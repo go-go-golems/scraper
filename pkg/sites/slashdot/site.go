@@ -19,6 +19,7 @@ func Definition() siteregistry.Definition {
 		ScriptsRoot:       "scripts",
 		SQLMigrationsFS:   siteFS,
 		SQLMigrationsRoot: "migrations",
+		RegisterCLI:       registerCLI,
 	}
 }
 

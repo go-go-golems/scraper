@@ -3,7 +3,6 @@ package hackernews
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -24,6 +23,24 @@ import (
 )
 
 func TestHackerNewsFrontpageWorkflow(t *testing.T) {
+	testHackerNewsWorkflow(t, "seed", func(baseURL string) (storecontract.CreateWorkflowParams, model.OpID, error) {
+		return BuildSeedWorkflow(RunOptions{
+			WorkflowID: "wf-hackernews-seed",
+			BaseURL:    baseURL,
+		})
+	})
+}
+
+func TestHackerNewsExtractFrontpageWorkflow(t *testing.T) {
+	testHackerNewsWorkflow(t, "extract-frontpage", func(baseURL string) (storecontract.CreateWorkflowParams, model.OpID, error) {
+		return BuildExtractFrontpageWorkflow(RunOptions{
+			WorkflowID: "wf-hackernews-extract",
+			BaseURL:    baseURL,
+		})
+	})
+}
+
+func testHackerNewsWorkflow(t *testing.T, _ string, build func(baseURL string) (storecontract.CreateWorkflowParams, model.OpID, error)) {
 	ctx := context.Background()
 	registry := siteregistry.New()
 	require.NoError(t, Register(registry))
@@ -68,35 +85,17 @@ func TestHackerNewsFrontpageWorkflow(t *testing.T) {
 	})
 
 	baseURL := server.URL + "/"
-	input, err := json.Marshal(map[string]any{"baseURL": baseURL})
+	params, _, err := build(baseURL)
 	require.NoError(t, err)
 
-	err = s.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
-		Workflow: model.WorkflowRun{
-			ID:   "wf-hackernews",
-			Site: "hackernews",
-			Name: "hackernews frontpage",
-		},
-		Initial: []model.OpSpec{
-			{
-				ID:         "seed-hackernews",
-				WorkflowID: "wf-hackernews",
-				Site:       "hackernews",
-				Kind:       "js",
-				Queue:      "site:hackernews:js",
-				DedupKey:   "seed-hackernews",
-				Input:      input,
-				Metadata:   map[string]string{"script": "seed.js"},
-			},
-		},
-	})
+	err = s.CreateWorkflow(ctx, params)
 	require.NoError(t, err)
 
 	for i := 0; i < 8; i++ {
 		_, err = s.RunOnce(ctx)
 		require.NoError(t, err)
 
-		workflow, err := engineStore.GetWorkflow(ctx, "wf-hackernews")
+		workflow, err := engineStore.GetWorkflow(ctx, params.Workflow.ID)
 		require.NoError(t, err)
 		require.NotNil(t, workflow)
 		if workflow.Status == model.WorkflowStatusSucceeded {
@@ -105,7 +104,7 @@ func TestHackerNewsFrontpageWorkflow(t *testing.T) {
 		require.NotEqual(t, model.WorkflowStatusFailed, workflow.Status)
 	}
 
-	workflow, err := engineStore.GetWorkflow(ctx, "wf-hackernews")
+	workflow, err := engineStore.GetWorkflow(ctx, params.Workflow.ID)
 	require.NoError(t, err)
 	require.Equal(t, model.WorkflowStatusSucceeded, workflow.Status)
 

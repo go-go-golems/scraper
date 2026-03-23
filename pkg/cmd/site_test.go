@@ -139,4 +139,98 @@ func TestJSDemoRunSummaryCommand(t *testing.T) {
 	require.Contains(t, stdout.String(), `"totalSquared": 350`)
 }
 
+func TestHackerNewsRunSeedCommand(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{
+		"site", "hackernews", "run", "seed",
+		"--fixture",
+		"--sites-dir", t.TempDir(),
+		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
+		"--workflow-id", "cmd-hackernews-seed",
+	})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "Site: hackernews")
+	require.Contains(t, stdout.String(), "Entrypoint: seed")
+	require.Contains(t, stdout.String(), "Status: succeeded")
+	require.Contains(t, stdout.String(), "Fixture: true")
+	require.Contains(t, stdout.String(), `"storyCount": 2`)
+	require.Contains(t, stdout.String(), `"47490070"`)
+}
+
+func TestHackerNewsRunExtractFrontpageCommand(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{
+		"site", "hackernews", "run", "extract-frontpage",
+		"--fixture",
+		"--sites-dir", t.TempDir(),
+		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
+		"--workflow-id", "cmd-hackernews-extract",
+	})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "Entrypoint: extract-frontpage")
+	require.Contains(t, stdout.String(), `"storyCount": 2`)
+	require.Contains(t, stdout.String(), `"47490080"`)
+}
+
+func TestSlashdotRunSeedCommand(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{
+		"site", "slashdot", "run", "seed",
+		"--fixture",
+		"--sites-dir", t.TempDir(),
+		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
+		"--workflow-id", "cmd-slashdot-seed",
+	})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "Site: slashdot")
+	require.Contains(t, stdout.String(), "Entrypoint: seed")
+	require.Contains(t, stdout.String(), "Status: succeeded")
+	require.Contains(t, stdout.String(), "Fixture: true")
+	require.Contains(t, stdout.String(), `"storyCount": 2`)
+	require.Contains(t, stdout.String(), `"181087690"`)
+}
+
+func TestSlashdotRunExtractFrontpageCommand(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{
+		"site", "slashdot", "run", "extract-frontpage",
+		"--fixture",
+		"--sites-dir", t.TempDir(),
+		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
+		"--workflow-id", "cmd-slashdot-extract",
+	})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "Entrypoint: extract-frontpage")
+	require.Contains(t, stdout.String(), `"storyCount": 2`)
+	require.Contains(t, stdout.String(), `"181087016"`)
+}
+
 var _ fs.FS = fstest.MapFS{}

@@ -13,7 +13,7 @@ type siteCommandOptions struct {
 	sitesDir string
 }
 
-func newSiteCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
+func newSiteCommand(siteRegistry *siteregistry.Registry) (*cobra.Command, error) {
 	options := &siteCommandOptions{}
 	manager := sitemigrate.NewManager(siteRegistry)
 
@@ -53,8 +53,10 @@ func newSiteCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 		if def.RegisterCLI == nil {
 			continue
 		}
-		_ = def.RegisterCLI(siteCmd)
+		if err := def.RegisterCLI(siteCmd); err != nil {
+			return nil, fmt.Errorf("register CLI for site %s: %w", def.Name, err)
+		}
 	}
 
-	return siteCmd
+	return siteCmd, nil
 }
