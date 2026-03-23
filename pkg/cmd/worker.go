@@ -82,8 +82,7 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			s.SetScraperDB(scraperDB)
-			s.SetSiteDBProvider(siteDBs.QueryExecer)
+			setSchedulerSiteRuntime(s, siteRegistry, scraperDB, siteDBs.QueryExecer)
 
 			result, err := runSchedulerCycles(ctx, s, options.pollInterval, options.maxCycles)
 			if err != nil {

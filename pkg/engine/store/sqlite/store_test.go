@@ -133,6 +133,239 @@ func TestStoreWorkflowLeaseCompleteRoundTrip(t *testing.T) {
 	require.JSONEq(t, `{"status":"ok"}`, string(result.Data))
 }
 
+func TestLeaseReadyOpTokenBucketBurstOne(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	defer func() { require.NoError(t, store.Close()) }()
+
+	now := time.Date(2026, 3, 23, 18, 30, 0, 0, time.UTC)
+	workflow := model.WorkflowRun{
+		ID:   "wf-rate-one",
+		Site: "js-demo",
+		Name: "rate limiter burst one",
+	}
+	require.NoError(t, store.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
+		Workflow: workflow,
+		Initial: []model.OpSpec{
+			{ID: "op-1", WorkflowID: workflow.ID, Site: workflow.Site, Kind: "js", Queue: "site:js-demo:js", DedupKey: "op-1"},
+			{ID: "op-2", WorkflowID: workflow.ID, Site: workflow.Site, Kind: "js", Queue: "site:js-demo:js", DedupKey: "op-2"},
+		},
+	}))
+
+	policy := model.QueuePolicy{
+		MaxInFlight: 1,
+		RateLimit: &model.RateLimitPolicy{
+			Kind:          model.RateLimitKindTokenBucket,
+			RatePerSecond: 1,
+			Burst:         1,
+		},
+	}
+
+	firstOp, firstLease, err := store.LeaseReadyOp(ctx, storecontract.LeaseRequest{
+		WorkerID:      "worker-1",
+		Queue:         "site:js-demo:js",
+		Site:          "js-demo",
+		Policy:        policy,
+		LeaseDuration: 30 * time.Second,
+		Now:           now,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, firstOp)
+	require.NotNil(t, firstLease)
+	require.NoError(t, store.CompleteOp(ctx, firstOp.ID, storecontract.Completion{
+		Lease: *firstLease,
+		Result: model.OpResult{
+			OpID:        firstOp.ID,
+			CompletedAt: now,
+		},
+	}))
+
+	secondOp, secondLease, err := store.LeaseReadyOp(ctx, storecontract.LeaseRequest{
+		WorkerID:      "worker-1",
+		Queue:         "site:js-demo:js",
+		Site:          "js-demo",
+		Policy:        policy,
+		LeaseDuration: 30 * time.Second,
+		Now:           now,
+	})
+	require.NoError(t, err)
+	require.Nil(t, secondOp)
+	require.Nil(t, secondLease)
+
+	secondOp, secondLease, err = store.LeaseReadyOp(ctx, storecontract.LeaseRequest{
+		WorkerID:      "worker-1",
+		Queue:         "site:js-demo:js",
+		Site:          "js-demo",
+		Policy:        policy,
+		LeaseDuration: 30 * time.Second,
+		Now:           now.Add(1 * time.Second),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, secondOp)
+	require.NotNil(t, secondLease)
+	require.Equal(t, model.OpID("op-2"), secondOp.ID)
+}
+
+func TestLeaseReadyOpTokenBucketBurstTwo(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	defer func() { require.NoError(t, store.Close()) }()
+
+	now := time.Date(2026, 3, 23, 18, 45, 0, 0, time.UTC)
+	workflow := model.WorkflowRun{
+		ID:   "wf-rate-two",
+		Site: "js-demo",
+		Name: "rate limiter burst two",
+	}
+	require.NoError(t, store.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
+		Workflow: workflow,
+		Initial: []model.OpSpec{
+			{ID: "op-a", WorkflowID: workflow.ID, Site: workflow.Site, Kind: "js", Queue: "site:js-demo:js", DedupKey: "op-a"},
+			{ID: "op-b", WorkflowID: workflow.ID, Site: workflow.Site, Kind: "js", Queue: "site:js-demo:js", DedupKey: "op-b"},
+			{ID: "op-c", WorkflowID: workflow.ID, Site: workflow.Site, Kind: "js", Queue: "site:js-demo:js", DedupKey: "op-c"},
+		},
+	}))
+
+	policy := model.QueuePolicy{
+		MaxInFlight: 1,
+		RateLimit: &model.RateLimitPolicy{
+			Kind:          model.RateLimitKindTokenBucket,
+			RatePerSecond: 1,
+			Burst:         2,
+		},
+	}
+
+	leaseAndComplete := func(current time.Time) model.OpID {
+		op, lease, err := store.LeaseReadyOp(ctx, storecontract.LeaseRequest{
+			WorkerID:      "worker-1",
+			Queue:         "site:js-demo:js",
+			Site:          "js-demo",
+			Policy:        policy,
+			LeaseDuration: 30 * time.Second,
+			Now:           current,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, op)
+		require.NotNil(t, lease)
+		require.NoError(t, store.CompleteOp(ctx, op.ID, storecontract.Completion{
+			Lease: *lease,
+			Result: model.OpResult{
+				OpID:        op.ID,
+				CompletedAt: current,
+			},
+		}))
+		return op.ID
+	}
+
+	require.Equal(t, model.OpID("op-a"), leaseAndComplete(now))
+	require.Equal(t, model.OpID("op-b"), leaseAndComplete(now))
+
+	blockedOp, blockedLease, err := store.LeaseReadyOp(ctx, storecontract.LeaseRequest{
+		WorkerID:      "worker-1",
+		Queue:         "site:js-demo:js",
+		Site:          "js-demo",
+		Policy:        policy,
+		LeaseDuration: 30 * time.Second,
+		Now:           now,
+	})
+	require.NoError(t, err)
+	require.Nil(t, blockedOp)
+	require.Nil(t, blockedLease)
+
+	nextOp, nextLease, err := store.LeaseReadyOp(ctx, storecontract.LeaseRequest{
+		WorkerID:      "worker-1",
+		Queue:         "site:js-demo:js",
+		Site:          "js-demo",
+		Policy:        policy,
+		LeaseDuration: 30 * time.Second,
+		Now:           now.Add(1 * time.Second),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, nextOp)
+	require.NotNil(t, nextLease)
+	require.Equal(t, model.OpID("op-c"), nextOp.ID)
+}
+
+func TestLeaseReadyOpTokenBucketStatePersistsAcrossReopen(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "engine.db")
+
+	store, err := Open(ctx, path)
+	require.NoError(t, err)
+
+	now := time.Date(2026, 3, 23, 19, 15, 0, 0, time.UTC)
+	workflow := model.WorkflowRun{
+		ID:   "wf-rate-reopen",
+		Site: "js-demo",
+		Name: "rate limiter reopen",
+	}
+	require.NoError(t, store.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
+		Workflow: workflow,
+		Initial: []model.OpSpec{
+			{ID: "op-1", WorkflowID: workflow.ID, Site: workflow.Site, Kind: "js", Queue: "site:js-demo:js", DedupKey: "op-1"},
+			{ID: "op-2", WorkflowID: workflow.ID, Site: workflow.Site, Kind: "js", Queue: "site:js-demo:js", DedupKey: "op-2"},
+		},
+	}))
+
+	policy := model.QueuePolicy{
+		MaxInFlight: 1,
+		RateLimit: &model.RateLimitPolicy{
+			Kind:          model.RateLimitKindTokenBucket,
+			RatePerSecond: 1,
+			Burst:         1,
+		},
+	}
+
+	firstOp, firstLease, err := store.LeaseReadyOp(ctx, storecontract.LeaseRequest{
+		WorkerID:      "worker-1",
+		Queue:         "site:js-demo:js",
+		Site:          "js-demo",
+		Policy:        policy,
+		LeaseDuration: 30 * time.Second,
+		Now:           now,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, firstOp)
+	require.NotNil(t, firstLease)
+	require.NoError(t, store.CompleteOp(ctx, firstOp.ID, storecontract.Completion{
+		Lease: *firstLease,
+		Result: model.OpResult{
+			OpID:        firstOp.ID,
+			CompletedAt: now,
+		},
+	}))
+	require.NoError(t, store.Close())
+
+	reopened, err := Open(ctx, path)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, reopened.Close()) }()
+
+	blockedOp, blockedLease, err := reopened.LeaseReadyOp(ctx, storecontract.LeaseRequest{
+		WorkerID:      "worker-2",
+		Queue:         "site:js-demo:js",
+		Site:          "js-demo",
+		Policy:        policy,
+		LeaseDuration: 30 * time.Second,
+		Now:           now,
+	})
+	require.NoError(t, err)
+	require.Nil(t, blockedOp)
+	require.Nil(t, blockedLease)
+
+	nextOp, nextLease, err := reopened.LeaseReadyOp(ctx, storecontract.LeaseRequest{
+		WorkerID:      "worker-2",
+		Queue:         "site:js-demo:js",
+		Site:          "js-demo",
+		Policy:        policy,
+		LeaseDuration: 30 * time.Second,
+		Now:           now.Add(1 * time.Second),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, nextOp)
+	require.NotNil(t, nextLease)
+	require.Equal(t, model.OpID("op-2"), nextOp.ID)
+}
+
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
 

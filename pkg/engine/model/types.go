@@ -10,6 +10,7 @@ type OpID string
 type ArtifactID string
 type SiteName string
 type QueueKey string
+type RateLimitKind string
 
 type WorkflowStatus string
 
@@ -68,6 +69,49 @@ type RetryState struct {
 	Attempt       int
 	NextAttemptAt *time.Time
 	LastError     string
+}
+
+const (
+	RateLimitKindTokenBucket RateLimitKind = "token_bucket"
+)
+
+type RateLimitPolicy struct {
+	Kind          RateLimitKind
+	RatePerSecond float64
+	Burst         int
+}
+
+type QueuePolicy struct {
+	MaxInFlight int
+	RateLimit   *RateLimitPolicy
+}
+
+func DefaultQueuePolicy() QueuePolicy {
+	return QueuePolicy{
+		MaxInFlight: 1,
+	}
+}
+
+func (p QueuePolicy) Normalize() QueuePolicy {
+	ret := p
+	if ret.MaxInFlight <= 0 {
+		ret.MaxInFlight = 1
+	}
+	if ret.RateLimit == nil {
+		return ret
+	}
+
+	limit := *ret.RateLimit
+	if limit.Kind == "" {
+		limit.Kind = RateLimitKindTokenBucket
+	}
+	if limit.Kind != RateLimitKindTokenBucket || limit.RatePerSecond <= 0 || limit.Burst <= 0 {
+		ret.RateLimit = nil
+		return ret
+	}
+
+	ret.RateLimit = &limit
+	return ret
 }
 
 type Lease struct {

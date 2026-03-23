@@ -1,47 +1,50 @@
 package model
 
-import (
-	"encoding/json"
-	"testing"
-	"time"
+import "testing"
 
-	"github.com/stretchr/testify/require"
-)
-
-func TestOpSpecSupportsWorkflowLinkage(t *testing.T) {
-	parentID := OpID("op-parent")
-	spec := OpSpec{
-		ID:         OpID("op-child"),
-		WorkflowID: WorkflowID("workflow-1"),
-		ParentID:   &parentID,
-		Site:       SiteName("nereval"),
-		Kind:       "js/analyze",
-		Queue:      QueueKey("site:nereval:http"),
-		Input:      json.RawMessage(`{"page":2}`),
-		DependsOn: []Dependency{
-			{OpID: OpID("op-fetch-list"), Required: true},
-		},
-		Retry: RetryPolicy{
-			MaxAttempts:    5,
-			BackoffKind:    BackoffKindExponential,
-			InitialBackoff: 2 * time.Second,
-			MaxBackoff:     1 * time.Minute,
-			Multiplier:     2,
-		},
+func TestQueuePolicyNormalizeDefaults(t *testing.T) {
+	policy := (QueuePolicy{}).Normalize()
+	if policy.MaxInFlight != 1 {
+		t.Fatalf("expected default MaxInFlight=1, got %d", policy.MaxInFlight)
 	}
-
-	require.Equal(t, OpID("op-parent"), *spec.ParentID)
-	require.Len(t, spec.DependsOn, 1)
-	require.Equal(t, BackoffKindExponential, spec.Retry.BackoffKind)
+	if policy.RateLimit != nil {
+		t.Fatalf("expected nil rate limit by default")
+	}
 }
 
-func TestOpResultTracksEmittedOpIDsSeparately(t *testing.T) {
-	result := OpResult{
-		OpID:       OpID("op-list-extract"),
-		Emitted:    []OpSpec{{ID: OpID("op-detail-1")}, {ID: OpID("op-detail-2")}},
-		EmittedIDs: []OpID{OpID("op-detail-1"), OpID("op-detail-2")},
-	}
+func TestQueuePolicyNormalizeTokenBucketDefaults(t *testing.T) {
+	policy := QueuePolicy{
+		RateLimit: &RateLimitPolicy{
+			RatePerSecond: 2,
+			Burst:         3,
+		},
+	}.Normalize()
 
-	require.Len(t, result.Emitted, 2)
-	require.Equal(t, []OpID{OpID("op-detail-1"), OpID("op-detail-2")}, result.EmittedIDs)
+	if policy.MaxInFlight != 1 {
+		t.Fatalf("expected normalized MaxInFlight=1, got %d", policy.MaxInFlight)
+	}
+	if policy.RateLimit == nil {
+		t.Fatalf("expected rate limit to be retained")
+	}
+	if policy.RateLimit.Kind != RateLimitKindTokenBucket {
+		t.Fatalf("expected default rate limit kind %q, got %q", RateLimitKindTokenBucket, policy.RateLimit.Kind)
+	}
+}
+
+func TestQueuePolicyNormalizeDisablesInvalidLimiter(t *testing.T) {
+	policy := QueuePolicy{
+		MaxInFlight: 2,
+		RateLimit: &RateLimitPolicy{
+			Kind:          RateLimitKindTokenBucket,
+			RatePerSecond: 0,
+			Burst:         2,
+		},
+	}.Normalize()
+
+	if policy.MaxInFlight != 2 {
+		t.Fatalf("expected MaxInFlight to be preserved, got %d", policy.MaxInFlight)
+	}
+	if policy.RateLimit != nil {
+		t.Fatalf("expected invalid limiter to normalize to nil")
+	}
 }

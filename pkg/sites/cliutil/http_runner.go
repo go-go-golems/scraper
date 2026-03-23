@@ -154,6 +154,7 @@ func RunHTTPWorkflowCommand(cmd *cobra.Command, options *HTTPWorkflowCLIOptions,
 	if err != nil {
 		return err
 	}
+	s.SetQueuePolicyProvider(registry.QueuePolicyProvider())
 	s.SetSiteDBProvider(func(ctx context.Context, site model.SiteName) (databasemod.QueryExecer, error) {
 		if site != spec.Site {
 			return nil, fmt.Errorf("unexpected site db request for %s", site)

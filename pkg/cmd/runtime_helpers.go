@@ -145,3 +145,23 @@ func runSchedulerCycles(ctx context.Context, s schedulerRunner, pollInterval tim
 		}
 	}
 }
+
+func setSchedulerSiteRuntime(
+	s *scheduler.Scheduler,
+	siteRegistry *siteregistry.Registry,
+	scraperDB databasemod.QueryExecer,
+	siteDBProvider func(ctx context.Context, site model.SiteName) (databasemod.QueryExecer, error),
+) {
+	if s == nil {
+		return
+	}
+	if scraperDB != nil {
+		s.SetScraperDB(scraperDB)
+	}
+	if siteDBProvider != nil {
+		s.SetSiteDBProvider(siteDBProvider)
+	}
+	if siteRegistry != nil {
+		s.SetQueuePolicyProvider(siteRegistry.QueuePolicyProvider())
+	}
+}

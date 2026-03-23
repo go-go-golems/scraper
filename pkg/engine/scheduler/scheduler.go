@@ -36,13 +36,14 @@ func (c Config) Validate() error {
 type EventKind string
 
 const (
-	EventWorkflowCreated EventKind = "workflow_created"
-	EventOpLeased        EventKind = "op_leased"
-	EventOpSucceeded     EventKind = "op_succeeded"
-	EventOpRetried       EventKind = "op_retried"
-	EventOpFailed        EventKind = "op_failed"
-	EventWorkflowUpdated EventKind = "workflow_updated"
-	EventIdle            EventKind = "idle"
+	EventWorkflowCreated  EventKind = "workflow_created"
+	EventOpLeased         EventKind = "op_leased"
+	EventOpSucceeded      EventKind = "op_succeeded"
+	EventOpRetried        EventKind = "op_retried"
+	EventOpFailed         EventKind = "op_failed"
+	EventWorkflowUpdated  EventKind = "workflow_updated"
+	EventQueueRateLimited EventKind = "queue_rate_limited"
+	EventIdle             EventKind = "idle"
 )
 
 type Event struct {
@@ -71,14 +72,15 @@ func (f ObserverFunc) OnSchedulerEvent(ctx context.Context, event Event) {
 }
 
 type Scheduler struct {
-	config         Config
-	store          storecontract.Store
-	runners        *runner.Registry
-	workerID       string
-	observer       Observer
-	scraperDB      databasemod.QueryExecer
-	siteDBProvider func(ctx context.Context, site model.SiteName) (databasemod.QueryExecer, error)
-	now            func() time.Time
+	config              Config
+	store               storecontract.Store
+	runners             *runner.Registry
+	workerID            string
+	observer            Observer
+	scraperDB           databasemod.QueryExecer
+	siteDBProvider      func(ctx context.Context, site model.SiteName) (databasemod.QueryExecer, error)
+	queuePolicyProvider func(ctx context.Context, site model.SiteName, queue model.QueueKey) model.QueuePolicy
+	now                 func() time.Time
 }
 
 func New(store storecontract.Store, runners *runner.Registry, config Config, workerID string, observer Observer) (*Scheduler, error) {
@@ -121,6 +123,24 @@ func (s *Scheduler) SetSiteDBProvider(
 		return
 	}
 	s.siteDBProvider = provider
+}
+
+func (s *Scheduler) SetQueuePolicyProvider(
+	provider func(ctx context.Context, site model.SiteName, queue model.QueueKey) model.QueuePolicy,
+) {
+	if s == nil {
+		return
+	}
+	s.queuePolicyProvider = provider
+}
+
+func (s *Scheduler) SetNowFunc(now func() time.Time) {
+	if s == nil || now == nil {
+		return
+	}
+	s.now = func() time.Time {
+		return now().UTC()
+	}
 }
 
 func (s *Scheduler) CreateWorkflow(ctx context.Context, params storecontract.CreateWorkflowParams) error {
@@ -203,35 +223,59 @@ func (s *Scheduler) RunOnce(ctx context.Context) (*CycleResult, error) {
 			break
 		}
 
-		op, lease, err := s.store.LeaseReadyOp(ctx, storecontract.LeaseRequest{
-			WorkerID:      s.workerID,
-			Queue:         candidate.Queue,
-			Site:          candidate.Site,
-			LeaseDuration: s.config.DefaultLeaseDuration,
-			Now:           now,
-		})
-		if err != nil {
-			return nil, err
+		policy := s.queuePolicy(ctx, candidate.Site, candidate.Queue)
+		remainingGlobalSlots := s.config.MaxWorkers - result.Processed
+		if remainingGlobalSlots <= 0 {
+			break
 		}
-		if op == nil || lease == nil {
-			continue
+		maxAttempts := policy.MaxInFlight
+		if maxAttempts > remainingGlobalSlots {
+			maxAttempts = remainingGlobalSlots
 		}
 
-		result.Processed++
-		processedWorkflows[op.WorkflowID] = struct{}{}
-		s.emit(ctx, Event{
-			Kind:       EventOpLeased,
-			OccurredAt: now,
-			WorkflowID: op.WorkflowID,
-			OpID:       op.ID,
-			Site:       op.Site,
-			Queue:      op.Queue,
-			Attempt:    op.RetryState.Attempt + 1,
-			Message:    "leased op",
-		})
+		leasedInQueue := 0
+		for leasedInQueue < maxAttempts {
+			op, lease, err := s.store.LeaseReadyOp(ctx, storecontract.LeaseRequest{
+				WorkerID:      s.workerID,
+				Queue:         candidate.Queue,
+				Site:          candidate.Site,
+				Policy:        policy,
+				LeaseDuration: s.config.DefaultLeaseDuration,
+				Now:           now,
+			})
+			if err != nil {
+				return nil, err
+			}
+			if op == nil || lease == nil {
+				if leasedInQueue == 0 && policy.RateLimit != nil {
+					s.emit(ctx, Event{
+						Kind:       EventQueueRateLimited,
+						OccurredAt: now,
+						Site:       candidate.Site,
+						Queue:      candidate.Queue,
+						Message:    "queue had ready work but could not lease due to queue policy",
+					})
+				}
+				break
+			}
 
-		if err := s.executeLeasedOp(ctx, *op, *lease, now); err != nil {
-			return nil, err
+			leasedInQueue++
+			result.Processed++
+			processedWorkflows[op.WorkflowID] = struct{}{}
+			s.emit(ctx, Event{
+				Kind:       EventOpLeased,
+				OccurredAt: now,
+				WorkflowID: op.WorkflowID,
+				OpID:       op.ID,
+				Site:       op.Site,
+				Queue:      op.Queue,
+				Attempt:    op.RetryState.Attempt + 1,
+				Message:    "leased op",
+			})
+
+			if err := s.executeLeasedOp(ctx, *op, *lease, now); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -243,6 +287,13 @@ func (s *Scheduler) RunOnce(ctx context.Context) (*CycleResult, error) {
 	}
 
 	return result, nil
+}
+
+func (s *Scheduler) queuePolicy(ctx context.Context, site model.SiteName, queue model.QueueKey) model.QueuePolicy {
+	if s.queuePolicyProvider == nil {
+		return model.DefaultQueuePolicy()
+	}
+	return s.queuePolicyProvider(ctx, site, queue).Normalize()
 }
 
 func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease model.Lease, now time.Time) error {

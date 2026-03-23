@@ -8,6 +8,8 @@ import (
 	"testing/fstest"
 
 	"github.com/go-go-golems/scraper/pkg/engine/model"
+	hackernews "github.com/go-go-golems/scraper/pkg/sites/hackernews"
+	"github.com/go-go-golems/scraper/pkg/sites/jsdemo"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	"github.com/stretchr/testify/require"
 )
@@ -210,6 +212,86 @@ func TestJSDemoSubmitThenWorkerRun(t *testing.T) {
 	require.Contains(t, statusAfter, "Results: 5")
 }
 
+func TestJSDemoSubmitThenWorkerRunWithQueueRateLimit(t *testing.T) {
+	sitesDir := t.TempDir()
+	engineDB := filepath.Join(t.TempDir(), "engine.db")
+
+	registry := siteregistry.New()
+	def := jsdemo.Definition()
+	def.QueuePolicies = map[model.QueueKey]model.QueuePolicy{
+		model.QueueKey("site:js-demo:js"): {
+			MaxInFlight: 4,
+			RateLimit: &model.RateLimitPolicy{
+				Kind:          model.RateLimitKindTokenBucket,
+				RatePerSecond: 10,
+				Burst:         1,
+			},
+		},
+	}
+	require.NoError(t, registry.Register(def))
+
+	runCommand := func(args ...string) string {
+		rootCmd, err := newRootCommand("test-version", registry)
+		require.NoError(t, err)
+
+		var stdout bytes.Buffer
+		rootCmd.SetOut(&stdout)
+		rootCmd.SetErr(&stdout)
+		rootCmd.SetArgs(args)
+
+		err = rootCmd.Execute()
+		require.NoError(t, err)
+		return stdout.String()
+	}
+
+	submitOutput := runCommand(
+		"site", "js-demo", "run", "seed",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--workflow-id", "cmd-js-demo-rate",
+		"--count", "3",
+		"--multiplier", "4",
+		"--prefix", "rate",
+	)
+	require.Contains(t, submitOutput, "Submitted ops: 1")
+	require.Contains(t, submitOutput, "Target op: cmd-js-demo-rate:seed:summary")
+
+	statusBefore := runCommand("engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusBefore, "ready: 1")
+	require.Contains(t, statusBefore, "succeeded: 0")
+
+	firstWorkerRun := runCommand(
+		"worker", "run",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--max-workers", "4",
+		"--max-cycles", "2",
+		"--poll-interval", "120ms",
+	)
+	require.Contains(t, firstWorkerRun, "Processed:")
+	require.Contains(t, firstWorkerRun, "Succeeded:")
+
+	statusMid := runCommand("engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusMid, "Workflows: 1")
+	require.Contains(t, statusMid, "succeeded: 2")
+	require.Contains(t, statusMid, "ready: 2")
+
+	secondWorkerRun := runCommand(
+		"worker", "run",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--max-workers", "4",
+		"--max-cycles", "6",
+		"--poll-interval", "120ms",
+	)
+	require.Contains(t, secondWorkerRun, "Succeeded:")
+
+	statusAfter := runCommand("engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusAfter, "ready: 0")
+	require.Contains(t, statusAfter, "succeeded: 5")
+	require.Contains(t, statusAfter, "Results: 5")
+}
+
 func TestHackerNewsRunSeedCommand(t *testing.T) {
 	rootCmd, err := NewRootCommand("test-version")
 	require.NoError(t, err)
@@ -234,6 +316,44 @@ func TestHackerNewsRunSeedCommand(t *testing.T) {
 	require.Contains(t, stdout.String(), "Fixture: true")
 	require.Contains(t, stdout.String(), `"storyCount": 2`)
 	require.Contains(t, stdout.String(), `"47490070"`)
+}
+
+func TestHackerNewsRunSeedCommandWithQueueRateLimit(t *testing.T) {
+	registry := siteregistry.New()
+	def := hackernews.Definition()
+	def.QueuePolicies = map[model.QueueKey]model.QueuePolicy{
+		model.QueueKey("site:hackernews:http"): {
+			MaxInFlight: 4,
+			RateLimit: &model.RateLimitPolicy{
+				Kind:          model.RateLimitKindTokenBucket,
+				RatePerSecond: 10,
+				Burst:         1,
+			},
+		},
+	}
+	require.NoError(t, registry.Register(def))
+
+	rootCmd, err := newRootCommand("test-version", registry)
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{
+		"site", "hackernews", "run", "seed",
+		"--fixture",
+		"--sites-dir", t.TempDir(),
+		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
+		"--workflow-id", "cmd-hackernews-rate",
+		"--max-pages", "2",
+	})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "Site: hackernews")
+	require.Contains(t, stdout.String(), "Entrypoint: seed")
+	require.Contains(t, stdout.String(), "Status: succeeded")
+	require.Contains(t, stdout.String(), `"storyCount": 2`)
 }
 
 func TestHackerNewsRunSeedHelpIncludesMaxPages(t *testing.T) {

@@ -18,6 +18,14 @@ CREATE TABLE IF NOT EXISTS leases (
 
 CREATE INDEX IF NOT EXISTS idx_leases_expires_at ON leases(expires_at);
 
+CREATE TABLE IF NOT EXISTS queue_limit_state (
+    site TEXT NOT NULL,
+    queue_key TEXT NOT NULL,
+    tokens REAL NOT NULL,
+    last_refill_at TEXT NOT NULL,
+    PRIMARY KEY (site, queue_key)
+);
+
 CREATE TABLE IF NOT EXISTS results (
     op_id TEXT PRIMARY KEY REFERENCES ops(id) ON DELETE CASCADE,
     workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,

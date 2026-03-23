@@ -16,6 +16,7 @@ type LeaseRequest struct {
 	WorkerID      string
 	Queue         model.QueueKey
 	Site          model.SiteName
+	Policy        model.QueuePolicy
 	LeaseDuration time.Duration
 	Now           time.Time
 }

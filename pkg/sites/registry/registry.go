@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"sort"
@@ -24,6 +25,7 @@ type Definition struct {
 	JSMigrationsRoot        string
 	HelpFS                  fs.FS
 	HelpRoot                string
+	QueuePolicies           map[model.QueueKey]model.QueuePolicy
 	RuntimeModuleRegistrars []gggengine.RuntimeModuleRegistrar
 	RegisterCLI             func(root *cobra.Command) error
 }
@@ -68,4 +70,24 @@ func (r *Registry) List() []Definition {
 	}
 
 	return ret
+}
+
+func (r *Registry) QueuePolicyProvider() func(ctx context.Context, site model.SiteName, queue model.QueueKey) model.QueuePolicy {
+	return func(ctx context.Context, site model.SiteName, queue model.QueueKey) model.QueuePolicy {
+		if r == nil {
+			return model.DefaultQueuePolicy()
+		}
+		def, ok := r.Get(site)
+		if !ok {
+			return model.DefaultQueuePolicy()
+		}
+		if def.QueuePolicies == nil {
+			return model.DefaultQueuePolicy()
+		}
+		policy, ok := def.QueuePolicies[queue]
+		if !ok {
+			return model.DefaultQueuePolicy()
+		}
+		return policy.Normalize()
+	}
 }

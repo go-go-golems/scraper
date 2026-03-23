@@ -364,6 +364,127 @@ func TestSchedulerHonorsQueueRateDomainOnePerQueue(t *testing.T) {
 	require.Equal(t, 2, stats.Succeeded)
 }
 
+func TestSchedulerAllowsMultipleOpsPerQueueWhenPolicyAllows(t *testing.T) {
+	ctx := context.Background()
+	store := openSchedulerStore(t)
+	registry := runner.NewRegistry()
+
+	require.NoError(t, registry.Register(runnerFunc{
+		kind: "queue-test",
+		run: func(ctx context.Context, runCtx runner.RunContext) (*model.OpResult, error) {
+			return &model.OpResult{
+				OpID:        runCtx.Op.ID,
+				Data:        []byte(`{"ok":true}`),
+				CompletedAt: runCtx.Now,
+			}, nil
+		},
+	}))
+
+	s, err := New(store, registry, testSchedulerConfig(), "worker-4", nil)
+	require.NoError(t, err)
+	s.SetQueuePolicyProvider(func(ctx context.Context, site model.SiteName, queue model.QueueKey) model.QueuePolicy {
+		require.Equal(t, model.SiteName("nereval"), site)
+		require.Equal(t, model.QueueKey("site:nereval:http"), queue)
+		return model.QueuePolicy{MaxInFlight: 2}
+	})
+
+	current := time.Date(2026, 3, 23, 18, 0, 0, 0, time.UTC)
+	s.SetNowFunc(func() time.Time { return current })
+
+	err = s.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
+		Workflow: model.WorkflowRun{
+			ID:   "wf-multi-queue",
+			Site: "nereval",
+			Name: "multi queue test",
+		},
+		Initial: []model.OpSpec{
+			{ID: "queue-op-1", WorkflowID: "wf-multi-queue", Site: "nereval", Kind: "queue-test", Queue: "site:nereval:http", DedupKey: "queue-op-1"},
+			{ID: "queue-op-2", WorkflowID: "wf-multi-queue", Site: "nereval", Kind: "queue-test", Queue: "site:nereval:http", DedupKey: "queue-op-2"},
+			{ID: "queue-op-3", WorkflowID: "wf-multi-queue", Site: "nereval", Kind: "queue-test", Queue: "site:nereval:http", DedupKey: "queue-op-3"},
+		},
+	})
+	require.NoError(t, err)
+
+	first, err := s.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 2, first.Processed)
+
+	second, err := s.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, second.Processed)
+
+	stats, err := store.GetWorkflowStats(ctx, "wf-multi-queue")
+	require.NoError(t, err)
+	require.Equal(t, 3, stats.Succeeded)
+}
+
+func TestSchedulerRateLimitsQueueAcrossCycles(t *testing.T) {
+	ctx := context.Background()
+	store := openSchedulerStore(t)
+	registry := runner.NewRegistry()
+
+	require.NoError(t, registry.Register(runnerFunc{
+		kind: "queue-test",
+		run: func(ctx context.Context, runCtx runner.RunContext) (*model.OpResult, error) {
+			return &model.OpResult{
+				OpID:        runCtx.Op.ID,
+				Data:        []byte(`{"ok":true}`),
+				CompletedAt: runCtx.Now,
+			}, nil
+		},
+	}))
+
+	observer := &recordingObserver{}
+	s, err := New(store, registry, testSchedulerConfig(), "worker-5", observer)
+	require.NoError(t, err)
+	s.SetQueuePolicyProvider(func(ctx context.Context, site model.SiteName, queue model.QueueKey) model.QueuePolicy {
+		require.Equal(t, model.SiteName("nereval"), site)
+		require.Equal(t, model.QueueKey("site:nereval:http"), queue)
+		return model.QueuePolicy{
+			MaxInFlight: 4,
+			RateLimit: &model.RateLimitPolicy{
+				Kind:          model.RateLimitKindTokenBucket,
+				RatePerSecond: 2,
+				Burst:         1,
+			},
+		}
+	})
+
+	current := time.Date(2026, 3, 23, 19, 0, 0, 0, time.UTC)
+	s.SetNowFunc(func() time.Time { return current })
+
+	err = s.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
+		Workflow: model.WorkflowRun{
+			ID:   "wf-rate",
+			Site: "nereval",
+			Name: "rate limited queue test",
+		},
+		Initial: []model.OpSpec{
+			{ID: "queue-op-1", WorkflowID: "wf-rate", Site: "nereval", Kind: "queue-test", Queue: "site:nereval:http", DedupKey: "queue-op-1"},
+			{ID: "queue-op-2", WorkflowID: "wf-rate", Site: "nereval", Kind: "queue-test", Queue: "site:nereval:http", DedupKey: "queue-op-2"},
+		},
+	})
+	require.NoError(t, err)
+
+	first, err := s.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, first.Processed)
+
+	second, err := s.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 0, second.Processed)
+	requireEventKinds(t, observer.events, EventQueueRateLimited)
+
+	current = current.Add(500 * time.Millisecond)
+	third, err := s.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, third.Processed)
+
+	stats, err := store.GetWorkflowStats(ctx, "wf-rate")
+	require.NoError(t, err)
+	require.Equal(t, 2, stats.Succeeded)
+}
+
 func openSchedulerStore(t *testing.T) *sqlitestore.Store {
 	t.Helper()
 
