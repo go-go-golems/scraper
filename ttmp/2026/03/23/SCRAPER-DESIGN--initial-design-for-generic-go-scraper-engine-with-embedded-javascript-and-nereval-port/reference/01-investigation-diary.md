@@ -1277,7 +1277,7 @@ This step completed phase 7 by adding the first Go-backed acquisition runner. Be
 
 **Inferred user intent:** Keep building the engine until it can perform real HTTP work that later NEREVAL scripts can consume as dependency results.
 
-**Commit (code):** Pending at the time of writing this diary entry; the HTTP milestone changes are validated locally and ready to commit.
+**Commit (code):** `72b7f32` — Add generic HTTP fetch runner
 
 ### What I did
 
