@@ -26,6 +26,8 @@ The implementation is intentionally split into two layers:
 
 The first milestone keeps the JS contract narrow. Scripts do not fetch directly. Instead, they inspect dependency results, persist records or artifacts, and emit additional ops for the Go scheduler to execute.
 
+When JavaScript needs database access, the runtime should expose preconfigured module names such as `require("scraper-db")` and `require("site-db")`. JS should not be responsible for discovering or opening those SQLite files itself.
+
 Use the CLI help system as the top-level guide for operators and new contributors:
 
 - `scraper help` for the command tree

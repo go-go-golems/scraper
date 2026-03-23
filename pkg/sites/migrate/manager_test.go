@@ -74,8 +74,9 @@ func TestManagerSupportsRelativeRequireInJSMigrations(t *testing.T) {
 			`)},
 			"002_seed.js": &fstest.MapFile{Data: []byte(`
 				const helper = require("./lib/helper.js");
+				const siteDB = require("site-db");
 				module.exports = function(m) {
-					m.exec("INSERT INTO widgets(name) VALUES(?)", helper.name());
+					siteDB.exec("INSERT INTO widgets(name) VALUES(?)", helper.name());
 				};
 			`)},
 		},

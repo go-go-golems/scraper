@@ -106,3 +106,15 @@ Added per-site SQLite DB management, combined SQL/JS site migrations, and the `s
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site.go — Added the explicit site migration CLI command
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go — Added CLI tests for site migration execution
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md — Added discovery notes for the site migration command
+
+
+## 2026-03-23
+
+Added preconfigured JS database exposure so runtimes can inject `scraper-db` and `site-db` instead of requiring JS to open SQLite files by path.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/js/runtime/databases.go — Added the scraper-side runtime registrar for preconfigured DB modules
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/js/runtime/databases_test.go — Added runtime tests covering `scraper-db` and `site-db`
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/migrate/manager.go — Wired the site migration runtime to expose `site-db`
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/migrate/manager_test.go — Updated migration tests to use the injected `site-db` module

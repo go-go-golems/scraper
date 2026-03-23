@@ -30,7 +30,7 @@ RelatedFiles:
 ExternalSources:
     - local:scraper.md
 Summary: Detailed analysis and implementation guide for porting the current NEREVAL prototype into a generic Go scraping engine with embedded JavaScript built on go-go-goja.
-LastUpdated: 2026-03-23T14:05:00-04:00
+LastUpdated: 2026-03-23T14:35:00-04:00
 WhatFor: Explain how the imported scraper architecture maps to the current NEREVAL prototype and define a concrete, intern-oriented plan for implementing the new engine in scraper/.
 WhenToUse: Use when bootstrapping the scraper codebase, designing the engine/store/runtime split, or porting NEREVAL from the JS prototype to the Go/goja system.
 ---
@@ -732,6 +732,13 @@ scraper site migrate <site> --sites-dir state/sites
 ```
 
 That command opens or creates the site DB, applies pending site migrations, and records migration history in the site DB itself.
+
+Implementation note after the preconfigured-DB runtime pass: when JavaScript needs DB access, Go should inject named preconfigured modules instead of making JS call `require("database").configure(...)` with repo-specific file paths. The concrete names should be boring and stable:
+
+- `require("scraper-db")` for engine-owned or shared scraper state,
+- `require("site-db")` for the current site's DB.
+
+That keeps file-location ownership in Go while still letting JS execute SQL against the correct handles.
 
 ### Projection writing for NEREVAL
 

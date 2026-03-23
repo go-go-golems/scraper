@@ -22,7 +22,7 @@ RelatedFiles:
 ExternalSources:
     - local:scraper.md
 Summary: Chronological diary of the initial SCRAPER-DESIGN research and documentation pass.
-LastUpdated: 2026-03-23T14:05:00-04:00
+LastUpdated: 2026-03-23T14:35:00-04:00
 WhatFor: Record the research steps, commands, decisions, and rough edges encountered while producing the initial design guide.
 WhenToUse: Use when reviewing how the initial design doc was produced or when continuing the implementation work later.
 ---
@@ -920,4 +920,109 @@ The implementation uses one combined migration stream per site. SQL and JS migra
 - Concrete commands used during the site DB phase:
   - `go mod tidy`
   - `go test ./pkg/sites/migrate ./pkg/cmd`
+  - `go test ./...`
+
+## Step 8: Expose preconfigured `scraper-db` and `site-db` modules to JS
+
+This step tightened the JS database story so JavaScript does not need to discover or open SQLite files itself. Instead of expecting JS to call `require("database").configure(...)` with a path, Go now preconfigures named modules and injects them into the runtime:
+
+- `require("scraper-db")`
+- `require("site-db")`
+
+The work landed in two layers. First, `go-go-goja`'s `database` module was refactored so it can be instantiated as a named, preconfigured module backed by an existing `*sql.DB` or `*sql.Tx`. Second, the `scraper` repo added a runtime registrar that exposes those preconfigured modules to JS runtimes, and the site migration runtime now uses it so migrations can access `site-db` directly.
+
+### Prompt Context
+
+**User prompt (verbatim):** "expose a preconfigured site db and scraper db to js (instead of leaving it to the js to open the proper file). You can probably add an option to the db functionality in go-go-goja to pass in a \"preconfigured\" version"
+
+**Assistant interpretation:** Refactor the go-go-goja database module so Go can construct named preconfigured DB modules, then wire that capability into scraper runtimes so JS gets stable site/scraper DB handles without owning file-path discovery.
+
+**Inferred user intent:** Keep DB-path ownership in Go while still making DB access ergonomic for JS, especially for site code and smoke-test/debug workflows.
+
+**Commit (code):** Pending at the time of writing this diary entry; coordinated commits are prepared in both `go-go-goja` and `scraper` after validation.
+
+### What I did
+
+- Refactored `go-go-goja/modules/database` so the module can be constructed with options:
+  - custom module name
+  - preconfigured DB handle
+  - optional close function
+  - configure enabled/disabled
+- Kept the default `require("database")` module behavior working for callers that still want to configure a DB explicitly.
+- Added integration tests in `go-go-goja` for:
+  - default configurable `database`
+  - named preconfigured module use
+  - rejection of `configure()` on preconfigured modules
+- Added a scraper-side runtime registrar in `pkg/js/runtime/databases.go`.
+- Made that registrar expose:
+  - `scraper-db`
+  - `site-db`
+  when corresponding DB handles are provided by Go.
+- Wired the site migration runtime to register `site-db` automatically, backed by the active transaction.
+- Updated the site migration tests so one JS migration now uses:
+  - `const siteDB = require("site-db")`
+  instead of only the explicit migration helper API.
+- Added a runtime-level scraper test proving both preconfigured modules can be required in the same JS runtime.
+
+### Why
+
+- The user was right that JS should not own DB-path discovery.
+- Preconfigured modules keep DB lifecycle and file-location ownership in Go.
+- Using module names like `site-db` and `scraper-db` gives JS a simple, stable contract that matches the architecture we already documented.
+
+### What worked
+
+- The refactored `database` module still supports the old configurable behavior.
+- The new preconfigured path works cleanly with both `*sql.DB` and `*sql.Tx`.
+- The site migration runtime can now expose `site-db` without broadening the migration API surface too much.
+- Full test suites passed in both repos after the change.
+
+### What didn't work
+
+- The first draft of the `go-go-goja` integration test created an import cycle by testing the module from the same package while importing `engine`.
+- Resolution:
+  - move the test package to `databasemod_test`
+- I also initially used the wrong callback signature for `runtime.Owner.Call` in two tests.
+- Resolution:
+  - switch the callbacks to use `*goja.Runtime`
+
+### What I learned
+
+- The `database` module needed an explicit ownership boundary: preconfigured should not imply that JS may close a Go-owned DB.
+- The right model is:
+  - Go injects the handle
+  - JS uses it
+  - Go still owns the file path and lifecycle
+
+### What was tricky to build
+
+- The sharp edge was ownership of `close()`. For preconfigured modules, letting JS close a Go-owned DB would be wrong, so the module now only closes a DB when Go explicitly provides a close function.
+- The second tricky part was making the change reusable instead of only fixing the migration runtime. That is why I split the change into a reusable `go-go-goja` module option layer and a scraper-side runtime registrar.
+
+### What warrants a second pair of eyes
+
+- Whether the future JS op runtime should always expose both modules, or only expose `site-db` for site code and a more specialized API for engine reads.
+- Whether `scraper-db` should stay a raw SQL module forever or later become a more opinionated engine-state API.
+
+### What should be done in the future
+
+- Reuse the new registrar in the phase-5 JS op runtime so site scripts get the same DB contract as migrations.
+- Decide which JS runtimes should expose only `site-db` versus both `site-db` and `scraper-db`.
+
+### Code review instructions
+
+- Review the reusable database-module refactor in the sibling repo:
+  - `go-go-goja/modules/database/database.go`
+  - `go-go-goja/modules/database/database_test.go`
+- Then review the scraper-side integration:
+  - `scraper/pkg/js/runtime/databases.go`
+  - `scraper/pkg/js/runtime/databases_test.go`
+  - `scraper/pkg/sites/migrate/manager.go`
+  - `scraper/pkg/sites/migrate/manager_test.go`
+
+### Technical details
+
+- Concrete commands used during the preconfigured DB phase:
+  - `go test ./modules/database/...`
+  - `go test ./pkg/js/runtime ./pkg/sites/migrate ./pkg/cmd`
   - `go test ./...`
