@@ -939,7 +939,7 @@ The work landed in two layers. First, `go-go-goja`'s `database` module was refac
 
 **Inferred user intent:** Keep DB-path ownership in Go while still making DB access ergonomic for JS, especially for site code and smoke-test/debug workflows.
 
-**Commit (code):** Pending at the time of writing this diary entry; coordinated commits are prepared in both `go-go-goja` and `scraper` after validation.
+**Commit (code):** `go-go-goja` commit `3722177` added reusable preconfigured database modules, and `scraper` commit `2ad649a` wired runtime exposure for `scraper-db` and `site-db`.
 
 ### What I did
 
