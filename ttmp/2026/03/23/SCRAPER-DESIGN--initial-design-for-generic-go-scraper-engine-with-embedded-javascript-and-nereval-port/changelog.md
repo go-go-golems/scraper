@@ -2,6 +2,16 @@
 
 ## 2026-03-23
 
+Generalized `scraper site js-demo run` into named entrypoints so the demo can run `seed`, `item`, or `summary` directly from the CLI.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/cli.go — Reworked the js-demo CLI into `run <entrypoint>` subcommands
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/workflow.go — Added dedicated builders for seed, item, and summary workflows
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/site_test.go — Added direct scheduler coverage for the item entrypoint
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go — Added CLI coverage for `run seed`, `run item`, and `run summary`
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md — Updated operator docs to reference the new `run <entrypoint>` shape
+
 Added a pure-JS `js-demo` site and `scraper site js-demo run` so the engine can exercise fan-out, dependency joins, `site-db`, records, artifacts, and async JS op execution without any `http/fetch` dependency.
 
 ### Related Files

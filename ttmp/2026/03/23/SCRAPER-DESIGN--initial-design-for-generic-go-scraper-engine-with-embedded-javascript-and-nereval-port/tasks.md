@@ -108,6 +108,7 @@
 - [x] Add end-to-end scheduler tests for `js -> http/fetch -> js -> site-db` on both sites
 - [x] Add an operator-facing smoke test for `scraper site migrate <site>` against a built-in site
 - [x] Add a built-in pure-JS demo site plus a runnable CLI path that exercises JS-only workflows without `http/fetch`
+- [x] Generalize `scraper site js-demo run` into named entrypoints so individual JS stages can be exercised directly
 - [x] Record the exercise-site milestone in the implementation diary
 - [x] Commit the exercise-site milestone
 

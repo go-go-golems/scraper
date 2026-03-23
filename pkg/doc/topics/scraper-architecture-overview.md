@@ -42,5 +42,5 @@ Use the CLI help system as the top-level guide for operators and new contributor
 - `scraper engine migrations status` for applied-vs-known migration visibility
 - `scraper site migrate <site>` to initialize or upgrade a site-specific database
 - built-in exercise sites currently include `hackernews` and `slashdot` for `js -> http/fetch -> js -> site-db` validation, plus `js-demo` for a pure-JS `js -> js -> site-db` path without any HTTP dependency
-- `scraper site js-demo run` to seed and run the pure-JS demo workflow locally
+- `scraper site js-demo run <seed|item|summary>` to exercise different pure-JS entrypoints locally
 - ticket `SCRAPER-DESIGN` in `ttmp/` for the detailed implementation guide and diary

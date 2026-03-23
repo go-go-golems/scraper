@@ -1643,3 +1643,87 @@ The resulting path is operator-friendly as well as test-friendly. `scraper site 
   - base values for `count=3`, `multiplier=5` are `5`, `10`, `15`
   - squared values are `25`, `100`, `225`
   - totals are `30` and `350`
+
+## Step 14: Generalize js-demo run into named entrypoints
+
+This step turned the single hardcoded `scraper site js-demo run` command into a small entrypoint tree so the CLI can exercise individual parts of the JS pipeline directly. The new shape is `scraper site js-demo run <entrypoint>`, with `seed`, `item`, and `summary` as the first supported entrypoints.
+
+That makes the demo materially more useful for debugging. `seed` still drives the whole fan-out workflow, `item` runs the single item-building op as its own workflow, and `summary` runs the join stage by constructing item dependencies explicitly. Together they let us test each script in its intended durable environment without having to wait for an HTTP-backed site.
+
+### Prompt Context
+
+**User prompt (verbatim):** "add tasks to the ticket, and then impolement this. use whatever names you think are best for the entry points"
+
+**Assistant interpretation:** Update the design ticket to reflect multi-entrypoint site runs, then implement a CLI shape that exposes the js-demo stages individually.
+
+**Inferred user intent:** Make `site ... run` feel like a real operator harness for individual site entrypoints rather than a single hardcoded demo command.
+
+**Commit (code):** `60d279c` — `Add js demo run entrypoints`
+
+### What I did
+
+- Reworked [cli.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/cli.go) so `run` is now a parent command with:
+  - `seed`
+  - `item`
+  - `summary`
+- Split workflow construction in [workflow.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/workflow.go) into:
+  - `BuildSeedWorkflow`
+  - `BuildItemWorkflow`
+  - `BuildSummaryWorkflow`
+- Kept `BuildWorkflow` as a compatibility alias to the seed entrypoint.
+- Added direct scheduler coverage for the single-item path in [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/site_test.go).
+- Expanded CLI coverage in [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go) to cover:
+  - `run seed`
+  - `run item`
+  - `run summary`
+- Ran:
+  - `go test ./pkg/sites/jsdemo ./pkg/cmd -count=1`
+  - `go test ./... -count=1`
+
+### Why
+
+- The user wanted `site ... run` to behave more like a site verb runner.
+- Individual entrypoints are faster to debug than always running the whole fan-out workflow.
+- Keeping the names aligned with the actual JS stages makes the operator surface clearer than inventing abstract labels.
+
+### What worked
+
+- `seed` maps naturally to the existing full workflow path.
+- `item` is a clean single-op workflow and gives a tight feedback loop for `build_item.js`.
+- `summary` exercises the dependency-join logic by creating item ops plus a dependent summary op without going through `seed.js`.
+
+### What didn't work
+
+- N/A
+
+### What I learned
+
+- The `js-demo` site is already a good proving ground for the broader site-runner idea because its stages are small and deterministic.
+- Direct op-oriented entrypoints are easier to name and reason about when they stay close to the script names.
+
+### What was tricky to build
+
+- The only real design choice was whether to use abstract command names like `fanout` or literal stage names like `seed`. I chose `seed`, `item`, and `summary` because they map directly onto the scripts and make the CLI easier to correlate with the code.
+
+### What warrants a second pair of eyes
+
+- If we later generalize this pattern beyond `js-demo`, we should decide whether site entrypoints are always stage/script-shaped or whether some sites should expose higher-level operator names instead.
+
+### What should be done in the future
+
+- Reuse this `run <entrypoint>` shape when building the more generic site-op runner or jsverbs-backed CLI.
+
+### Code review instructions
+
+- Review [cli.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/cli.go) and [workflow.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/workflow.go) together.
+- Then run:
+  - `scraper site js-demo run seed --count 3`
+  - `scraper site js-demo run item --index 2 --multiplier 4`
+  - `scraper site js-demo run summary --count 3 --multiplier 5`
+
+### Technical details
+
+- The result-targeting model now differs by entrypoint:
+  - `seed` returns the emitted summary op result
+  - `item` returns the single `build_item.js` op result
+  - `summary` returns the `summarize.js` op result after generating its dependencies
