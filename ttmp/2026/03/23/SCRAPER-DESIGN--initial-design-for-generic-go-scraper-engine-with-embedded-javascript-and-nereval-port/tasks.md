@@ -28,18 +28,18 @@
 - [x] Add a `version` or equivalent low-risk smoke-test command so the CLI can be exercised early
 - [x] Verify `go test ./...` and a simple CLI invocation both work
 - [x] Record the bootstrap work in the implementation diary
-- [ ] Commit the CLI/bootstrap milestone
+- [x] Commit the CLI/bootstrap milestone
 
 ### Phase 2. Engine package skeleton
 
-- [ ] Create package boundaries for engine config, store, scheduler, runners, and site registry
-- [ ] Define the durable engine data model for ops, results, dependencies, leases, artifacts, and workflow runs
-- [ ] Add initial Go types for `OpSpec`, `OpResult`, retry policy, queue keys, and workflow metadata
-- [ ] Define store interfaces for enqueueing, leasing, completing, failing, and querying ops
-- [ ] Define runner interfaces for Go-backed op kinds and JS-backed op kinds
-- [ ] Define the site registration contract so sites can contribute scripts, migrations, help text, and commands
-- [ ] Add package-level tests for the pure type and interface contracts that can be validated without SQLite
-- [ ] Record the engine skeleton work in the implementation diary
+- [x] Create package boundaries for engine config, store, scheduler, runners, and site registry
+- [x] Define the durable engine data model for ops, results, dependencies, leases, artifacts, and workflow runs
+- [x] Add initial Go types for `OpSpec`, `OpResult`, retry policy, queue keys, and workflow metadata
+- [x] Define store interfaces for enqueueing, leasing, completing, failing, and querying ops
+- [x] Define runner interfaces for Go-backed op kinds and JS-backed op kinds
+- [x] Define the site registration contract so sites can contribute scripts, migrations, help text, and commands
+- [x] Add package-level tests for the pure type and interface contracts that can be validated without SQLite
+- [x] Record the engine skeleton work in the implementation diary
 - [ ] Commit the engine skeleton milestone
 
 ### Phase 3. Engine database and migrations

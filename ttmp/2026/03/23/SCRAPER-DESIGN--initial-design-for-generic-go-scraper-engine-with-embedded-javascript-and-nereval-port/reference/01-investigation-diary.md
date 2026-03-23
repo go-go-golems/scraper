@@ -22,7 +22,7 @@ RelatedFiles:
 ExternalSources:
     - local:scraper.md
 Summary: Chronological diary of the initial SCRAPER-DESIGN research and documentation pass.
-LastUpdated: 2026-03-23T12:10:00-04:00
+LastUpdated: 2026-03-23T12:35:00-04:00
 WhatFor: Record the research steps, commands, decisions, and rough edges encountered while producing the initial design guide.
 WhenToUse: Use when reviewing how the initial design doc was produced or when continuing the implementation work later.
 ---
@@ -296,7 +296,7 @@ Then work on the tasks one by one committing at appropriate intervals and keepin
 
 **Inferred user intent:** Turn the design ticket into an execution guide and begin actual repo construction immediately instead of leaving the work at documentation level.
 
-**Commit (code):** Pending at the time of writing this diary entry; the bootstrap milestone is prepared for commit after validation and ticket updates.
+**Commit (code):** `7876934` — Bootstrap scraper CLI and design ticket
 
 ### What I did
 
@@ -424,3 +424,141 @@ Then work on the tasks one by one committing at appropriate intervals and keepin
   - `go test ./...`
   - `go run ./cmd/scraper version`
   - `go run ./cmd/scraper help scraper-architecture-overview`
+
+## Step 4: Define the engine contracts before implementing storage
+
+This step established the package boundaries and durable type contracts for the engine before any SQLite implementation was written. The goal was to lock down the shape of workflows, ops, leases, retries, results, runners, stores, scheduler configuration, and site registration so the next implementation steps can build against stable interfaces instead of inventing them ad hoc while writing the database layer.
+
+The output is a phase-2 skeleton under `pkg/engine/` and `pkg/sites/registry/` with lightweight validation tests. No database or runtime logic was added yet; this milestone is intentionally about contract clarity.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Cool, add a detailed list of tasks to the ticket on how to build this, using the glazed framework for CLI (don't forget to properly initialize the help system and logging, see skills), and decompose the task into a set of phases. 
+
+Then work on the tasks one by one committing at appropriate intervals and keeping a detailed diary as you work."
+
+**Assistant interpretation:** Continue from the bootstrap milestone into the next planned phase, implementing the engine package skeleton and documenting the work in the ticket diary.
+
+**Inferred user intent:** Move steadily through the phased plan instead of stopping after the CLI bootstrap.
+
+**Commit (code):** Pending at the time of writing this diary entry; the engine contract milestone is prepared for commit after validation and ticket updates.
+
+### What I did
+
+- Added package boundaries for the early engine surface:
+  - `pkg/engine/config`
+  - `pkg/engine/model`
+  - `pkg/engine/store`
+  - `pkg/engine/runner`
+  - `pkg/engine/scheduler`
+  - `pkg/sites/registry`
+- Defined the core durable model types in `pkg/engine/model/types.go`:
+  - workflow IDs and site names
+  - workflow status
+  - op status
+  - dependency edges
+  - retry policy and retry state
+  - lease data
+  - op spec
+  - op result
+  - record writes
+  - artifact writes
+  - op error
+- Added a first-pass config model in `pkg/engine/config/config.go` for:
+  - engine DB path
+  - sites directory
+  - worker identity and worker timings
+  - shared HTTP timeout and user-agent settings
+- Added store interfaces in `pkg/engine/store/store.go` for:
+  - workflow creation and status updates
+  - op enqueueing and lookup
+  - op leasing and lease heartbeats
+  - completion and failure recording
+  - result lookup for dependency reads
+- Added runner interfaces and a runner registry in `pkg/engine/runner/runner.go`:
+  - `Runner`
+  - `RunContext`
+  - `DependencyResolver`
+  - `SiteDatabase`
+  - duplicate-safe runner registration
+- Added scheduler config validation in `pkg/engine/scheduler/scheduler.go`.
+- Added a site definition and registry in `pkg/sites/registry/registry.go` so a site can contribute:
+  - script roots
+  - SQL migration roots
+  - JS migration roots
+  - help roots
+  - CLI registration hooks
+- Added package-level tests covering:
+  - op spec linkage and retry metadata
+  - `EmittedIDs`
+  - config validation
+  - scheduler validation
+  - runner duplicate registration and kind ordering
+  - site registry validation and ordering
+- Ran `go test ./...` successfully after the phase 2 additions.
+
+### Why
+
+- The database layer should not invent the contract it is meant to persist.
+- The goja runtime layer should not define the data model implicitly through ad hoc marshaling code.
+- Sites need a formal registration contract early because migrations, scripts, help entries, and CLI commands all depend on it.
+
+### What worked
+
+- The package boundaries were small enough to define without dragging in storage or runtime implementation prematurely.
+- The data model maps cleanly to the ticket design:
+  - `Lease`
+  - `RetryPolicy`
+  - dependency edges
+  - `OpSpec`
+  - `OpResult`
+  - `EmittedIDs`
+- The runner registry and site registry are already useful pure-Go seams with straightforward tests.
+
+### What didn't work
+
+- N/A
+
+### What I learned
+
+- The design document translated into code cleanly once the package split was kept disciplined.
+- The site registry is a useful early abstraction because it prevents migrations, scripts, and docs from turning into separate ad hoc configuration mechanisms later.
+- Even without SQLite, tests on these contracts already catch useful mistakes such as duplicate registration and invalid scheduler/config values.
+
+### What was tricky to build
+
+- The main design tension was keeping the model explicit without overfitting to one site. I kept the store and runner interfaces narrow enough that both the NEREVAL port and future sites can still shape the implementation details later.
+- The second tension was whether to place registries under `pkg/engine/` or under `pkg/sites/`. I chose `pkg/sites/registry` because the registration contract is site-facing rather than a scheduler concern.
+
+### What warrants a second pair of eyes
+
+- Whether `OpStatusReady` belongs as a first-class persisted status or should remain a query-time derived state after dependencies are satisfied.
+- Whether `SiteDatabase` in the runner contract should remain a minimal SQL executor or become a richer projection interface later.
+
+### What should be done in the future
+
+- Implement engine SQLite migrations and the first concrete store in phase 3.
+- Decide how dependency readiness is persisted versus computed when the scheduler is implemented.
+- Add serialization tests once the SQLite store starts writing and reading these types.
+
+### Code review instructions
+
+- Review the contracts in this order:
+  - `pkg/engine/model/types.go`
+  - `pkg/engine/store/store.go`
+  - `pkg/engine/runner/runner.go`
+  - `pkg/sites/registry/registry.go`
+  - `pkg/engine/config/config.go`
+  - `pkg/engine/scheduler/scheduler.go`
+- Then review the tests:
+  - `pkg/engine/model/types_test.go`
+  - `pkg/engine/config/config_test.go`
+  - `pkg/engine/runner/runner_test.go`
+  - `pkg/engine/scheduler/scheduler_test.go`
+  - `pkg/sites/registry/registry_test.go`
+
+### Technical details
+
+- Concrete commands used during the contract phase:
+  - `gofmt -w ...`
+  - `go test ./...`

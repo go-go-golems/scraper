@@ -51,3 +51,17 @@ Expanded the ticket backlog into phased implementation work, bootstrapped the re
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md — Added the first embedded help entry
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/tasks.md — Replaced the one-shot checklist with phased build tasks
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/reference/01-investigation-diary.md — Recorded the bootstrap implementation step
+
+
+## 2026-03-23
+
+Added the phase-2 engine contracts: durable workflow/op/result types, store interfaces, runner interfaces, scheduler/config validation, and a site registry contract with package-level tests.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/model/types.go — Defined the durable engine data model
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/store.go — Added the first store interfaces
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/runner/runner.go — Added runner contracts and duplicate-safe runner registration
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/scheduler/scheduler.go — Added scheduler config validation
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/registry/registry.go — Added the site registration contract
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/reference/01-investigation-diary.md — Recorded the contract milestone
