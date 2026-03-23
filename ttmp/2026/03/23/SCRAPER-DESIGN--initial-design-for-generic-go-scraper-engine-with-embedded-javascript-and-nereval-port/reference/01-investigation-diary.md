@@ -1163,7 +1163,7 @@ This step turned the engine from a durable store plus runnable ops into a real w
 
 **Inferred user intent:** Keep building the engine phase by phase until the runtime and persistence layers are connected by a real durable execution loop.
 
-**Commit (code):** Pending at the time of writing this diary entry; the scheduler milestone changes are validated locally and ready to commit.
+**Commit (code):** `da71a46` — Add scheduler loop and retry handling
 
 ### What I did
 
