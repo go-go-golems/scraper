@@ -1112,6 +1112,22 @@ Implement:
 
 Use fixture HTML from the prototype's known DOM structure as the first tests. Only after fixtures pass should you run live-site smoke tests.
 
+Implemented slice:
+
+- `pkg/sites/nereval/site.go` now registers NEREVAL as a built-in site with embedded scripts, verbs, migrations, and fixtures.
+- `pkg/sites/nereval/verbs/seed.js` submits the initial durable workflow through the JS submit-verb host.
+- `pkg/sites/nereval/scripts/seed.js` emits the first list fetch and list extract ops.
+- `pkg/sites/nereval/scripts/extract_list.js` owns ASP.NET viewstate chaining, list-row extraction, property stub writes, detail-op fan-out, and next-page emission.
+- `pkg/sites/nereval/scripts/extract_detail.js` writes normalized projections into `nereval.db`.
+- `pkg/sites/nereval/migrations/001_init.sql` mirrors the prototype's normalized read models closely enough for fixture-driven comparison.
+- `pkg/cmd/site_test.go` now runs a full `site nereval run seed` -> `worker run` flow against a local fixture server and asserts both `engine status` and `nereval.db` contents.
+
+Current boundary:
+
+- the NEREVAL port is intentionally validated only against fixture HTML and a local `httptest` server
+- no live `data.nereval.com` scrape was run in this slice
+- queue policies for NEREVAL are not enabled by default yet; the site uses the generic queue behavior until later rollout work
+
 ### Phase 8: Add operator-facing CLI commands
 
 Goal: make the engine usable without a web app.

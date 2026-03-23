@@ -119,16 +119,16 @@
 
 ### Phase 9. NEREVAL site port
 
-- [ ] Create the NEREVAL site package and register it with the engine
-- [ ] Port NEREVAL list-page fetch behavior into the new HTTP op model
-- [ ] Port ASP.NET pagination and viewstate handling into explicit op/data flow
-- [ ] Port list extraction into JS analysis scripts
-- [ ] Port detail-page fetch and detail extraction into site scripts
-- [ ] Move NEREVAL read models into the NEREVAL site database with migrations
-- [ ] Define the first end-to-end NEREVAL workflow graph in the new engine
-- [ ] Add fixture and integration tests comparing the new outputs with the prototype behavior
-- [ ] Record the NEREVAL port work in the implementation diary
-- [ ] Commit the NEREVAL port milestone
+- [x] Create the NEREVAL site package and register it with the engine
+- [x] Port NEREVAL list-page fetch behavior into the new HTTP op model
+- [x] Port ASP.NET pagination and viewstate handling into explicit op/data flow
+- [x] Port list extraction into JS analysis scripts
+- [x] Port detail-page fetch and detail extraction into site scripts
+- [x] Move NEREVAL read models into the NEREVAL site database with migrations
+- [x] Define the first end-to-end NEREVAL workflow graph in the new engine
+- [x] Add fixture and integration tests comparing the new outputs with the prototype behavior
+- [x] Record the NEREVAL port work in the implementation diary
+- [x] Commit the NEREVAL port milestone
 
 ### Phase 10. CLI workflows and operator ergonomics
 
@@ -141,9 +141,9 @@
 
 ### Phase 11. Validation and handoff
 
-- [ ] Run full `go test ./...` validation
-- [ ] Run a local end-to-end NEREVAL scrape against fixtures or a constrained live target
-- [ ] Update the design doc if implementation diverges from the current architecture notes
-- [ ] Update the changelog and diary with the final implementation sequence
+- [x] Run full `go test ./...` validation
+- [x] Run a local end-to-end NEREVAL scrape against fixtures only
+- [x] Update the design doc if implementation diverges from the current architecture notes
+- [x] Update the changelog and diary with the final implementation sequence
 - [ ] Run `docmgr doctor --ticket SCRAPER-DESIGN --stale-after 30`
 - [ ] Upload an updated implementation bundle to reMarkable

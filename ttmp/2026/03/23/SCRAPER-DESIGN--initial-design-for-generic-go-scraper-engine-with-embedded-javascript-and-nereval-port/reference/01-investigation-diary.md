@@ -2030,3 +2030,138 @@ I added dedicated two-page tests for both sites using tiny `httptest` servers wi
 - Live manual smoke results:
   - `scraper site slashdot run seed --max-pages 2` returned page-1 `storyCount: 15`, emitted page-2 ops, and persisted `30` rows in the site DB
   - `scraper site hackernews run seed --max-pages 2` returned page-1 `storyCount: 29`, emitted page-2 ops, and persisted `52` rows in the site DB
+
+## Step 18: Port NEREVAL into the built-in site system without running it live
+
+This step finally turned the earlier NEREVAL design notes into a real built-in site package. The goal was not to re-create the whole prototype app or run the live site. The goal was to prove that the current durable engine can host the essential NEREVAL shape: submit a workflow from a JS verb, fetch the list page through generic `http/fetch`, carry ASP.NET viewstate explicitly through op input, fan out detail fetches from JS, and write the normalized property read models into a site-owned SQLite database.
+
+I kept the validation boundary deliberately tight. The new NEREVAL site runs only against embedded fixture HTML and a local `httptest` server in tests. That gives us evidence that the generic engine primitives are sufficient for the old prototype behavior, while respecting the user’s instruction not to run the real NEREVAL scraper yet.
+
+### Prompt Context
+
+**User prompt (verbatim):** "I'm oging for a walk, so feel free to continue with the RPS ticket SCRAPER-RATE-LIMITER and then continue with testing it and porting over the nereval stuff (but don't run it!). 
+
+I hope to see everything done when I come back"
+
+**Assistant interpretation:** After finishing the queue limiter work, port the NEREVAL site into the new scraper engine and validate it through tests only, not against the live website.
+
+**Inferred user intent:** Leave the codebase with a real NEREVAL site package that demonstrates the intended architecture, but avoid hitting the live service before the port is reviewed.
+
+**Commit (code):** `a64cc24` — `Add NEREVAL site package`
+
+### What I did
+
+- Added [site.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/site.go) and registered it in [defaults.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/defaults/defaults.go).
+- Added the normalized NEREVAL schema in [001_init.sql](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/migrations/001_init.sql), mirroring the old prototype’s tables:
+  - `properties`
+  - `owners`
+  - `assessments`
+  - `prior_assessments`
+  - `buildings`
+  - `sales`
+  - `sub_areas`
+  - `land`
+  - `mailing_addresses`
+- Added a JS submit verb in [seed.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/verbs/seed.js) so `scraper site nereval run seed ...` now submits durable work through the same submit-verb host as `js-demo`.
+- Added the execution scripts:
+  - [seed.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/seed.js)
+  - [extract_list.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/extract_list.js)
+  - [extract_detail.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/extract_detail.js)
+  - [common.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/lib/common.js)
+  - [extract.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/lib/extract.js)
+- Ported the prototype logic into the new engine shape:
+  - list page GET via `http/fetch`
+  - next-page POST via `__VIEWSTATE`, `__EVENTVALIDATION`, and `__EVENTARGUMENT`
+  - list-row extraction and property stub writes in JS
+  - detail-page fan-out from JS
+  - detail projection writes into the NEREVAL site DB
+- Added embedded fixtures for:
+  - list page 1
+  - list page 2
+  - detail pages for accounts `24038`, `24058`, and `24100`
+- Added command-path tests in [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go) that:
+  - start a local fixture server
+  - submit `site nereval run seed`
+  - inspect `engine status`
+  - run `worker run`
+  - inspect `engine status` again
+  - open `nereval.db` and assert normalized table contents
+- Ran:
+  - `go test ./pkg/cmd -run 'TestNereval|TestRootCommandIncludesBuiltinSites' -count=1`
+  - `go test ./... -count=1`
+
+### Why
+
+- NEREVAL is the first site in this repo that actually needs the richer engine shape: durable JS submit verbs, generic HTTP ops, dependent JS extraction, explicit pagination state, and normalized site projections.
+- The old prototype proved the domain requirements, but it bundled queueing, HTTP orchestration, and persistence together. The new site package demonstrates how those concerns now live in separate engine layers.
+- Avoiding the live site keeps this slice deterministic and reviewable.
+
+### What worked
+
+- The current submit-verb host was enough. No extra CLI plumbing was needed once the site exposed `verbs/seed.js`.
+- The generic `http/fetch` runner was sufficient for ASP.NET pagination because the next-page JS extractor can emit the POST request with explicit form fields.
+- The fixture-backed worker test proved the full durable flow without special-case code in the engine.
+
+### What didn't work
+
+- N/A for correctness. The main constraint was intentional: I did not run a live NEREVAL scrape, so this slice does not yet validate against current production HTML.
+
+### What I learned
+
+- The prototype’s viewstate cache table can be replaced, at least for the first pass, by explicit op chaining: fetch list page N, extract hidden fields, emit fetch list page N+1.
+- The submit-verb model is a good fit for complex sites. The NEREVAL command now behaves like `js-demo`: the CLI submits initial work and the durable worker executes the graph later.
+- The normalized read-model tables from the prototype still make sense, but they belong in the per-site DB, not in a prototype-specific app shell.
+
+### What was tricky to build
+
+- The sharp edge was deduplicating detail fan-out across repeated owner rows and later pages without adding new engine primitives. The current engine does not enforce dedup keys globally, so `extract_list.js` now checks `scraper-db` for an existing workflow op before emitting another detail fetch for the same account. That keeps the first port correct without changing the store contract again.
+
+### What warrants a second pair of eyes
+
+- The current HTML parsing is intentionally fixture-shaped and regex-based. It is good enough for this port slice, but the exact selectors may need refinement before live execution.
+- NEREVAL is not yet using an explicit queue policy or rate limiter by default.
+- The site currently has only the `seed` submit verb; operator query commands and richer workflow inspection remain later CLI work.
+
+### What should be done in the future
+
+- Add live-site fixture refreshes or constrained smoke runs before relying on the parser against current production markup.
+- Decide whether to add a specialized summary op or richer operator commands for completed NEREVAL workflows.
+- Add queue policy defaults for `site:nereval:http` and `site:nereval:js` when rollout timing makes sense.
+
+### Code review instructions
+
+- Start with [site.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/site.go) and [defaults.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/defaults/defaults.go) to see how the site is registered.
+- Then read the submit and execution scripts in this order:
+  - [seed.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/verbs/seed.js)
+  - [seed.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/seed.js)
+  - [extract_list.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/extract_list.js)
+  - [extract_detail.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/extract_detail.js)
+  - [extract.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/lib/extract.js)
+- Then inspect the schema in [001_init.sql](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/migrations/001_init.sql).
+- Finish with [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go), especially `TestNerevalSubmitThenWorkerRun`.
+
+### Technical details
+
+- Durable op graph created by the first seed op:
+
+```text
+js:nereval seed
+  -> http/fetch list page 1
+  -> js extract list page 1
+       -> http/fetch detail 24038
+       -> js extract detail 24038
+       -> http/fetch detail 24058
+       -> js extract detail 24058
+       -> http/fetch list page 2 (POST with viewstate)
+       -> js extract list page 2
+            -> http/fetch detail 24100
+            -> js extract detail 24100
+```
+
+- Fixture-backed end state asserted by tests:
+  - engine `succeeded: 11`
+  - engine `artifacts: 5`
+  - `properties = 3`
+  - `owners = 4`
+  - `assessments = 3`
+  - `sales = 3`

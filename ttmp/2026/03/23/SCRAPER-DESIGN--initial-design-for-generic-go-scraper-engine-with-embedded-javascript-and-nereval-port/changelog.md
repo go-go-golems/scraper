@@ -2,6 +2,27 @@
 
 ## 2026-03-23
 
+Ported the first NEREVAL site package into the durable scraper engine as a built-in site, including a JS submit verb, list/detail extraction scripts, normalized site DB migrations, embedded fixtures, and a fixture-backed command-path test that submits work, runs the durable worker, inspects `engine status`, and verifies `nereval.db` contents without touching the live site.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/site.go — Added the built-in NEREVAL site definition with embedded scripts, verbs, migrations, and fixtures
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/verbs/seed.js — Added the JS submit verb for `scraper site nereval run seed`
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/seed.js — Added the initial NEREVAL workflow seed op
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/extract_list.js — Added list extraction, viewstate chaining, and detail fan-out
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/extract_detail.js — Added detail extraction and normalized projection writes
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/lib/extract.js — Added NEREVAL-specific HTML parsing helpers
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/migrations/001_init.sql — Added the NEREVAL site DB schema
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/fixtures/list-page-1.html — Added fixture HTML for list page 1
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/fixtures/list-page-2.html — Added fixture HTML for list page 2
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/fixtures/detail-24038.html — Added fixture HTML for detail account 24038
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/fixtures/detail-24058.html — Added fixture HTML for detail account 24058
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/fixtures/detail-24100.html — Added fixture HTML for detail account 24100
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/defaults/defaults.go — Registered NEREVAL in the default site registry
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go — Added the end-to-end fixture-backed NEREVAL submit-plus-worker test
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/reference/01-investigation-diary.md — Recorded the NEREVAL port work and review notes
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/design-doc/01-generic-go-scraper-engine-and-nereval-port-design-guide.md — Updated the design guide to describe the implemented NEREVAL boundary
+
 Moved listing pagination control for the built-in Hacker News and Slashdot exercise sites into the JS scripts themselves. The Go CLI now only passes `--max-pages` through workflow input, while `seed.js` and `extract_frontpage.js` decide whether to emit the next fetch and extract ops.
 
 ### Related Files
