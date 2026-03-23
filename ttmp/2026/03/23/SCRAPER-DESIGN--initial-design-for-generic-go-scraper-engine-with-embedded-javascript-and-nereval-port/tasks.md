@@ -111,6 +111,9 @@
 - [x] Generalize `scraper site js-demo run` into named entrypoints so individual JS stages can be exercised directly
 - [x] Add named `run` entrypoints for Hacker News and Slashdot, including a fixture-backed smoke mode for local HTTP-free operator testing
 - [x] Add an explicit `js-demo` test proving queue-domain throttling applies to JS ops too
+- [x] Move Hacker News and Slashdot pagination fan-out into JS so `seed.js` and `extract_frontpage.js` own `max-pages` behavior by emitting additional ops
+- [x] Expose `--max-pages` on the built-in Hacker News and Slashdot `run` entrypoints
+- [x] Add multipage tests and live smoke checks proving page-2 fan-out works on both exercise sites
 - [x] Record the exercise-site milestone in the implementation diary
 - [x] Commit the exercise-site milestone
 

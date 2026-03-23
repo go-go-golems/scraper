@@ -2,6 +2,26 @@
 
 ## 2026-03-23
 
+Moved listing pagination control for the built-in Hacker News and Slashdot exercise sites into the JS scripts themselves. The Go CLI now only passes `--max-pages` through workflow input, while `seed.js` and `extract_frontpage.js` decide whether to emit the next fetch and extract ops.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/cliutil/http_runner.go — Added the shared `--max-pages` CLI flag and passed it through to site workflow builders
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/workflow.go — Added `MaxPages` to Hacker News workflow input and direct extract runs
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/cli.go — Wired `--max-pages` into the Hacker News seed and extract commands
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/scripts/seed.js — Passed `pageNumber` and `maxPages` into the emitted extract op
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/scripts/extract_frontpage.js — Added JS-driven next-page emission when a `morelink` exists and `pageNumber < maxPages`
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/scripts/lib/frontpage.js — Added next-page URL extraction for Hacker News
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/site_test.go — Added a two-page scheduler integration test covering emitted page-2 fetch/extract ops
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/workflow.go — Added `MaxPages` to Slashdot workflow input and direct extract runs
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/cli.go — Wired `--max-pages` into the Slashdot seed and extract commands
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/scripts/seed.js — Passed `pageNumber` and `maxPages` into the emitted extract op
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/scripts/extract_frontpage.js — Added JS-driven next-page emission when an `Older` link exists and `pageNumber < maxPages`
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/scripts/lib/frontpage.js — Added next-page URL extraction for Slashdot
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/site_test.go — Added a two-page scheduler integration test covering emitted page-2 fetch/extract ops
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go — Added CLI coverage for `--max-pages` and help output
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md — Documented the new JS-driven pagination smoke path
+
 Added an explicit `js-demo` queue-domain test proving that the scheduler’s queue throttling applies to JavaScript ops too, not just HTTP ops.
 
 ### Related Files

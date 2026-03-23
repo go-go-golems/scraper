@@ -1923,3 +1923,110 @@ I added that explicit coverage in the `js-demo` test suite. The test creates two
   - `Processed == 1`
   - workflow stats `Succeeded == 2`
   - workflow status `succeeded`
+
+## Step 17: Move Hacker News and Slashdot pagination fan-out into JS
+
+This step pushed more site behavior into the JavaScript layer for the two built-in HTTP exercise sites. Before this change, the CLI could start `seed` and `extract-frontpage`, but pagination was effectively fixed to one page. The user wanted the operator-facing entrypoints to keep their current CLI shape while moving the “how many pages do we follow?” decision into JS itself. That meant the Go side should only carry `maxPages` as workflow input, while the site scripts decide whether to emit more work.
+
+I implemented that by threading `maxPages` through the shared HTTP CLI helper and the HN/Slashdot workflow builders, then changing the site scripts to own pagination. `seed.js` now emits the first fetch and extract pair with `pageNumber: 1` and `maxPages`. `extract_frontpage.js` now parses the next-page link from the fetched HTML and, if `pageNumber < maxPages`, emits the next `http/fetch` plus the next `js` extract op itself. This keeps the workflow policy inside the site scripts, which is the right place for it.
+
+I added dedicated two-page tests for both sites using tiny `httptest` servers with page-1 and page-2 HTML. Those tests proved the emitted page-2 ops actually run through the scheduler and write more records into the site DB. I also ran live manual smoke tests on both real sites with `--max-pages 2`; Slashdot persisted 30 stories and Hacker News persisted 52 stories, confirming that page-2 crawling works on the current live markup.
+
+### Prompt Context
+
+**User prompt (verbatim):** "cool, so expose JS commands as glazed verbs the same way we did for jsdemo, but do all the max-pages etc... in JS itself to start the ops (using ctx.emit)"
+
+**Assistant interpretation:** Keep the existing operator-facing `run` entrypoint shape, but move listing-pagination control into the site JS scripts instead of hardcoding it in Go.
+
+**Inferred user intent:** Use the real scheduler/runtime path, let the CLI pass parameters like `max-pages`, and make the site JS scripts responsible for fan-out decisions.
+
+### What I did
+
+- Extended the shared HTTP site-runner options with `MaxPages`
+- Threaded `maxPages` into the Hacker News and Slashdot workflow builders
+- Added `--max-pages` to both `scraper site hackernews run ...` and `scraper site slashdot run ...`
+- Updated both `seed.js` scripts to emit the first fetch/extract pair with `pageNumber` and `maxPages`
+- Updated both `extract_frontpage.js` scripts to:
+  - parse the next listing URL
+  - check `pageNumber < maxPages`
+  - emit the next page’s fetch op
+  - emit the next page’s extract op
+- Added parser helpers for:
+  - Hacker News `morelink`
+  - Slashdot `Older` pagination links
+- Added two-page scheduler integration tests for both sites
+- Added CLI tests covering `--max-pages` and command help visibility
+- Ran:
+  - `go test ./pkg/sites/hackernews ./pkg/sites/slashdot ./pkg/cmd -count=1`
+  - `go test ./... -count=1`
+  - `go run ./cmd/scraper site slashdot run seed --help`
+  - `go run ./cmd/scraper site hackernews run seed --help`
+  - `go run ./cmd/scraper site slashdot run seed --max-pages 2 ...`
+  - `go run ./cmd/scraper site hackernews run seed --max-pages 2 ...`
+
+### Why
+
+- The user wanted more of the site behavior in JS, especially the decision to keep following listing pages.
+- The engine already supports JS fan-out through `ctx.emit`, so pagination belongs naturally in the site extractors.
+- This keeps the Go CLI thin and makes the site scripts a better representation of the real scrape logic.
+
+### What worked
+
+- The existing runtime contract was already sufficient. No engine changes were needed beyond passing `maxPages` into workflow input.
+- Slashdot’s live frontpage already exposes a stable `Older` link and the current parser shape handled it cleanly.
+- Hacker News’ `morelink` pagination also worked once the parser extracted it robustly.
+
+### What didn't work
+
+- My first Hacker News `morelink` regex only matched `class=... href=...` order, while the synthetic test page used `href=... class=...`. That caused the initial multipage test to stop after page 1.
+- I fixed that by making the regex order-insensitive and reran the full test suite.
+
+### What I learned
+
+- The current Go-hosted site commands are already a good operator shell for JS-defined behavior. We do not need JS-discovered verbs yet to move more workflow policy into JS.
+- Returning the first extract result is still fine for the current CLI, even when later page ops are emitted, because workflow success waits for the whole graph to finish.
+
+### What was tricky to build
+
+- The subtle boundary was deciding what belongs in Go versus JS. The correct split here is:
+  - Go: parse CLI flags, open DBs, run the scheduler
+  - JS: decide whether another listing page should be fetched and extracted
+- The other tricky bit was making the pagination parsers tolerant enough for real HTML attribute ordering.
+
+### What warrants a second pair of eyes
+
+- Hacker News pagination currently follows the `morelink` URL exactly as rendered. That is probably correct, but it is worth checking whether we want any canonicalization around `?p=2` versus `news?p=2` before the NEREVAL port brings in more complex URL handling.
+- Slashdot and Hacker News still report the first extract op’s summary on `run seed`. If we later want a true end-of-workflow summary, we should add an explicit summary op rather than overloading the first extract result.
+
+### What should be done in the future
+
+- If we add JS-defined operator entrypoints later, this exact pagination logic can stay where it is. Only the command discovery layer would need to change.
+- Consider whether multipage list scrapes should annotate records with a page index or global ordinal when sites do not already expose one.
+
+### Code review instructions
+
+- Start with [http_runner.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/cliutil/http_runner.go) to see how `--max-pages` is now passed through
+- Then read:
+  - [workflow.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/workflow.go)
+  - [seed.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/scripts/seed.js)
+  - [extract_frontpage.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/scripts/extract_frontpage.js)
+  - [frontpage.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/scripts/lib/frontpage.js)
+  - [workflow.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/workflow.go)
+  - [seed.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/scripts/seed.js)
+  - [extract_frontpage.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/scripts/extract_frontpage.js)
+  - [frontpage.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/scripts/lib/frontpage.js)
+- Finish with:
+  - [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/site_test.go)
+  - [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/site_test.go)
+  - [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go)
+
+### Technical details
+
+- New/updated CLI flags:
+  - `scraper site hackernews run seed --max-pages N`
+  - `scraper site hackernews run extract-frontpage --max-pages N`
+  - `scraper site slashdot run seed --max-pages N`
+  - `scraper site slashdot run extract-frontpage --max-pages N`
+- Live manual smoke results:
+  - `scraper site slashdot run seed --max-pages 2` returned page-1 `storyCount: 15`, emitted page-2 ops, and persisted `30` rows in the site DB
+  - `scraper site hackernews run seed --max-pages 2` returned page-1 `storyCount: 29`, emitted page-2 ops, and persisted `52` rows in the site DB
