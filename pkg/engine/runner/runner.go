@@ -6,15 +6,12 @@ import (
 	"sort"
 	"time"
 
+	databasemod "github.com/go-go-golems/go-go-goja/modules/database"
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 )
 
 type DependencyResolver interface {
 	Result(ctx context.Context, workflowID model.WorkflowID, opID model.OpID) (*model.OpResult, error)
-}
-
-type SiteDatabase interface {
-	Exec(ctx context.Context, sql string, args ...any) error
 }
 
 type RunContext struct {
@@ -23,7 +20,8 @@ type RunContext struct {
 	Lease        model.Lease
 	Now          time.Time
 	Dependencies DependencyResolver
-	SiteDB       SiteDatabase
+	ScraperDB    databasemod.QueryExecer
+	SiteDB       databasemod.QueryExecer
 }
 
 type Runner interface {

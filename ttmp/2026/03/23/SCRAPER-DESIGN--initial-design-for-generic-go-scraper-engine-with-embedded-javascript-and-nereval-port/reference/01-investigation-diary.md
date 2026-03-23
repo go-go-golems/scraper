@@ -22,7 +22,7 @@ RelatedFiles:
 ExternalSources:
     - local:scraper.md
 Summary: Chronological diary of the initial SCRAPER-DESIGN research and documentation pass.
-LastUpdated: 2026-03-23T14:35:00-04:00
+LastUpdated: 2026-03-23T12:23:47-04:00
 WhatFor: Record the research steps, commands, decisions, and rough edges encountered while producing the initial design guide.
 WhenToUse: Use when reviewing how the initial design doc was produced or when continuing the implementation work later.
 ---
@@ -1025,4 +1025,128 @@ The work landed in two layers. First, `go-go-goja`'s `database` module was refac
 - Concrete commands used during the preconfigured DB phase:
   - `go test ./modules/database/...`
   - `go test ./pkg/js/runtime ./pkg/sites/migrate ./pkg/cmd`
+  - `go test ./...`
+
+## Step 9: Build the first executable JS op runtime
+
+This step completed the first real JS execution slice for the scraper engine. Before this point we had site migration runtimes and preconfigured database modules, but not a general op runner that could load a site script, construct a stable `ctx` contract, and return a durable `OpResult`. The new code adds exactly that: a generic JS executor in `pkg/js/runtime` and a `js` runner adapter in `pkg/engine/runner`.
+
+### Prompt Context
+
+**User prompt (verbatim):** "continue"
+
+**Assistant interpretation:** Move into phase 5 of the ticket backlog and implement the milestone-one JS runtime integration rather than stopping at the site DB milestone.
+
+**Inferred user intent:** Turn the architectural design into working runtime code so future phases can run real site scripts through the engine instead of only through migration helpers.
+
+**Commit (code):** Pending at the time of writing this diary entry; the JS runtime milestone changes are validated locally and ready to commit.
+
+### What I did
+
+- Added `pkg/js/runtime/executor.go` as the generic JS op executor.
+- Defined the current metadata contract:
+  - JS ops use runner kind `js`
+  - the executed module path comes from op metadata key `script`
+- Added a runtime builder that:
+  - loads site scripts from the site's `ScriptsFS` and `ScriptsRoot`
+  - injects preconfigured `scraper-db` and `site-db` modules
+  - applies any site-provided runtime module registrars
+- Defined the milestone-one `ctx` contract with:
+  - `ctx.input`
+  - `ctx.workflow`
+  - `ctx.op`
+  - `ctx.lease`
+  - `ctx.dep(opID)`
+  - `ctx.emit(spec)`
+  - `ctx.writeRecord(collection, key, data)`
+  - `ctx.writeArtifact(spec)`
+  - `ctx.log(...)`
+- Added JS-to-Go result-envelope marshalling:
+  - plain return values become `OpResult.Data`
+  - `{ data, error }` objects populate the durable result envelope explicitly
+- Added emitted-op normalization so child ops inherit:
+  - current workflow ID
+  - current site
+  - current op as `parent_id`
+  unless JS overrides those fields
+- Added `pkg/js/runtime/promises.go` so async JS ops can be awaited with the same explicit polling model already used in site migrations.
+- Added `pkg/engine/runner/js.go` as the engine-facing `js` runner that resolves the site definition and delegates execution into the new runtime package.
+- Added runtime and runner tests covering:
+  - script execution
+  - script-local relative `require()`
+  - dependency reads
+  - emitted ops
+  - record writes
+  - artifact writes
+  - preconfigured `scraper-db` and `site-db` access
+  - runtime closer execution on teardown
+
+### Why
+
+- The next scheduler and HTTP phases need a real programmable execution target, not only sketches in the design doc.
+- The user had already pushed the architecture toward Go-owned DB handles and Go-owned path discovery, so this was the right moment to make the JS op runtime match that same ownership model.
+- Building the executor before the scheduler keeps the interfaces honest: the scheduler can now target a real runner shape instead of a hypothetical one.
+
+### What worked
+
+- Relative `require("./lib/helper.js")` loading worked cleanly from `fstest.MapFS`, so the site script model already supports both embedded filesystems and normal directories.
+- The preconfigured database modules integrated naturally into the executor once the runtime builder delegated to the existing `DatabaseRegistrar`.
+- The result envelope shape maps well onto the current `model.OpResult`.
+- Full repo tests passed after the new runner was added.
+
+### What didn't work
+
+- The first test draft imported `io/fs/fstest`, which is the wrong package path.
+- Resolution:
+  - switch to `testing/fstest`
+- I also hit a test import-name collision between:
+  - `github.com/dop251/goja_nodejs/require`
+  - `github.com/stretchr/testify/require`
+- Resolution:
+  - alias the node require package as `noderequire`
+
+### What I learned
+
+- The executor wants two distinct layers:
+  - runtime construction and JS marshalling in `pkg/js/runtime`
+  - engine-facing site lookup in `pkg/engine/runner`
+- That split is cleaner than putting site-registry lookups directly into the runtime package or pushing JS marshalling into the engine package.
+
+### What was tricky to build
+
+- The sharp edge here was not the Goja call itself. It was defining which defaults belong in emitted child ops. The current implementation makes emitted ops inherit the current workflow ID, site, and parent ID unless the script overrides them explicitly.
+- The second subtle part was keeping the result envelope small while still allowing future extension. Right now the runtime only blesses the current fields we actually need: `data`, `error`, emitted ops, records, and artifacts.
+
+### What warrants a second pair of eyes
+
+- Whether the `script` metadata key should stay on `OpSpec.Metadata` or move into a runner-specific input envelope later.
+- Whether the current `ctx.dep(opID)` lookup is sufficient for milestone one, or whether a later phase should add dependency aliases for ergonomics.
+- Whether `ctx.writeRecord` should eventually accept structured keys instead of the current string-or-JSON-string fallback.
+
+### What should be done in the future
+
+- Wire the scheduler loop to lease and execute `js` ops through the new runner.
+- Add the first Go-backed HTTP scrape runner so JS can consume fetch results via dependencies instead of doing transport itself.
+- Decide whether to add helper sugar such as `ctx.ops.scrape(...)` only after the HTTP runner exists.
+
+### Code review instructions
+
+- Review the JS runtime core first:
+  - `scraper/pkg/js/runtime/executor.go`
+  - `scraper/pkg/js/runtime/promises.go`
+  - `scraper/pkg/js/runtime/executor_test.go`
+- Then review the engine adapter:
+  - `scraper/pkg/engine/runner/runner.go`
+  - `scraper/pkg/engine/runner/js.go`
+  - `scraper/pkg/engine/runner/js_test.go`
+- Finally, review the operator-facing ticket/doc sync:
+  - `scraper/pkg/doc/topics/scraper-architecture-overview.md`
+  - `scraper/ttmp/.../tasks.md`
+  - `scraper/ttmp/.../design-doc/01-generic-go-scraper-engine-and-nereval-port-design-guide.md`
+
+### Technical details
+
+- Concrete commands used during the JS runtime phase:
+  - `gofmt -w pkg/js/runtime/executor.go pkg/js/runtime/promises.go pkg/js/runtime/executor_test.go pkg/engine/runner/js.go pkg/engine/runner/js_test.go pkg/engine/runner/runner.go`
+  - `go test ./pkg/js/runtime ./pkg/engine/runner`
   - `go test ./...`

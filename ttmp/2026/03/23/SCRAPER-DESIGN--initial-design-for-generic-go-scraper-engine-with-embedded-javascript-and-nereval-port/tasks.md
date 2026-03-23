@@ -68,14 +68,14 @@
 
 ### Phase 5. JavaScript runtime integration
 
-- [ ] Build the go-go-goja runtime factory for scraper ops
-- [ ] Register scraper-specific native modules for op context, dependency reads, records, artifacts, and site DB access
-- [ ] Define the milestone-one JS API without `ctx.fetch()`
-- [ ] Support loading site scripts from the filesystem or embedded sources
-- [ ] Add structured conversion between Go values and JS result envelopes
-- [ ] Add tests for script execution, emitted ops, record writes, artifact writes, and controlled runtime teardown
-- [ ] Record the JS runtime integration work in the implementation diary
-- [ ] Commit the JS runtime milestone
+- [x] Build the go-go-goja runtime factory for scraper ops
+- [x] Expose the milestone-one JS execution contract with `ctx` helpers plus preconfigured `scraper-db` and `site-db`
+- [x] Define the milestone-one JS API without `ctx.fetch()`
+- [x] Support loading site scripts from the filesystem or embedded sources
+- [x] Add structured conversion between Go values and JS result envelopes
+- [x] Add tests for script execution, emitted ops, record writes, artifact writes, dependency reads, and controlled runtime teardown
+- [x] Record the JS runtime integration work in the implementation diary
+- [x] Commit the JS runtime milestone
 
 ### Phase 6. Scheduler and worker loop
 

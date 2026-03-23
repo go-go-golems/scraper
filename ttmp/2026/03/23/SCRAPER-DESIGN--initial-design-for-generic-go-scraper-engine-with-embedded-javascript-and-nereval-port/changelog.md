@@ -2,6 +2,20 @@
 
 ## 2026-03-23
 
+Added the first executable JS op runtime: site-script loading, a `ctx` contract for dependency reads and durable writes, a concrete `js` runner, and runtime tests covering emitted ops, artifacts, records, DB access, and teardown.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/js/runtime/executor.go — Added the generic scraper JS executor and result marshalling
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/js/runtime/promises.go — Added shared promise waiting for async JS ops
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/js/runtime/executor_test.go — Added end-to-end JS runtime tests for dependencies, emitted ops, records, artifacts, DB access, and teardown
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/runner/js.go — Added the engine-facing `js` runner
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/runner/js_test.go — Added runner integration coverage for site scripts
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md — Updated the operator help topic with the new JS runner contract
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/reference/01-investigation-diary.md — Recorded the JS runtime milestone
+
+## 2026-03-23
+
 - Initial workspace created
 - Imported `/tmp/scraper.md` into the ticket sources as the primary design input
 - Added the main design guide describing how the imported op/result architecture maps onto the current NEREVAL prototype and how to implement the Go/goja port in `scraper/`

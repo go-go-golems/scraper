@@ -30,7 +30,7 @@ RelatedFiles:
 ExternalSources:
     - local:scraper.md
 Summary: Detailed analysis and implementation guide for porting the current NEREVAL prototype into a generic Go scraping engine with embedded JavaScript built on go-go-goja.
-LastUpdated: 2026-03-23T14:35:00-04:00
+LastUpdated: 2026-03-23T12:23:47-04:00
 WhatFor: Explain how the imported scraper architecture maps to the current NEREVAL prototype and define a concrete, intern-oriented plan for implementing the new engine in scraper/.
 WhenToUse: Use when bootstrapping the scraper codebase, designing the engine/store/runtime split, or porting NEREVAL from the JS prototype to the Go/goja system.
 ---
@@ -833,31 +833,63 @@ This keeps runtime construction declarative and testable.
 
 ### JS runtime contract
 
-The contract should prefer structured helpers over raw SQL and keep network access outside JS in the first milestone.
+The milestone-one contract now exists in code and should stay intentionally small. It prefers structured helpers over ad hoc file-path discovery, and it keeps network access outside JS in the first milestone.
 
 ```javascript
-export default async function (ctx) {
-  const latest = await ctx.records.latest("nereval_property_stub", {
-    accountNumber: ctx.input.accountNumber,
-  })
+const siteDB = require("site-db");
 
-  if (latest && !ctx.input.force) {
-    return { data: { skipped: true } }
+module.exports = async function (ctx) {
+  const prior = ctx.dep("nereval.list.fetch:page:1");
+
+  if (prior && prior.data && prior.data.skipped) {
+    return { data: { skipped: true } };
   }
 
-  const emitted = await ctx.emit(ctx.ops.scrape({
-    name: "nereval.detail.fetch",
-    queue: "site:nereval:http",
-    dedupKey: `nereval:detail:${ctx.input.accountNumber}`,
-    scrape: {
-      request: { method: "GET", url: ctx.input.detailURL },
-      persistBody: true,
-    },
-  }))
+  ctx.writeRecord("nereval_property_stub", `acct:${ctx.input.accountNumber}`, {
+    accountNumber: ctx.input.accountNumber,
+    town: ctx.input.town,
+  });
 
-  return { data: { emittedDetailFetch: emitted } }
+  const emittedID = ctx.emit({
+    kind: "js",
+    queue: "site:nereval:js",
+    dedupKey: `nereval:detail:${ctx.input.accountNumber}`,
+    metadata: { script: "extract_detail.js" },
+    input: {
+      town: ctx.input.town,
+      accountNumber: ctx.input.accountNumber,
+    },
+  });
+
+  siteDB.exec(
+    "INSERT OR IGNORE INTO seen_accounts(account_number) VALUES (?)",
+    ctx.input.accountNumber,
+  );
+
+  return { data: { emittedID } };
 }
 ```
+
+The current `ctx` surface is:
+
+- `ctx.input` for decoded op input JSON
+- `ctx.workflow`, `ctx.op`, and `ctx.lease` for execution metadata
+- `ctx.dep(opID)` for dependency result lookup by op ID
+- `ctx.emit(spec)` for child-op creation
+- `ctx.writeRecord(collection, key, data)` for durable record writes
+- `ctx.writeArtifact({...})` for durable artifact writes
+- `ctx.log(...)` for structured Go-side logging
+
+The current runtime also injects preconfigured database modules:
+
+- `require("site-db")`
+- `require("scraper-db")`
+
+The important constraint for milestone one is still unchanged:
+
+- no `ctx.fetch()`
+
+Fetches remain Go-owned work executed through separate ops. JS decides what to emit next and how to project data, but it does not own transport.
 
 ### Site migration contract
 

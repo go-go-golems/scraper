@@ -28,6 +28,8 @@ The first milestone keeps the JS contract narrow. Scripts do not fetch directly.
 
 When JavaScript needs database access, the runtime should expose preconfigured module names such as `require("scraper-db")` and `require("site-db")`. JS should not be responsible for discovering or opening those SQLite files itself.
 
+In the current codebase, JS ops are loaded from the site script filesystem declared in the site registry, and the `js` runner expects op metadata to include a `script` entry naming the module to execute.
+
 Use the CLI help system as the top-level guide for operators and new contributors:
 
 - `scraper help` for the command tree
