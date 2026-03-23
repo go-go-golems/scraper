@@ -1,3 +1,22 @@
-topics: []
-docTypes: []
-intent: []
+topics:
+    - slug: architecture
+      description: Architecture and design work
+    - slug: go
+      description: Go language work
+    - slug: goja
+      description: Goja JavaScript runtime work
+    - slug: javascript
+      description: JavaScript work
+    - slug: nereval
+      description: Nereval scraper and related work
+    - slug: scraping
+      description: Web scraping systems and workflows
+docTypes:
+    - slug: index
+      description: Ticket index documents
+intent:
+    - slug: long-term
+      description: Long-term reference documentation
+status:
+    - slug: active
+      description: Active in-progress documentation
