@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestJSDemoWorkflow(t *testing.T) {
+func TestJSDemoSeedWorkflow(t *testing.T) {
 	ctx := context.Background()
 	registry := siteregistry.New()
 	require.NoError(t, Register(registry))
@@ -51,7 +51,7 @@ func TestJSDemoWorkflow(t *testing.T) {
 		return siteDB, nil
 	})
 
-	params, summaryOpID, err := BuildWorkflow(RunOptions{
+	params, summaryOpID, err := BuildSeedWorkflow(RunOptions{
 		WorkflowID: "wf-js-demo",
 		Count:      3,
 		Multiplier: 5,
@@ -114,4 +114,75 @@ func TestJSDemoWorkflow(t *testing.T) {
 	require.Equal(t, 350, totalSquared)
 	require.Contains(t, labelsJSON, "SPEC item 1")
 	require.Contains(t, artifactNamesJSON, "spec-01.json")
+}
+
+func TestJSDemoItemWorkflow(t *testing.T) {
+	ctx := context.Background()
+	registry := siteregistry.New()
+	require.NoError(t, Register(registry))
+
+	sitesDir := t.TempDir()
+	manager := sitemigrate.NewManager(registry)
+	report, err := manager.Migrate(ctx, model.SiteName("js-demo"), sitesDir)
+	require.NoError(t, err)
+
+	siteDB, err := sql.Open("sqlite3", report.DatabasePath)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, siteDB.Close()) })
+
+	engineStore, err := sqlitestore.Open(ctx, filepath.Join(t.TempDir(), "engine.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, engineStore.Close()) })
+
+	runners := runner.NewRegistry()
+	require.NoError(t, runners.Register(runner.NewJSRunner(registry)))
+
+	s, err := scheduler.New(engineStore, runners, scheduler.Config{
+		MaxWorkers:           8,
+		PollInterval:         25 * time.Millisecond,
+		DefaultLeaseDuration: 30 * time.Second,
+	}, "worker-js-demo-item", nil)
+	require.NoError(t, err)
+	s.SetSiteDBProvider(func(ctx context.Context, site model.SiteName) (databasemod.QueryExecer, error) {
+		require.Equal(t, model.SiteName("js-demo"), site)
+		return siteDB, nil
+	})
+
+	params, itemOpID, err := BuildItemWorkflow(RunOptions{
+		WorkflowID: "wf-js-demo-item",
+		Index:      2,
+		Multiplier: 4,
+		Prefix:     "solo",
+	})
+	require.NoError(t, err)
+	require.NoError(t, s.CreateWorkflow(ctx, params))
+
+	for i := 0; i < 4; i++ {
+		_, err = s.RunOnce(ctx)
+		require.NoError(t, err)
+	}
+
+	workflow, err := engineStore.GetWorkflow(ctx, params.Workflow.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.WorkflowStatusSucceeded, workflow.Status)
+
+	result, err := engineStore.GetResult(ctx, params.Workflow.ID, itemOpID)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	var item struct {
+		RunID        string `json:"runID"`
+		ItemKey      string `json:"itemKey"`
+		Index        int    `json:"index"`
+		BaseValue    int    `json:"baseValue"`
+		SquaredValue int    `json:"squaredValue"`
+		Label        string `json:"label"`
+	}
+	require.NoError(t, json.Unmarshal(result.Data, &item))
+	require.Equal(t, "wf-js-demo-item", item.RunID)
+	require.Equal(t, "solo-03", item.ItemKey)
+	require.Equal(t, 2, item.Index)
+	require.Equal(t, 12, item.BaseValue)
+	require.Equal(t, 144, item.SquaredValue)
+	require.Equal(t, "SOLO item 3", item.Label)
 }

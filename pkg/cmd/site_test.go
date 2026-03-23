@@ -65,7 +65,7 @@ func TestRootCommandIncludesBuiltinSites(t *testing.T) {
 	require.Contains(t, stdout.String(), "Current schema version: 1")
 }
 
-func TestJSDemoRunCommand(t *testing.T) {
+func TestJSDemoRunSeedCommand(t *testing.T) {
 	rootCmd, err := NewRootCommand("test-version")
 	require.NoError(t, err)
 
@@ -73,7 +73,7 @@ func TestJSDemoRunCommand(t *testing.T) {
 	rootCmd.SetOut(&stdout)
 	rootCmd.SetErr(&stdout)
 	rootCmd.SetArgs([]string{
-		"site", "js-demo", "run",
+		"site", "js-demo", "run", "seed",
 		"--sites-dir", t.TempDir(),
 		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
 		"--workflow-id", "cmd-js-demo",
@@ -85,9 +85,58 @@ func TestJSDemoRunCommand(t *testing.T) {
 	err = rootCmd.Execute()
 	require.NoError(t, err)
 	require.Contains(t, stdout.String(), "Site: js-demo")
+	require.Contains(t, stdout.String(), "Entrypoint: seed")
 	require.Contains(t, stdout.String(), "Status: succeeded")
 	require.Contains(t, stdout.String(), `"itemCount": 3`)
 	require.Contains(t, stdout.String(), `"totalBase": 24`)
+}
+
+func TestJSDemoRunItemCommand(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{
+		"site", "js-demo", "run", "item",
+		"--sites-dir", t.TempDir(),
+		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
+		"--workflow-id", "cmd-js-demo-item",
+		"--index", "2",
+		"--multiplier", "4",
+		"--prefix", "cmd",
+	})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "Entrypoint: item")
+	require.Contains(t, stdout.String(), `"itemKey": "cmd-03"`)
+	require.Contains(t, stdout.String(), `"baseValue": 12`)
+}
+
+func TestJSDemoRunSummaryCommand(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{
+		"site", "js-demo", "run", "summary",
+		"--sites-dir", t.TempDir(),
+		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
+		"--workflow-id", "cmd-js-demo-summary",
+		"--count", "3",
+		"--multiplier", "5",
+		"--prefix", "sum",
+	})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "Entrypoint: summary")
+	require.Contains(t, stdout.String(), `"itemCount": 3`)
+	require.Contains(t, stdout.String(), `"totalSquared": 350`)
 }
 
 var _ fs.FS = fstest.MapFS{}
