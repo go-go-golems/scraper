@@ -2,6 +2,18 @@
 
 ## 2026-03-23
 
+Added a pure-JS `js-demo` site and `scraper site js-demo run` so the engine can exercise fan-out, dependency joins, `site-db`, records, artifacts, and async JS op execution without any `http/fetch` dependency.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/site.go — Added the new built-in `js-demo` site definition and module wiring
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/cli.go — Added the operator-facing `scraper site js-demo run` command
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/workflow.go — Added deterministic workflow construction for the pure-JS demo pipeline
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/site_test.go — Added end-to-end scheduler coverage for the pure-JS workflow
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go — Added CLI smoke coverage for `scraper site js-demo run`
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/js/runtime/executor.go — Extended the JS executor so sites can opt into extra go-go-goja module sets
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md — Updated the architecture help topic with the new pure-JS exercise path
+
 Added two smaller built-in exercise sites, Hacker News and Slashdot, so the generic scheduler/runtime path can be validated end to end before starting the NEREVAL port.
 
 ### Related Files

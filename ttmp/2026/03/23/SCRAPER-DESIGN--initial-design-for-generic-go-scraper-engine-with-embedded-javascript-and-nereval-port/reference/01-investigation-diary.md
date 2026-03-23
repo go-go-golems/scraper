@@ -21,6 +21,12 @@ RelatedFiles:
       Note: Built-in site migration smoke test used in the exercise-site milestone
     - Path: pkg/sites/hackernews/site_test.go
       Note: End-to-end Hacker News workflow test used in Step 12
+    - Path: pkg/sites/jsdemo/cli.go
+      Note: Step 13 adds the runnable CLI demo flow
+    - Path: pkg/sites/jsdemo/site.go
+      Note: Step 13 adds the new built-in pure-JS exercise site
+    - Path: pkg/sites/jsdemo/site_test.go
+      Note: Step 13 validates the pure-JS workflow end to end
     - Path: pkg/sites/slashdot/site_test.go
       Note: End-to-end Slashdot workflow test used in Step 12
     - Path: ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/sources/local/scraper.md
@@ -32,6 +38,7 @@ LastUpdated: 2026-03-23T14:24:00-04:00
 WhatFor: Record the research steps, commands, decisions, and rough edges encountered while producing the initial design guide.
 WhenToUse: Use when reviewing how the initial design doc was produced or when continuing the implementation work later.
 ---
+
 
 
 
@@ -1537,3 +1544,102 @@ The resulting milestone is a much better proving ground for the system that now 
   - extraction writes into `hackernews.db`
 - The Slashdot workflow shape is the same, but the site DB schema differs to capture source-link and comment metadata.
 - The built-in exercise sites are now available to the production CLI via `NewRootCommand(...)`, so commands such as `scraper site migrate hackernews` and `scraper site migrate slashdot` no longer require a custom registry in tests.
+
+## Step 13: Add a pure-JS demo site and runnable CLI flow
+
+This step added a built-in `js-demo` site so the engine can be exercised without touching the HTTP runner at all. The intent was to keep building confidence in the scheduler/runtime path before starting NEREVAL by proving that the same durable workflow machinery also works for a JS-only pipeline with fan-out, dependency joins, artifacts, records, and site-DB writes.
+
+The resulting path is operator-friendly as well as test-friendly. `scraper site js-demo run` now migrates the site DB, opens the engine DB, seeds a deterministic workflow, runs scheduler cycles locally, and prints the final summary result. That makes it useful both as a smoke test during development and as a debugging harness when changing JS runtime behavior.
+
+### Prompt Context
+
+**User prompt (verbatim):** "make a js-demo site that showcases some the js possibilities, and allows us to do runs without even doing an http fetch"
+
+**Assistant interpretation:** Add a built-in site dedicated to demonstrating the JS execution model and expose a command that runs it end to end without any HTTP ops.
+
+**Inferred user intent:** Create a smaller, faster feedback loop for exercising the real scheduler and JS runtime before tackling the more complex NEREVAL port.
+
+**Commit (code):** `b6cf91b` — `Add js demo site and runner command`
+
+### What I did
+
+- Added the new built-in site package:
+  - [site.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/site.go)
+  - [workflow.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/workflow.go)
+  - [cli.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/cli.go)
+- Added the embedded JS workflow:
+  - [seed.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/scripts/seed.js)
+  - [build_item.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/scripts/build_item.js)
+  - [summarize.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/scripts/summarize.js)
+  - [demo.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/scripts/lib/demo.js)
+- Added the site schema in [001_init.sql](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/migrations/001_init.sql).
+- Extended the site registry and JS runner so a site can opt into extra go-go-goja module specs via:
+  - [registry.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/registry/registry.go)
+  - [js.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/runner/js.go)
+  - [executor.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/js/runtime/executor.go)
+- Wired the new site into defaults and the `site` command tree through:
+  - [defaults.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/defaults/defaults.go)
+  - [site.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site.go)
+- Added tests:
+  - [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/site_test.go)
+  - [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go)
+- Ran:
+  - `go test ./pkg/sites/jsdemo ./pkg/cmd -count=1`
+  - `go test ./... -count=1`
+
+### Why
+
+- A pure-JS site removes the HTTP runner from the loop, which makes runtime and scheduler debugging faster and much more local.
+- It demonstrates that the engine’s primitives are not tied to HTML scraping specifically; they are general durable workflow primitives that JS can use for orchestrated computation as well.
+- The operator-facing CLI command gives a real end-to-end smoke test, not just a unit-test fixture.
+
+### What worked
+
+- The same `js` runner and scheduler path used by the HTTP-backed sites worked cleanly for a JS-only workflow.
+- Deterministic op IDs made it easy for the CLI to find and print the final summary result.
+- The demo site now exercises:
+  - relative `require("./lib/...")`
+  - `require("site-db")`
+  - `ctx.emit(...)`
+  - `ctx.dep(...)`
+  - `ctx.writeRecord(...)`
+  - `ctx.writeArtifact(...)`
+  - async JS function exports
+
+### What didn't work
+
+- No runtime failures occurred after the first implementation pass, but I did have to be careful not to stage the unrelated `ttmp/` worktree dirt from the earlier `SCRAPER-SITE-JSVERBS` doc-only ticket while committing the code change.
+
+### What I learned
+
+- The scheduler/runtime split is generic enough that a site can behave like a tiny workflow lab, not just a web scraper.
+- Site-level module injection is useful. The `js-demo` site opts into `go-go-goja` default modules without forcing every site script in the repository to get the same JS surface area.
+
+### What was tricky to build
+
+- The main design edge was how to expose extra JS capabilities to one site without broadly changing the contract for every other site. The resolution was to extend the site definition with optional static module specs and let the JS executor opt in per site. That keeps the demo expressive without silently broadening the runtime surface for production scrape sites.
+
+### What warrants a second pair of eyes
+
+- The new per-site module injection path in [executor.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/js/runtime/executor.go) is intentionally small, but it changes the site contract. It is worth reviewing whether future sites should use it sparingly or whether there should be a stricter allowlist policy.
+- The `site` command tree now supports site-specific CLI registration. That mechanism is useful, but it should stay disciplined so the top-level CLI does not become inconsistent across sites.
+
+### What should be done in the future
+
+- Reuse `js-demo` as the basis for any future `site op run` or jsverbs-style script-runner experiments.
+- Consider adding a second demo workflow that showcases `timer.sleep(...)` explicitly now that `go-go-goja` ships a real timer module.
+
+### Code review instructions
+
+- Start with [cli.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/cli.go) and [workflow.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/workflow.go) to understand how the operator path seeds and runs the workflow.
+- Then read [seed.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/scripts/seed.js), [build_item.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/scripts/build_item.js), and [summarize.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/scripts/summarize.js) in order.
+- Finish with [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/site_test.go) and [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go) to validate the intended behavior.
+
+### Technical details
+
+- CLI entrypoint:
+  - `scraper site js-demo run --workflow-id demo-1 --count 3 --multiplier 4 --prefix smoke`
+- Example summary math used in tests:
+  - base values for `count=3`, `multiplier=5` are `5`, `10`, `15`
+  - squared values are `25`, `100`, `225`
+  - totals are `30` and `350`
