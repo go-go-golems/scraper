@@ -1727,3 +1727,118 @@ That makes the demo materially more useful for debugging. `seed` still drives th
   - `seed` returns the emitted summary op result
   - `item` returns the single `build_item.js` op result
   - `summary` returns the `summarize.js` op result after generating its dependencies
+
+## Step 15: Add named Hacker News and Slashdot run entrypoints
+
+This step extended the same operator-oriented `site ... run <entrypoint>` pattern from `js-demo` to the two HTTP-backed exercise sites. Both built-in scraper sites now expose `seed` and `extract-frontpage` entrypoints from the CLI, and both commands support `--fixture` so the runs stay local and deterministic instead of reaching out to the live sites.
+
+That closes the loop on the original reason for adding the exercise sites in the first place. Before this step, Hacker News and Slashdot were only covered by Go tests and by the generic workflow engine. After this step, they are also first-class operator smoke targets, which makes it easier to debug site DB writes, HTTP runner behavior, JS extraction, and scheduler flow with one command.
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok, cool, so now do the same for slashdot and hn i think? i don't remember where we left off before this excursion"
+
+**Assistant interpretation:** Add the same named site-run entrypoint pattern used by `js-demo` to the built-in Hacker News and Slashdot exercise sites.
+
+**Inferred user intent:** Turn the smaller HTTP-backed exercise sites into interactive CLI smoke targets before resuming NEREVAL work.
+
+**Commit (code):** `1ab059b` — `Add Hacker News and Slashdot run entrypoints`
+
+### What I did
+
+- Added a shared HTTP-backed site runner helper in [http_runner.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/cliutil/http_runner.go) that:
+  - migrates the site DB
+  - opens the engine DB
+  - registers the HTTP and JS runners
+  - optionally serves an embedded fixture from a temporary local HTTP server
+  - runs scheduler cycles until the requested result op completes
+  - renders the target result back to the operator
+- Added Hacker News workflow builders in [workflow.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/workflow.go):
+  - `BuildSeedWorkflow`
+  - `BuildExtractFrontpageWorkflow`
+- Added Slashdot workflow builders in [workflow.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/workflow.go):
+  - `BuildSeedWorkflow`
+  - `BuildExtractFrontpageWorkflow`
+- Added site-specific CLI trees in:
+  - [cli.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/cli.go)
+  - [cli.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/cli.go)
+- Wired both site packages to register their commands through the site registry in:
+  - [site.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/site.go)
+  - [site.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/site.go)
+- Tightened the root/site command wiring in:
+  - [site.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site.go)
+  - [root.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/root.go)
+  so site CLI registration failures are returned instead of being silently ignored.
+- Expanded tests in:
+  - [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/site_test.go)
+  - [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/site_test.go)
+  - [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go)
+- Ran:
+  - `go test ./pkg/sites/hackernews ./pkg/sites/slashdot ./pkg/cmd -count=1`
+  - `go test ./... -count=1`
+  - `go run ./cmd/scraper site hackernews run --help`
+  - `go run ./cmd/scraper site slashdot run --help`
+  - `go run ./cmd/scraper site hackernews run seed --fixture ...`
+  - `go run ./cmd/scraper site hackernews run extract-frontpage --fixture ...`
+  - `go run ./cmd/scraper site slashdot run seed --fixture ...`
+  - `go run ./cmd/scraper site slashdot run extract-frontpage --fixture ...`
+
+### Why
+
+- The user wanted the same entrypoint-driven operator experience on the smaller HTTP-backed sites, not just on the pure-JS demo.
+- Using the embedded fixtures keeps the commands fast and deterministic, which matters for repeated smoke tests during ongoing engine work.
+- The new commands let us exercise real ops in their real durable environment instead of stopping at isolated unit tests.
+
+### What worked
+
+- The existing site scripts already had a clean stage boundary: `seed.js` and `extract_frontpage.js`. That mapped directly to `seed` and `extract-frontpage` command names.
+- A small shared helper was enough to avoid duplicating the site migration, DB setup, scheduler loop, and result rendering logic.
+- Reusing the embedded site fixtures via a temporary local HTTP server gave the commands a stable smoke-test mode without changing the real site scripts.
+
+### What didn't work
+
+- My first compile pass left stale `encoding/json` imports in the refactored site tests after switching them to the new workflow builders. That was the only build break and it was trivial to correct.
+
+### What I learned
+
+- The `site ... run` pattern scales to the HTTP-backed exercise sites cleanly as long as the CLI layer treats the site scripts as durable workflow stages, not as ad hoc script files.
+- A built-in `--fixture` mode is worth having for operator commands. It makes smoke testing much more reliable than asking the CLI to hit the live site every time.
+
+### What was tricky to build
+
+- The main design choice was where to put the shared logic. I chose a `pkg/sites/cliutil` helper instead of copying the `js-demo` runner into both site packages. That keeps the HN and Slashdot commands small while still letting each site define its own workflow builders and defaults.
+- The other small cleanup was the site registry command hook. Once site-specific commands matter more, ignoring `RegisterCLI` errors becomes a bad failure mode.
+
+### What warrants a second pair of eyes
+
+- The new shared HTTP runner helper in [http_runner.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/cliutil/http_runner.go) is generic enough for more HTTP-backed sites, but it is still deliberately small. It is worth checking whether future sites need more hook points before it grows by accretion.
+- The default command output currently includes scheduler info logs because the root logger defaults to `info`. That is useful for debugging, but we may later want a quieter default display for operator runs.
+
+### What should be done in the future
+
+- Consider refactoring `js-demo` to reuse the same shared runner structure if the site-runner surface grows further.
+- Use this exact `run <entrypoint>` pattern as the baseline when adding operator entrypoints for NEREVAL.
+
+### Code review instructions
+
+- Start with [http_runner.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/cliutil/http_runner.go) to understand the shared execution path.
+- Then read:
+  - [workflow.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/workflow.go)
+  - [cli.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/cli.go)
+  - [workflow.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/workflow.go)
+  - [cli.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/cli.go)
+- Finish with:
+  - [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/site_test.go)
+  - [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/site_test.go)
+  - [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go)
+
+### Technical details
+
+- New commands:
+  - `scraper site hackernews run seed --fixture`
+  - `scraper site hackernews run extract-frontpage --fixture`
+  - `scraper site slashdot run seed --fixture`
+  - `scraper site slashdot run extract-frontpage --fixture`
+- Manual smoke results:
+  - Hacker News `seed` and `extract-frontpage` both returned `storyCount: 2` and top IDs `47490070`, `47490080`
+  - Slashdot `seed` and `extract-frontpage` both returned `storyCount: 2` and top IDs `181087690`, `181087016`

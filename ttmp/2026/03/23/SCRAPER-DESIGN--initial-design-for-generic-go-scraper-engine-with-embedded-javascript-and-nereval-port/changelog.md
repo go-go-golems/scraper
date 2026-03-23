@@ -2,6 +2,20 @@
 
 ## 2026-03-23
 
+Added named operator entrypoints for the built-in Hacker News and Slashdot sites so both HTTP-backed exercise paths can be run locally as `seed` or `extract-frontpage`, including a `--fixture` mode that serves embedded HTML without touching the live sites.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/cliutil/http_runner.go — Added the shared HTTP-backed site runner helper used by built-in site commands
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/cli.go — Added `scraper site hackernews run seed|extract-frontpage`
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/workflow.go — Added durable workflow builders for Hacker News operator runs
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/cli.go — Added `scraper site slashdot run seed|extract-frontpage`
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/workflow.go — Added durable workflow builders for Slashdot operator runs
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/root.go — Switched site command construction to fail fast on site CLI registration errors
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site.go — Propagated site-specific CLI registration errors during command construction
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go — Added CLI coverage for the new Hacker News and Slashdot entrypoints
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md — Documented the new site run smoke-test commands
+
 Generalized `scraper site js-demo run` into named entrypoints so the demo can run `seed`, `item`, or `summary` directly from the CLI.
 
 ### Related Files
