@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	"github.com/go-go-golems/scraper/pkg/engine/runner"
 	"github.com/go-go-golems/scraper/pkg/engine/scheduler"
+	storecontract "github.com/go-go-golems/scraper/pkg/engine/store"
 	sqlitestore "github.com/go-go-golems/scraper/pkg/engine/store/sqlite"
 	sitemigrate "github.com/go-go-golems/scraper/pkg/sites/migrate"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
@@ -185,4 +187,90 @@ func TestJSDemoItemWorkflow(t *testing.T) {
 	require.Equal(t, 12, item.BaseValue)
 	require.Equal(t, 144, item.SquaredValue)
 	require.Equal(t, "SOLO item 3", item.Label)
+}
+
+func TestJSDemoJSQueueProcessesOneOpPerCycle(t *testing.T) {
+	ctx := context.Background()
+	registry := siteregistry.New()
+	require.NoError(t, Register(registry))
+
+	sitesDir := t.TempDir()
+	manager := sitemigrate.NewManager(registry)
+	report, err := manager.Migrate(ctx, model.SiteName("js-demo"), sitesDir)
+	require.NoError(t, err)
+
+	siteDB, err := sql.Open("sqlite3", report.DatabasePath)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, siteDB.Close()) })
+
+	engineStore, err := sqlitestore.Open(ctx, filepath.Join(t.TempDir(), "engine.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, engineStore.Close()) })
+
+	runners := runner.NewRegistry()
+	require.NoError(t, runners.Register(runner.NewJSRunner(registry)))
+
+	s, err := scheduler.New(engineStore, runners, scheduler.Config{
+		MaxWorkers:           8,
+		PollInterval:         25 * time.Millisecond,
+		DefaultLeaseDuration: 30 * time.Second,
+	}, "worker-js-demo-queue", nil)
+	require.NoError(t, err)
+	s.SetSiteDBProvider(func(ctx context.Context, site model.SiteName) (databasemod.QueryExecer, error) {
+		require.Equal(t, model.SiteName("js-demo"), site)
+		return siteDB, nil
+	})
+
+	ops := make([]model.OpSpec, 0, 2)
+	for i := 0; i < 2; i++ {
+		input, err := itemInput(RunOptions{
+			WorkflowID: "wf-js-demo-queue",
+			Index:      i,
+			Multiplier: 7,
+			Prefix:     "queue",
+		})
+		require.NoError(t, err)
+
+		ops = append(ops, model.OpSpec{
+			ID:         itemOpID("wf-js-demo-queue", i),
+			WorkflowID: "wf-js-demo-queue",
+			Site:       model.SiteName("js-demo"),
+			Kind:       "js",
+			Queue:      model.QueueKey("site:js-demo:js"),
+			DedupKey:   fmt.Sprintf("js-demo:queue:%02d", i+1),
+			Input:      input,
+			Metadata:   map[string]string{"script": "build_item.js"},
+		})
+	}
+
+	require.NoError(t, s.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
+		Workflow: model.WorkflowRun{
+			ID:   "wf-js-demo-queue",
+			Site: model.SiteName("js-demo"),
+			Name: "js-demo queue serialization",
+		},
+		Initial: ops,
+	}))
+
+	first, err := s.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, first.Processed)
+
+	stats, err := engineStore.GetWorkflowStats(ctx, "wf-js-demo-queue")
+	require.NoError(t, err)
+	require.Equal(t, 2, stats.Total)
+	require.Equal(t, 1, stats.Succeeded)
+	require.Equal(t, 1, stats.Ready)
+
+	second, err := s.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, second.Processed)
+
+	stats, err = engineStore.GetWorkflowStats(ctx, "wf-js-demo-queue")
+	require.NoError(t, err)
+	require.Equal(t, 2, stats.Succeeded)
+
+	workflow, err := engineStore.GetWorkflow(ctx, "wf-js-demo-queue")
+	require.NoError(t, err)
+	require.Equal(t, model.WorkflowStatusSucceeded, workflow.Status)
 }
