@@ -32,7 +32,7 @@ In the current codebase, JS ops are loaded from the site script filesystem decla
 
 The current HTTP runner uses kind `http/fetch` and expects op input to carry a `request` object plus optional `persistBody` and `artifactName` fields. Request URLs, headers, form fields, and body text may be rendered from the op/workflow input template context before the request is sent.
 
-The current scheduler layer recovers expired leases back to `ready`, promotes dependency-satisfied ops automatically, cancels pending ops blocked by required failed dependencies, and treats each `site + queue` pair as a single active rate domain.
+The current scheduler layer recovers expired leases back to `ready`, promotes dependency-satisfied ops automatically, cancels pending ops blocked by required failed dependencies, and treats each `site + queue` pair as a single active rate domain. That queue-domain control is kind-agnostic, so it applies to `js` ops as well as `http/fetch` ops.
 
 Use the CLI help system as the top-level guide for operators and new contributors:
 

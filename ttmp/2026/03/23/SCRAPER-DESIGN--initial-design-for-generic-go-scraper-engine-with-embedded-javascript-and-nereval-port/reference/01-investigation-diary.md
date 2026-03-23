@@ -1842,3 +1842,84 @@ That closes the loop on the original reason for adding the exercise sites in the
 - Manual smoke results:
   - Hacker News `seed` and `extract-frontpage` both returned `storyCount: 2` and top IDs `47490070`, `47490080`
   - Slashdot `seed` and `extract-frontpage` both returned `storyCount: 2` and top IDs `181087690`, `181087016`
+
+## Step 16: Add an explicit js-demo JS queue throttling test
+
+This step answered a follow-up question that came up after the new site entrypoints were in place: do we actually prove that the scheduler’s queue throttling applies to JavaScript ops, or are we only testing that behavior indirectly for HTTP-backed work? The answer before this step was “only indirectly.” The scheduler had a generic queue-domain test, but `js-demo` itself did not assert that two real JS ops on the same queue are serialized across scheduler cycles.
+
+I added that explicit coverage in the `js-demo` test suite. The test creates two real `build_item.js` ops in the same `site:js-demo:js` queue, runs one scheduler cycle, and verifies that only one op is processed. After the second cycle, the second op completes and the workflow succeeds. That proves the current queue-domain control is kind-agnostic and therefore applies to JS ops too.
+
+### Prompt Context
+
+**User prompt (verbatim):** "yes, do it, add to ticket that corresponds to jsdemo work"
+
+**Assistant interpretation:** Add an explicit `js-demo` test covering JS queue throttling and record that work in the main `SCRAPER-DESIGN` ticket.
+
+**Inferred user intent:** Make the current queue-domain behavior around JS ops concrete and documented before talking about future RPS-style rate limiting.
+
+**Commit (code):** `c3b21f2` — `Add js-demo queue throttling test`
+
+### What I did
+
+- Added [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/site_test.go) coverage for two real `build_item.js` ops sharing `site:js-demo:js`
+- Asserted:
+  - first `RunOnce` processes exactly one op
+  - workflow stats show one succeeded op and one still ready
+  - second `RunOnce` processes the second op
+  - the workflow then reaches `succeeded`
+- Updated [scraper-architecture-overview.md](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md) to clarify that queue-domain control applies to `js` ops as well as `http/fetch`
+- Updated the ticket task list and changelog
+- Ran:
+  - `go test ./pkg/sites/jsdemo ./pkg/cmd -count=1`
+
+### Why
+
+- The user asked whether we already had a JS-specific test for this behavior.
+- The scheduler-level queue test existed, but it did not use the real `js-demo` site or the real JS runner path.
+- A site-level test is the most direct way to show that JS ops participate in the same queue-domain control as HTTP ops.
+
+### What worked
+
+- The existing `build_item.js` op was already a clean real-JS target for this test, so no script changes were needed.
+- Workflow stats were enough to show the serialized execution pattern without adding new introspection APIs.
+
+### What didn't work
+
+- N/A
+
+### What I learned
+
+- The current queue-domain model is a serialization primitive, not a configurable “requests per second” limiter.
+- For the current codebase, the clearest language is:
+  - yes, JS ops can be throttled by queue
+  - no, we do not yet have a real token-bucket or RPS limit implementation
+
+### What was tricky to build
+
+- The subtle part was making the test prove the specific queue behavior without overfitting to incidental ordering. The right assertion was workflow stats after each scheduler cycle, not “which exact op ran first.”
+
+### What warrants a second pair of eyes
+
+- If we later add true per-queue RPS configuration, this test should remain as the low-level serialization invariant, and a second test should cover the new timing-based limiter semantics separately.
+
+### What should be done in the future
+
+- Add a real configurable per-queue rate limiter if we want “N ops per second” instead of just “one active op per queue domain at a time.”
+
+### Code review instructions
+
+- Review [site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/site_test.go) and find `TestJSDemoJSQueueProcessesOneOpPerCycle`
+- Then compare that with the generic scheduler queue test in [scheduler_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/scheduler/scheduler_test.go)
+
+### Technical details
+
+- Queue under test:
+  - `site:js-demo:js`
+- First cycle expected state:
+  - `Processed == 1`
+  - workflow stats `Succeeded == 1`
+  - workflow stats `Ready == 1`
+- Second cycle expected state:
+  - `Processed == 1`
+  - workflow stats `Succeeded == 2`
+  - workflow status `succeeded`

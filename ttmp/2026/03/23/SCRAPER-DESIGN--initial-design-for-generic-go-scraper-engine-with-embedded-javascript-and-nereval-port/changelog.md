@@ -2,6 +2,13 @@
 
 ## 2026-03-23
 
+Added an explicit `js-demo` queue-domain test proving that the scheduler’s queue throttling applies to JavaScript ops too, not just HTTP ops.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/site_test.go — Added a scheduler integration test showing two `js` ops in the same queue are processed one per cycle
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md — Clarified that queue-domain control is kind-agnostic and therefore applies to `js` ops as well
+
 Added named operator entrypoints for the built-in Hacker News and Slashdot sites so both HTTP-backed exercise paths can be run locally as `seed` or `extract-frontpage`, including a `--fixture` mode that serves embedded HTML without touching the live sites.
 
 ### Related Files
