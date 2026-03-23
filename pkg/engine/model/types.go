@@ -88,6 +88,7 @@ type OpSpec struct {
 	Input      json.RawMessage
 	DependsOn  []Dependency
 	Retry      RetryPolicy
+	RetryState RetryState
 	Metadata   map[string]string
 }
 

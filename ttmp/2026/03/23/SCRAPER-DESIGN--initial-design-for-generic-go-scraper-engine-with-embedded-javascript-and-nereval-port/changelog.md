@@ -2,6 +2,20 @@
 
 ## 2026-03-23
 
+Added the first real scheduler loop with workflow submission, dependency promotion/cancellation, retry and backoff handling, expired-lease recovery, queue-domain leasing, and integration tests against the SQLite store.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/scheduler/scheduler.go — Added the worker loop, retry logic, workflow-state updates, and scheduler events
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/scheduler/scheduler_test.go — Added integration tests for fan-out, dependency completion, retry behavior, lease recovery, and queue-domain control
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/store.go — Added runnable-op refresh, queue-candidate listing, workflow stats, retry-state persistence, and failure-result persistence
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/store.go — Extended the engine store contract for scheduler operation
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/model/types.go — Extended `OpSpec` with durable retry state
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md — Updated the operator help topic with current scheduler semantics
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/reference/01-investigation-diary.md — Recorded the scheduler milestone
+
+## 2026-03-23
+
 Added the first executable JS op runtime: site-script loading, a `ctx` contract for dependency reads and durable writes, a concrete `js` runner, and runtime tests covering emitted ops, artifacts, records, DB access, and teardown.
 
 ### Related Files

@@ -31,6 +31,22 @@ type Failure struct {
 	RetryState model.RetryState
 }
 
+type QueueCandidate struct {
+	Site  model.SiteName
+	Queue model.QueueKey
+}
+
+type WorkflowStats struct {
+	WorkflowID model.WorkflowID
+	Total      int
+	Pending    int
+	Ready      int
+	Running    int
+	Succeeded  int
+	Failed     int
+	Canceled   int
+}
+
 type WorkflowStore interface {
 	CreateWorkflow(ctx context.Context, params CreateWorkflowParams) error
 	GetWorkflow(ctx context.Context, id model.WorkflowID) (*model.WorkflowRun, error)
@@ -54,4 +70,7 @@ type Store interface {
 	WorkflowStore
 	OpStore
 	ResultStore
+	RefreshRunnableOps(ctx context.Context, now time.Time) (int, error)
+	ListQueueCandidates(ctx context.Context, now time.Time) ([]QueueCandidate, error)
+	GetWorkflowStats(ctx context.Context, workflowID model.WorkflowID) (*WorkflowStats, error)
 }

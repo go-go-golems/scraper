@@ -22,7 +22,7 @@ RelatedFiles:
 ExternalSources:
     - local:scraper.md
 Summary: Chronological diary of the initial SCRAPER-DESIGN research and documentation pass.
-LastUpdated: 2026-03-23T12:23:47-04:00
+LastUpdated: 2026-03-23T13:55:57-04:00
 WhatFor: Record the research steps, commands, decisions, and rough edges encountered while producing the initial design guide.
 WhenToUse: Use when reviewing how the initial design doc was produced or when continuing the implementation work later.
 ---
@@ -1149,4 +1149,118 @@ This step completed the first real JS execution slice for the scraper engine. Be
 - Concrete commands used during the JS runtime phase:
   - `gofmt -w pkg/js/runtime/executor.go pkg/js/runtime/promises.go pkg/js/runtime/executor_test.go pkg/engine/runner/js.go pkg/engine/runner/js_test.go pkg/engine/runner/runner.go`
   - `go test ./pkg/js/runtime ./pkg/engine/runner`
+  - `go test ./...`
+
+## Step 10: Add the first real scheduler and worker loop
+
+This step turned the engine from a durable store plus runnable ops into a real worker loop. Before this change, the codebase could persist workflows, lease one ready op, and run JS modules, but it did not yet have a scheduler that understood dependency promotion, retry timing, expired-lease recovery, queue-domain control, or workflow status transitions. The new scheduler package now closes that gap for milestone one.
+
+### Prompt Context
+
+**User prompt (verbatim):** "continue."
+
+**Assistant interpretation:** Move from the phase-5 JS runner milestone into phase 6 and implement the scheduler/worker loop rather than stopping at isolated runner execution.
+
+**Inferred user intent:** Keep building the engine phase by phase until the runtime and persistence layers are connected by a real durable execution loop.
+
+**Commit (code):** Pending at the time of writing this diary entry; the scheduler milestone changes are validated locally and ready to commit.
+
+### What I did
+
+- Replaced the scheduler stub in `pkg/engine/scheduler/scheduler.go` with a real scheduler implementation.
+- Added scheduler support for:
+  - workflow submission through `CreateWorkflow(...)`
+  - `RunOnce(...)` for deterministic test cycles
+  - `Run(...)` for polling execution loops
+  - runner dispatch by op kind
+  - durable success/failure handling through the store
+  - workflow status recomputation
+  - structured scheduler events and optional observer hooks
+- Added queue-domain control by making the store expose distinct queue candidates and by ensuring only one active lease exists per `site + queue` pair.
+- Extended `model.OpSpec` with durable `RetryState` so attempt count and next-attempt time survive across scheduling cycles.
+- Extended the engine store contract with:
+  - `RefreshRunnableOps(...)`
+  - `ListQueueCandidates(...)`
+  - `GetWorkflowStats(...)`
+- Implemented those new store methods in the SQLite backend.
+- Added runnable-op refresh semantics in SQLite:
+  - recover expired leased `running` ops back to `ready`
+  - delete expired lease rows
+  - promote `pending` ops to `ready` when dependencies are satisfied
+  - cancel `pending` ops whose required dependencies have failed or been canceled
+- Updated SQLite failure handling so failures also persist a result envelope with `error_json`, which makes failure state visible through the normal result API.
+- Added retry/backoff scheduling in the scheduler using:
+  - `RetryPolicy`
+  - `RetryState`
+  - fixed, linear, and exponential backoff helpers
+- Added integration-style scheduler tests covering:
+  - fan-out from one op to a dependent child op
+  - dependency completion before child execution
+  - retry behavior with delayed requeue
+  - expired-lease recovery / resume semantics
+  - one-op-at-a-time queue-domain execution
+
+### Why
+
+- The user asked to continue phase by phase, and the next unimplemented phase after the JS runtime was the scheduler.
+- The JS runner is only useful once the engine can actually claim work, run it durably, and recover from interruption.
+- A scheduler implemented against the real SQLite store is also a better debugging surface for smoke tests than more abstract helper code.
+
+### What worked
+
+- The existing store schema already had most of the raw material needed for phase 6: op status, dependencies, leases, retry state, and results.
+- Modeling queue domains as one active lease per `site + queue` pair fit the current architecture well and kept the first implementation simple.
+- The scheduler tests were easiest to trust when they ran against the actual SQLite store instead of fake in-memory mocks.
+- Full repo tests passed after the scheduler work landed.
+
+### What didn't work
+
+- There was a hidden resume gap in the earlier store implementation: an expired lease left an op in `running`, so it could not actually be reclaimed.
+- Resolution:
+  - add `RefreshRunnableOps(...)` to recover expired leased ops back to `ready`
+- The previous failure path also did not persist failure details into the `results` table.
+- Resolution:
+  - update `FailOp(...)` to upsert a failure result row with `error_json`
+
+### What I learned
+
+- The scheduler became much simpler once the store knew how to answer "what is runnable now?" instead of forcing the worker loop to reconstruct dependency state in Go every cycle.
+- Expired-lease recovery is not a secondary feature. It is a core correctness path, because without it the engine only looks durable until the first crash.
+
+### What was tricky to build
+
+- The subtle part was deciding where to put dependency semantics. I intentionally pushed status promotion/cancellation into the store layer rather than scattering it across scheduler branches. That keeps the scheduling loop smaller and makes the DB state transitions easier to test directly.
+- The second tricky part was failure semantics for dependents. The current milestone cancels `pending` ops blocked by required failed dependencies. That is explicit and recoverable, but it is still a design point to revisit later if we want richer blocked/dead-letter states.
+
+### What warrants a second pair of eyes
+
+- Whether queue-domain concurrency should stay fixed at one active lease per `site + queue`, or whether a later phase should allow configurable per-queue parallelism.
+- Whether blocked required-dependency ops should remain `canceled` or eventually gain a dedicated status such as `blocked`.
+- Whether `CreateWorkflow(...)` belongs permanently in the scheduler package or should later move into a more explicit workflow service.
+
+### What should be done in the future
+
+- Add the HTTP fetch runner so the scheduler can drive real acquisition work, not only synthetic test runners.
+- Add operator-facing workflow and op inspection commands in phase 9 so the new scheduler state becomes directly visible from the CLI.
+- Revisit richer workflow status transitions once we have mixed success/failure outcomes from real NEREVAL workflows.
+
+### Code review instructions
+
+- Review the scheduler core first:
+  - `scraper/pkg/engine/scheduler/scheduler.go`
+  - `scraper/pkg/engine/scheduler/scheduler_test.go`
+- Then review the store contract/state changes:
+  - `scraper/pkg/engine/store/store.go`
+  - `scraper/pkg/engine/store/sqlite/store.go`
+  - `scraper/pkg/engine/model/types.go`
+- Finally, review the doc/ticket sync:
+  - `scraper/pkg/doc/topics/scraper-architecture-overview.md`
+  - `scraper/ttmp/.../tasks.md`
+  - `scraper/ttmp/.../design-doc/01-generic-go-scraper-engine-and-nereval-port-design-guide.md`
+
+### Technical details
+
+- Concrete commands used during the scheduler phase:
+  - `gofmt -w pkg/engine/model/types.go pkg/engine/store/store.go pkg/engine/store/sqlite/store.go pkg/engine/scheduler/scheduler.go pkg/engine/scheduler/scheduler_test.go`
+  - `go test ./pkg/engine/model ./pkg/engine/store/sqlite ./pkg/engine/scheduler`
   - `go test ./...`

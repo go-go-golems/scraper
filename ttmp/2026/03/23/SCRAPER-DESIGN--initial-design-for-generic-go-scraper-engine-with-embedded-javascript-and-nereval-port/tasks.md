@@ -79,15 +79,15 @@
 
 ### Phase 6. Scheduler and worker loop
 
-- [ ] Implement workflow creation and initial op enqueueing
-- [ ] Implement dependency-aware op readiness checks
-- [ ] Implement leasing, retries, backoff, and terminal failure handling
-- [ ] Implement queue-key based concurrency and rate-domain control
-- [ ] Implement durable result persistence including `emittedIDs`
-- [ ] Add worker loop logging, metrics hooks, and structured progress events
-- [ ] Add tests for fan-out, dependency completion, retry behavior, and resume semantics
-- [ ] Record the scheduler work in the implementation diary
-- [ ] Commit the scheduler milestone
+- [x] Implement workflow creation and initial op enqueueing
+- [x] Implement dependency-aware op readiness checks
+- [x] Implement leasing, retries, backoff, and terminal failure handling
+- [x] Implement queue-key based concurrency and rate-domain control
+- [x] Implement durable result persistence including `emittedIDs`
+- [x] Add worker loop logging, metrics hooks, and structured progress events
+- [x] Add tests for fan-out, dependency completion, retry behavior, and resume semantics
+- [x] Record the scheduler work in the implementation diary
+- [x] Commit the scheduler milestone
 
 ### Phase 7. Generic HTTP scraper primitives
 

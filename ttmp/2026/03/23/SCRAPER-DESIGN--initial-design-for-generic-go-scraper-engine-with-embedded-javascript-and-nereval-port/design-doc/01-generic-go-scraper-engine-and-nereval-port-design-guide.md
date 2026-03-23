@@ -30,7 +30,7 @@ RelatedFiles:
 ExternalSources:
     - local:scraper.md
 Summary: Detailed analysis and implementation guide for porting the current NEREVAL prototype into a generic Go scraping engine with embedded JavaScript built on go-go-goja.
-LastUpdated: 2026-03-23T12:23:47-04:00
+LastUpdated: 2026-03-23T13:55:57-04:00
 WhatFor: Explain how the imported scraper architecture maps to the current NEREVAL prototype and define a concrete, intern-oriented plan for implementing the new engine in scraper/.
 WhenToUse: Use when bootstrapping the scraper codebase, designing the engine/store/runtime split, or porting NEREVAL from the JS prototype to the Go/goja system.
 ---
@@ -477,6 +477,8 @@ This lets us preserve raw acquisition results and parse them later if a JS scrip
 ### Queue semantics
 
 For the first version, queue keys should be explicit strings rather than inferred objects. Keep them boring.
+
+Implementation note after phase 6: the current scheduler/store combination treats each `site + queue` pair as one active rate domain. It recovers expired leases by moving stale `running` ops back to `ready`, promotes `pending` ops to `ready` when dependency conditions are satisfied, and cancels `pending` ops whose required dependencies have failed terminally.
 
 Examples:
 

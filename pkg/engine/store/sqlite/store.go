@@ -155,7 +155,7 @@ func (s *Store) Enqueue(ctx context.Context, ops []model.OpSpec) error {
 func (s *Store) GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error) {
 	row := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, workflow_id, parent_id, site, kind, queue_key, dedup_key, input_json, retry_json, metadata_json
+		`SELECT id, workflow_id, parent_id, site, kind, queue_key, dedup_key, input_json, retry_json, retry_state_json, metadata_json
 		 FROM ops WHERE id = ?`,
 		id,
 	)
@@ -164,6 +164,7 @@ func (s *Store) GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error)
 	var parentID sql.NullString
 	var inputText string
 	var retryText string
+	var retryStateText string
 	var metadataText string
 	if err := row.Scan(
 		&op.ID,
@@ -175,6 +176,7 @@ func (s *Store) GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error)
 		&op.DedupKey,
 		&inputText,
 		&retryText,
+		&retryStateText,
 		&metadataText,
 	); err != nil {
 		if err == sql.ErrNoRows {
@@ -191,6 +193,9 @@ func (s *Store) GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error)
 	if err := unmarshalJSON(retryText, &op.Retry); err != nil {
 		return nil, fmt.Errorf("decode retry policy: %w", err)
 	}
+	if err := unmarshalJSON(retryStateText, &op.RetryState); err != nil {
+		return nil, fmt.Errorf("decode retry state: %w", err)
+	}
 	if err := unmarshalJSON(metadataText, &op.Metadata); err != nil {
 		return nil, fmt.Errorf("decode op metadata: %w", err)
 	}
@@ -204,6 +209,189 @@ func (s *Store) GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error)
 	return &op, nil
 }
 
+func (s *Store) RefreshRunnableOps(ctx context.Context, now time.Time) (int, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin refresh runnable ops: %w", err)
+	}
+
+	totalChanged := 0
+
+	recovered, err := execRowsAffected(
+		ctx,
+		tx,
+		`UPDATE ops
+		 SET status = ?, updated_at = ?
+		 WHERE status = ?
+		   AND EXISTS (
+		     SELECT 1 FROM leases
+		     WHERE leases.op_id = ops.id
+		       AND leases.expires_at <= ?
+		   )`,
+		model.OpStatusReady,
+		now.UTC().Format(time.RFC3339Nano),
+		model.OpStatusRunning,
+		now.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, fmt.Errorf("recover expired leases: %w", err)
+	}
+	totalChanged += recovered
+
+	if _, err := tx.ExecContext(
+		ctx,
+		`DELETE FROM leases WHERE expires_at <= ?`,
+		now.UTC().Format(time.RFC3339Nano),
+	); err != nil {
+		_ = tx.Rollback()
+		return 0, fmt.Errorf("delete expired leases: %w", err)
+	}
+
+	for {
+		canceled, err := execRowsAffected(
+			ctx,
+			tx,
+			`UPDATE ops
+			 SET status = ?, updated_at = ?
+			 WHERE status = ?
+			   AND EXISTS (
+			     SELECT 1
+			     FROM op_dependencies d
+			     JOIN ops dep ON dep.id = d.depends_on_op_id
+			     WHERE d.op_id = ops.id
+			       AND d.required = 1
+			       AND dep.status IN (?, ?)
+			   )`,
+			model.OpStatusCanceled,
+			now.UTC().Format(time.RFC3339Nano),
+			model.OpStatusPending,
+			model.OpStatusFailed,
+			model.OpStatusCanceled,
+		)
+		if err != nil {
+			_ = tx.Rollback()
+			return 0, fmt.Errorf("cancel blocked ops: %w", err)
+		}
+		totalChanged += canceled
+		if canceled == 0 {
+			break
+		}
+	}
+
+	ready, err := execRowsAffected(
+		ctx,
+		tx,
+		`UPDATE ops
+		 SET status = ?, updated_at = ?
+		 WHERE status = ?
+		   AND NOT EXISTS (
+		     SELECT 1
+		     FROM op_dependencies d
+		     JOIN ops dep ON dep.id = d.depends_on_op_id
+		     WHERE d.op_id = ops.id
+		       AND (
+		         (d.required = 1 AND dep.status != ?)
+		         OR
+		         (d.required = 0 AND dep.status NOT IN (?, ?, ?))
+		       )
+		   )`,
+		model.OpStatusReady,
+		now.UTC().Format(time.RFC3339Nano),
+		model.OpStatusPending,
+		model.OpStatusSucceeded,
+		model.OpStatusSucceeded,
+		model.OpStatusFailed,
+		model.OpStatusCanceled,
+	)
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, fmt.Errorf("promote pending ops: %w", err)
+	}
+	totalChanged += ready
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit refresh runnable ops: %w", err)
+	}
+
+	return totalChanged, nil
+}
+
+func (s *Store) ListQueueCandidates(ctx context.Context, now time.Time) ([]storecontract.QueueCandidate, error) {
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT DISTINCT ops.site, ops.queue_key
+		 FROM ops
+		 WHERE ops.status = ?
+		   AND (ops.next_attempt_at IS NULL OR ops.next_attempt_at <= ?)
+		   AND NOT EXISTS (
+		     SELECT 1
+		     FROM leases l
+		     JOIN ops active ON active.id = l.op_id
+		     WHERE l.expires_at > ?
+		       AND active.site = ops.site
+		       AND active.queue_key = ops.queue_key
+		   )
+		 ORDER BY ops.site, ops.queue_key`,
+		model.OpStatusReady,
+		now.UTC().Format(time.RFC3339Nano),
+		now.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list queue candidates: %w", err)
+	}
+	defer rows.Close()
+
+	ret := []storecontract.QueueCandidate{}
+	for rows.Next() {
+		var candidate storecontract.QueueCandidate
+		if err := rows.Scan(&candidate.Site, &candidate.Queue); err != nil {
+			return nil, fmt.Errorf("scan queue candidate: %w", err)
+		}
+		ret = append(ret, candidate)
+	}
+
+	return ret, rows.Err()
+}
+
+func (s *Store) GetWorkflowStats(ctx context.Context, workflowID model.WorkflowID) (*storecontract.WorkflowStats, error) {
+	row := s.db.QueryRowContext(
+		ctx,
+		`SELECT
+		 COUNT(1),
+		 COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0),
+		 COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0),
+		 COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0),
+		 COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0),
+		 COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0),
+		 COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0)
+		 FROM ops
+		 WHERE workflow_id = ?`,
+		model.OpStatusPending,
+		model.OpStatusReady,
+		model.OpStatusRunning,
+		model.OpStatusSucceeded,
+		model.OpStatusFailed,
+		model.OpStatusCanceled,
+		workflowID,
+	)
+
+	stats := &storecontract.WorkflowStats{WorkflowID: workflowID}
+	if err := row.Scan(
+		&stats.Total,
+		&stats.Pending,
+		&stats.Ready,
+		&stats.Running,
+		&stats.Succeeded,
+		&stats.Failed,
+		&stats.Canceled,
+	); err != nil {
+		return nil, fmt.Errorf("query workflow stats: %w", err)
+	}
+
+	return stats, nil
+}
+
 func (s *Store) LeaseReadyOp(
 	ctx context.Context,
 	req storecontract.LeaseRequest,
@@ -215,7 +403,7 @@ func (s *Store) LeaseReadyOp(
 
 	row := tx.QueryRowContext(
 		ctx,
-		`SELECT id, workflow_id, parent_id, site, kind, queue_key, dedup_key, input_json, retry_json, metadata_json
+		`SELECT id, workflow_id, parent_id, site, kind, queue_key, dedup_key, input_json, retry_json, retry_state_json, metadata_json
 		 FROM ops
 		 WHERE status = ?
 		   AND queue_key = ?
@@ -224,11 +412,20 @@ func (s *Store) LeaseReadyOp(
 		   AND id NOT IN (
 		     SELECT op_id FROM leases WHERE expires_at > ?
 		   )
+		   AND NOT EXISTS (
+		     SELECT 1
+		     FROM leases l
+		     JOIN ops active ON active.id = l.op_id
+		     WHERE l.expires_at > ?
+		       AND active.site = ops.site
+		       AND active.queue_key = ops.queue_key
+		   )
 		 ORDER BY created_at ASC
 		 LIMIT 1`,
 		model.OpStatusReady,
 		req.Queue,
 		req.Site,
+		req.Now.UTC().Format(time.RFC3339Nano),
 		req.Now.UTC().Format(time.RFC3339Nano),
 		req.Now.UTC().Format(time.RFC3339Nano),
 	)
@@ -237,6 +434,7 @@ func (s *Store) LeaseReadyOp(
 	var parentID sql.NullString
 	var inputText string
 	var retryText string
+	var retryStateText string
 	var metadataText string
 	if err := row.Scan(
 		&op.ID,
@@ -248,6 +446,7 @@ func (s *Store) LeaseReadyOp(
 		&op.DedupKey,
 		&inputText,
 		&retryText,
+		&retryStateText,
 		&metadataText,
 	); err != nil {
 		_ = tx.Rollback()
@@ -265,6 +464,10 @@ func (s *Store) LeaseReadyOp(
 	if err := unmarshalJSON(retryText, &op.Retry); err != nil {
 		_ = tx.Rollback()
 		return nil, nil, fmt.Errorf("decode retry policy: %w", err)
+	}
+	if err := unmarshalJSON(retryStateText, &op.RetryState); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, fmt.Errorf("decode retry state: %w", err)
 	}
 	if err := unmarshalJSON(metadataText, &op.Metadata); err != nil {
 		_ = tx.Rollback()
@@ -433,13 +636,46 @@ func (s *Store) CompleteOp(
 }
 
 func (s *Store) FailOp(ctx context.Context, opID model.OpID, failure storecontract.Failure) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin fail op: %w", err)
+	}
+
+	workflowID, _, err := lookupOpContext(ctx, tx, opID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	failedAt := failure.Error.OccurredAt
+	if failedAt.IsZero() {
+		failedAt = time.Now().UTC()
+	}
+
 	nextAttempt := nullableTime(failure.RetryState.NextAttemptAt)
 	status := model.OpStatusFailed
 	if failure.RetryState.NextAttemptAt != nil {
 		status = model.OpStatusReady
 	}
 
-	_, err := s.db.ExecContext(
+	if _, err := tx.ExecContext(
+		ctx,
+		`INSERT OR REPLACE INTO results(op_id, workflow_id, data_json, records_json, emitted_json, emitted_ids_json, error_json, completed_at)
+		 VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
+		opID,
+		workflowID,
+		`null`,
+		`[]`,
+		`[]`,
+		`[]`,
+		mustJSON(failure.Error),
+		failedAt.UTC().Format(time.RFC3339Nano),
+	); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("insert failed result: %w", err)
+	}
+
+	if _, err := tx.ExecContext(
 		ctx,
 		`UPDATE ops
 		 SET status = ?, retry_state_json = ?, next_attempt_at = ?, updated_at = ?
@@ -447,20 +683,25 @@ func (s *Store) FailOp(ctx context.Context, opID model.OpID, failure storecontra
 		status,
 		mustJSON(failure.RetryState),
 		nextAttempt,
-		time.Now().UTC().Format(time.RFC3339Nano),
+		failedAt.UTC().Format(time.RFC3339Nano),
 		opID,
-	)
-	if err != nil {
+	); err != nil {
+		_ = tx.Rollback()
 		return fmt.Errorf("update failed op: %w", err)
 	}
 
-	if _, err := s.db.ExecContext(
+	if _, err := tx.ExecContext(
 		ctx,
 		`DELETE FROM leases WHERE op_id = ? AND token = ?`,
 		opID,
 		failure.Lease.Token,
 	); err != nil {
+		_ = tx.Rollback()
 		return fmt.Errorf("delete failed lease: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit fail op: %w", err)
 	}
 
 	return nil
@@ -565,6 +806,18 @@ type execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
+func execRowsAffected(ctx context.Context, db execer, query string, args ...any) (int, error) {
+	result, err := db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(rowsAffected), nil
+}
+
 func insertOps(ctx context.Context, db execer, ops []model.OpSpec) error {
 	for _, op := range ops {
 		now := time.Now().UTC()
@@ -586,7 +839,7 @@ func insertOps(ctx context.Context, db execer, ops []model.OpSpec) error {
 			mustJSON(op.Retry),
 			mustJSON(op.Metadata),
 			initialStatus(op),
-			mustJSON(model.RetryState{}),
+			mustJSON(op.RetryState),
 			nil,
 			now.Format(time.RFC3339Nano),
 			now.Format(time.RFC3339Nano),
