@@ -820,7 +820,7 @@ The implementation uses one combined migration stream per site. SQL and JS migra
 
 **Inferred user intent:** Keep executing the phased backlog in order instead of pausing after engine-only work.
 
-**Commit (code):** Pending at the time of writing this diary entry; the site DB milestone is prepared for commit after validation and ticket updates.
+**Commit (code):** `6b38cbb` — Add site DB migrations and CLI
 
 ### What I did
 

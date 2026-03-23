@@ -64,7 +64,7 @@
 - [x] Add tests for site DB bootstrap, mixed SQL/JS migrations, and rerun/idempotency behavior
 - [x] Add CLI plumbing for explicit site migration execution
 - [x] Record the site DB and migration work in the implementation diary
-- [ ] Commit the site DB milestone
+- [x] Commit the site DB milestone
 
 ### Phase 5. JavaScript runtime integration
 
