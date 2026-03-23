@@ -1,5 +1,6 @@
 module.exports = function (ctx) {
   const baseURL = ctx.input.baseURL || "https://news.ycombinator.com/";
+  const maxPages = Math.max(1, Number(ctx.input.maxPages || 1));
   const fetchID = ctx.emit({
     id: ctx.op.id + ":frontpage-fetch",
     kind: "http/fetch",
@@ -24,12 +25,16 @@ module.exports = function (ctx) {
     metadata: { script: "extract_frontpage.js" },
     input: {
       baseURL: baseURL,
-      fetchedOpID: fetchID
+      fetchedOpID: fetchID,
+      pageNumber: 1,
+      maxPages: maxPages
     }
   });
 
   return {
     data: {
+      baseURL: baseURL,
+      maxPages: maxPages,
       fetchID: fetchID,
       extractID: extractID
     }

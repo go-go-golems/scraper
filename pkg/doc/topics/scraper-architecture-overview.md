@@ -44,5 +44,6 @@ Use the CLI help system as the top-level guide for operators and new contributor
 - built-in exercise sites currently include `hackernews` and `slashdot` for `js -> http/fetch -> js -> site-db` validation, plus `js-demo` for a pure-JS `js -> js -> site-db` path without any HTTP dependency
 - `scraper site hackernews run <seed|extract-frontpage> --fixture` to smoke-test the full Hacker News path against the embedded fixture server
 - `scraper site slashdot run <seed|extract-frontpage> --fixture` to smoke-test the full Slashdot path against the embedded fixture server
+- `scraper site hackernews run seed --max-pages 2` and `scraper site slashdot run seed --max-pages 2` to let the JS site scripts keep following listing pagination by emitting more fetch and extract ops
 - `scraper site js-demo run <seed|item|summary>` to exercise different pure-JS entrypoints locally
 - ticket `SCRAPER-DESIGN` in `ttmp/` for the detailed implementation guide and diary

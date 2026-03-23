@@ -152,6 +152,7 @@ func TestHackerNewsRunSeedCommand(t *testing.T) {
 		"--sites-dir", t.TempDir(),
 		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
 		"--workflow-id", "cmd-hackernews-seed",
+		"--max-pages", "2",
 	})
 
 	err = rootCmd.Execute()
@@ -162,6 +163,20 @@ func TestHackerNewsRunSeedCommand(t *testing.T) {
 	require.Contains(t, stdout.String(), "Fixture: true")
 	require.Contains(t, stdout.String(), `"storyCount": 2`)
 	require.Contains(t, stdout.String(), `"47490070"`)
+}
+
+func TestHackerNewsRunSeedHelpIncludesMaxPages(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"site", "hackernews", "run", "seed", "--help"})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "--max-pages")
 }
 
 func TestHackerNewsRunExtractFrontpageCommand(t *testing.T) {
@@ -199,6 +214,7 @@ func TestSlashdotRunSeedCommand(t *testing.T) {
 		"--sites-dir", t.TempDir(),
 		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
 		"--workflow-id", "cmd-slashdot-seed",
+		"--max-pages", "2",
 	})
 
 	err = rootCmd.Execute()
@@ -209,6 +225,20 @@ func TestSlashdotRunSeedCommand(t *testing.T) {
 	require.Contains(t, stdout.String(), "Fixture: true")
 	require.Contains(t, stdout.String(), `"storyCount": 2`)
 	require.Contains(t, stdout.String(), `"181087690"`)
+}
+
+func TestSlashdotRunSeedHelpIncludesMaxPages(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"site", "slashdot", "run", "seed", "--help"})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "--max-pages")
 }
 
 func TestSlashdotRunExtractFrontpageCommand(t *testing.T) {

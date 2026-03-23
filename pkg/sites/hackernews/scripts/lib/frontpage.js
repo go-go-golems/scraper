@@ -89,6 +89,15 @@ function extractStories(html, baseURL) {
   return stories;
 }
 
+function extractNextPageURL(html, baseURL) {
+  const moreMatch = String(html || "").match(/<a[^>]*(?:class=['"]morelink['"][^>]*href=['"]([^'"]+)['"]|href=['"]([^'"]+)['"][^>]*class=['"]morelink['"])[^>]*>/i);
+  if (!moreMatch) {
+    return "";
+  }
+  return toAbsolute(baseURL, moreMatch[1] || moreMatch[2]);
+}
+
 module.exports = {
-  extractStories: extractStories
+  extractStories: extractStories,
+  extractNextPageURL: extractNextPageURL
 };

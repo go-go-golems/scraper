@@ -82,6 +82,15 @@ function extractStories(html, baseURL) {
   return stories;
 }
 
+function extractNextPageURL(html, baseURL) {
+  const olderMatch = String(html || "").match(/<a[^>]*class="prevnextbutact"[^>]*href="([^"]+)"[^>]*>\s*Older/i);
+  if (!olderMatch) {
+    return "";
+  }
+  return toAbsolute(baseURL, olderMatch[1]);
+}
+
 module.exports = {
-  extractStories: extractStories
+  extractStories: extractStories,
+  extractNextPageURL: extractNextPageURL
 };

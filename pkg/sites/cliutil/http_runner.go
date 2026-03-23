@@ -29,11 +29,12 @@ type HTTPWorkflowCLIOptions struct {
 	EngineDB   string
 	WorkflowID string
 	BaseURL    string
+	MaxPages   int
 	MaxCycles  int
 	Fixture    bool
 }
 
-type BuildHTTPWorkflow func(baseURL string, workflowID string) (storecontract.CreateWorkflowParams, model.OpID, error)
+type BuildHTTPWorkflow func(baseURL string, workflowID string, maxPages int) (storecontract.CreateWorkflowParams, model.OpID, error)
 
 type HTTPWorkflowSpec struct {
 	Site           model.SiteName
@@ -63,6 +64,12 @@ func AddSharedHTTPWorkflowFlags(cmd *cobra.Command, options *HTTPWorkflowCLIOpti
 		"base-url",
 		defaultBaseURL,
 		"Base URL used by the HTTP-backed workflow",
+	)
+	cmd.Flags().IntVar(
+		&options.MaxPages,
+		"max-pages",
+		1,
+		"Maximum number of listing pages to scrape by following the site's pagination chain",
 	)
 	cmd.Flags().IntVar(
 		&options.MaxCycles,
@@ -154,7 +161,7 @@ func RunHTTPWorkflowCommand(cmd *cobra.Command, options *HTTPWorkflowCLIOptions,
 		return siteDB, nil
 	})
 
-	workflowParams, targetOpID, err := spec.BuildWorkflow(baseURL, options.WorkflowID)
+	workflowParams, targetOpID, err := spec.BuildWorkflow(baseURL, options.WorkflowID, options.MaxPages)
 	if err != nil {
 		return err
 	}

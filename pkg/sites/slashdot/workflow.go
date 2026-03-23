@@ -12,12 +12,16 @@ import (
 type RunOptions struct {
 	WorkflowID string
 	BaseURL    string
+	MaxPages   int
 }
 
 func normalizeRunOptions(options RunOptions) RunOptions {
 	ret := options
 	if ret.BaseURL == "" {
 		ret.BaseURL = "https://slashdot.org/"
+	}
+	if ret.MaxPages <= 0 {
+		ret.MaxPages = 1
 	}
 	return ret
 }
@@ -29,9 +33,10 @@ func ensureWorkflowID(current string, kind string) string {
 	return fmt.Sprintf("slashdot-%s-%d", kind, time.Now().UTC().UnixNano())
 }
 
-func seedInput(baseURL string) (json.RawMessage, error) {
+func seedInput(baseURL string, maxPages int) (json.RawMessage, error) {
 	return json.Marshal(map[string]any{
-		"baseURL": baseURL,
+		"baseURL":  baseURL,
+		"maxPages": maxPages,
 	})
 }
 
@@ -39,7 +44,7 @@ func BuildSeedWorkflow(options RunOptions) (storecontract.CreateWorkflowParams, 
 	options = normalizeRunOptions(options)
 	options.WorkflowID = ensureWorkflowID(options.WorkflowID, "seed")
 
-	input, err := seedInput(options.BaseURL)
+	input, err := seedInput(options.BaseURL, options.MaxPages)
 	if err != nil {
 		return storecontract.CreateWorkflowParams{}, "", fmt.Errorf("marshal slashdot seed input: %w", err)
 	}
@@ -92,6 +97,8 @@ func BuildExtractFrontpageWorkflow(options RunOptions) (storecontract.CreateWork
 	extractInput, err := json.Marshal(map[string]any{
 		"baseURL":     options.BaseURL,
 		"fetchedOpID": fetchID,
+		"pageNumber":  1,
+		"maxPages":    options.MaxPages,
 	})
 	if err != nil {
 		return storecontract.CreateWorkflowParams{}, "", fmt.Errorf("marshal slashdot extract input: %w", err)

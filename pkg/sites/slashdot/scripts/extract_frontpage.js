@@ -54,8 +54,11 @@ module.exports = function (ctx) {
     String(ctx.input.baseURL || "") ||
     String((((dep.data || {}).response || {}).finalURL) || "") ||
     "https://slashdot.org/";
+  const pageNumber = Math.max(1, Number(ctx.input.pageNumber || 1));
+  const maxPages = Math.max(1, Number(ctx.input.maxPages || 1));
 
   const stories = frontpage.extractStories(html, baseURL);
+  const nextPageURL = frontpage.extractNextPageURL(html, baseURL);
   for (let i = 0; i < stories.length; i += 1) {
     const story = stories[i];
     siteDB.exec(
@@ -88,9 +91,48 @@ module.exports = function (ctx) {
     );
   }
 
+  let nextFetchID = "";
+  let nextExtractID = "";
+  if (nextPageURL !== "" && pageNumber < maxPages) {
+    nextFetchID = ctx.emit({
+      id: ctx.op.id + ":page-" + String(pageNumber + 1) + "-fetch",
+      kind: "http/fetch",
+      queue: "site:slashdot:http",
+      dedupKey: "slashdot:frontpage:" + nextPageURL,
+      input: {
+        request: {
+          method: "GET",
+          url: nextPageURL
+        },
+        persistBody: true,
+        artifactName: "frontpage.html"
+      }
+    });
+
+    nextExtractID = ctx.emit({
+      id: ctx.op.id + ":page-" + String(pageNumber + 1) + "-extract",
+      kind: "js",
+      queue: "site:slashdot:js",
+      dedupKey: "slashdot:frontpage-extract:" + nextPageURL,
+      dependsOn: [{ opID: nextFetchID, required: true }],
+      metadata: { script: "extract_frontpage.js" },
+      input: {
+        baseURL: nextPageURL,
+        fetchedOpID: nextFetchID,
+        pageNumber: pageNumber + 1,
+        maxPages: maxPages
+      }
+    });
+  }
+
   return {
     data: {
+      pageNumber: pageNumber,
+      maxPages: maxPages,
       storyCount: stories.length,
+      nextPageURL: nextPageURL,
+      nextFetchID: nextFetchID,
+      nextExtractID: nextExtractID,
       topStoryIDs: stories.slice(0, 5).map(function (story) {
         return story.storyID;
       })

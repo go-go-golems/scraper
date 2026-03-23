@@ -29,10 +29,11 @@ func registerCLI(root *cobra.Command) error {
 				Entrypoint:     "seed",
 				DefaultBaseURL: "https://slashdot.org/",
 				FixtureName:    "frontpage.html",
-				BuildWorkflow: func(baseURL string, workflowID string) (params storecontract.CreateWorkflowParams, targetOpID model.OpID, err error) {
+				BuildWorkflow: func(baseURL string, workflowID string, maxPages int) (params storecontract.CreateWorkflowParams, targetOpID model.OpID, err error) {
 					return BuildSeedWorkflow(RunOptions{
 						WorkflowID: workflowID,
 						BaseURL:    baseURL,
+						MaxPages:   maxPages,
 					})
 				},
 				RegisterSite: Register,
@@ -51,10 +52,11 @@ func registerCLI(root *cobra.Command) error {
 				Entrypoint:     "extract-frontpage",
 				DefaultBaseURL: "https://slashdot.org/",
 				FixtureName:    "frontpage.html",
-				BuildWorkflow: func(baseURL string, workflowID string) (params storecontract.CreateWorkflowParams, targetOpID model.OpID, err error) {
+				BuildWorkflow: func(baseURL string, workflowID string, maxPages int) (params storecontract.CreateWorkflowParams, targetOpID model.OpID, err error) {
 					return BuildExtractFrontpageWorkflow(RunOptions{
 						WorkflowID: workflowID,
 						BaseURL:    baseURL,
+						MaxPages:   maxPages,
 					})
 				},
 				RegisterSite: Register,
