@@ -5,10 +5,15 @@ import (
 	"github.com/go-go-golems/glazed/pkg/help"
 	helpcmd "github.com/go-go-golems/glazed/pkg/help/cmd"
 	scraperdoc "github.com/go-go-golems/scraper/pkg/doc"
+	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	"github.com/spf13/cobra"
 )
 
 func NewRootCommand(version string) (*cobra.Command, error) {
+	return newRootCommand(version, siteregistry.New())
+}
+
+func newRootCommand(version string, siteRegistry *siteregistry.Registry) (*cobra.Command, error) {
 	rootCmd := &cobra.Command{
 		Use:     "scraper",
 		Short:   "Durable workflow-driven scraping with Go and embedded JavaScript",
@@ -29,6 +34,7 @@ func NewRootCommand(version string) (*cobra.Command, error) {
 	helpcmd.SetupCobraRootCommand(helpSystem, rootCmd)
 
 	rootCmd.AddCommand(newEngineCommand())
+	rootCmd.AddCommand(newSiteCommand(siteRegistry))
 	rootCmd.AddCommand(newVersionCommand(version))
 
 	return rootCmd, nil

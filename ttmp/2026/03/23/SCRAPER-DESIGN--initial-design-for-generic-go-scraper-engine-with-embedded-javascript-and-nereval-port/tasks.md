@@ -55,15 +55,15 @@
 
 ### Phase 4. Site registry and per-site databases
 
-- [ ] Create the site registry that resolves a site name to scripts, runtime modules, and migration sources
-- [ ] Give each site its own SQLite database separate from the engine database
-- [ ] Define the site database lifecycle and location rules
-- [ ] Support ordered SQL site migrations
-- [ ] Support ordered JS site migrations executed against the site DB through a narrow migration runtime
-- [ ] Define the migration execution order when both `.sql` and `.js` migrations exist
-- [ ] Add tests for site DB bootstrap, mixed SQL/JS migrations, and rerun/idempotency behavior
-- [ ] Add CLI plumbing for explicit site migration execution
-- [ ] Record the site DB and migration work in the implementation diary
+- [x] Create the site registry that resolves a site name to scripts, runtime modules, and migration sources
+- [x] Give each site its own SQLite database separate from the engine database
+- [x] Define the site database lifecycle and location rules
+- [x] Support ordered SQL site migrations
+- [x] Support ordered JS site migrations executed against the site DB through a narrow migration runtime
+- [x] Define the migration execution order when both `.sql` and `.js` migrations exist
+- [x] Add tests for site DB bootstrap, mixed SQL/JS migrations, and rerun/idempotency behavior
+- [x] Add CLI plumbing for explicit site migration execution
+- [x] Record the site DB and migration work in the implementation diary
 - [ ] Commit the site DB milestone
 
 ### Phase 5. JavaScript runtime integration

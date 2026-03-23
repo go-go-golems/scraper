@@ -92,3 +92,17 @@ Added `scraper engine status` and `scraper engine migrations status` so engine D
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/status.go — Added non-destructive engine DB inspection helpers
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/status_test.go — Added status inspection tests
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md — Added command discovery notes for the new engine status commands
+
+
+## 2026-03-23
+
+Added per-site SQLite DB management, combined SQL/JS site migrations, and the `scraper site migrate <site>` operator command.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/registry/registry.go — Extended the site definition with DB filename and runtime-module registrar support
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/migrate/manager.go — Added the site migration manager and JS migration runtime
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/migrate/manager_test.go — Added mixed SQL/JS migration and idempotency tests
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site.go — Added the explicit site migration CLI command
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go — Added CLI tests for site migration execution
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md — Added discovery notes for the site migration command

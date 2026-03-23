@@ -22,7 +22,7 @@ RelatedFiles:
 ExternalSources:
     - local:scraper.md
 Summary: Chronological diary of the initial SCRAPER-DESIGN research and documentation pass.
-LastUpdated: 2026-03-23T13:25:00-04:00
+LastUpdated: 2026-03-23T14:05:00-04:00
 WhatFor: Record the research steps, commands, decisions, and rough edges encountered while producing the initial design guide.
 WhenToUse: Use when reviewing how the initial design doc was produced or when continuing the implementation work later.
 ---
@@ -801,3 +801,123 @@ Both commands accept `--engine-db <path>`. They are intentionally non-destructiv
 - Concrete commands used during the visibility phase:
   - `go test ./...`
   - `go run ./cmd/scraper engine status --engine-db /tmp/does-not-exist-engine.db`
+
+## Step 7: Implement per-site DBs with mixed SQL and JS migrations
+
+This step completed the first site-owned storage layer. The goal was to make site state fully separate from engine state by giving each site its own SQLite DB and a migration system that can execute both SQL files and JavaScript files against that site DB. I also added `scraper site migrate <site>` so site DBs can be initialized and upgraded explicitly during development and smoke tests.
+
+The implementation uses one combined migration stream per site. SQL and JS migration files share a single numeric version sequence. The runner orders migrations by that numeric prefix across both file types and rejects duplicate version numbers, so a site can express a migration history such as:
+
+- `001_init.sql`
+- `002_seed.js`
+- `003_indexes.sql`
+
+### Prompt Context
+
+**User prompt (verbatim):** "continue"
+
+**Assistant interpretation:** Continue working through the next unfinished phase after the engine visibility commands.
+
+**Inferred user intent:** Keep executing the phased backlog in order instead of pausing after engine-only work.
+
+**Commit (code):** Pending at the time of writing this diary entry; the site DB milestone is prepared for commit after validation and ticket updates.
+
+### What I did
+
+- Extended the site definition contract in `pkg/sites/registry/registry.go` with:
+  - `DatabaseFileName`
+  - `RuntimeModuleRegistrars`
+- Added a new site migration manager in `pkg/sites/migrate/manager.go`.
+- Implemented site DB path rules:
+  - DBs live under a caller-provided sites directory
+  - default filename is `<site>.db`
+  - a site can override that filename explicitly
+- Implemented site-local migration history using `schema_migrations` in the site DB.
+- Implemented combined migration loading across:
+  - `SQLMigrationsFS`
+  - `JSMigrationsFS`
+- Implemented deterministic ordering by numeric prefix across SQL and JS migration files.
+- Rejected duplicate migration versions across SQL and JS sources.
+- Implemented SQL migration application in a transaction.
+- Implemented JS migration application in a transaction using a dedicated go-go-goja runtime.
+- Exposed a narrow JS migration API object:
+  - `exec(sql, ...args)`
+  - `query(sql, ...args)`
+  - `hasTable(name)`
+  - `hasColumn(table, column)`
+  - `log(...)`
+- Supported async JS migrations by awaiting a returned promise if the migration exports an `async function`.
+- Added tests for:
+  - mixed SQL and JS migrations
+  - relative `require()` inside JS migrations
+  - rerun/idempotency
+  - duplicate-version rejection
+- Added the CLI command:
+  - `scraper site migrate <site> --sites-dir <dir>`
+- Added CLI tests for:
+  - successful site migration
+  - unknown site failure
+
+### Why
+
+- The design explicitly called for each site to own its own DB and migrations.
+- SQL-only migrations are not sufficient for all future site evolution steps; some updates need conditional logic or backfills.
+- An explicit CLI entrypoint is important for development and smoke testing because it lets us validate site DB behavior independently from the scheduler.
+
+### What worked
+
+- The combined SQL/JS ordering model is simple and easy to explain.
+- The go-go-goja runtime is already a good fit for the migration runner even before the full JS op runtime exists.
+- Relative `require()` in JS migrations works once the entry migration is loaded as a relative module.
+- The migration rerun behavior is clean: already-applied versions are skipped and the second run applies zero migrations.
+
+### What didn't work
+
+- The first JS migration attempt failed with:
+  - `require migration 002_seed.js: Invalid module`
+- Cause:
+  - the entry migration was required as a bare module name instead of a relative module path
+- Resolution:
+  - require the entrypoint as `./<migration-file>`
+  - keep the loader tolerant of normalized relative module paths
+
+### What I learned
+
+- Site migrations are a good place to start using go-go-goja because the API surface is intentionally narrow and easy to control.
+- The explicit site command is valuable immediately because it establishes the operator flow and makes tests more realistic, even before any production site package is registered.
+
+### What was tricky to build
+
+- The main tricky part was keeping JS migration execution transactional. The solution was to bind the JS API directly to the active `*sql.Tx`, so both SQL and JS migrations participate in the same commit/rollback boundary.
+- The second tricky part was keeping the migration runtime narrow. I deliberately passed a purpose-built API object into the exported migration function instead of enabling broad default modules.
+
+### What warrants a second pair of eyes
+
+- Whether the site migration API should eventually expose a more structured row API than `query()` returning generic maps.
+- Whether future site migration commands should also support a dry-run or status mode under the `site` command tree.
+
+### What should be done in the future
+
+- Register a real site package so `scraper site migrate <site>` is useful outside of tests.
+- Reuse the go-go-goja runtime integration patterns from this migration runner when phase 5 introduces JS-backed op runners.
+- Add site status or inspection commands once a real site DB exists in the repo.
+
+### Code review instructions
+
+- Review the site DB and migration code in this order:
+  - `pkg/sites/registry/registry.go`
+  - `pkg/sites/migrate/manager.go`
+  - `pkg/sites/migrate/manager_test.go`
+  - `pkg/cmd/site.go`
+  - `pkg/cmd/site_test.go`
+- Then compare the ticket updates:
+  - `tasks.md`
+  - the storage/migration notes in the design doc
+  - this diary entry
+
+### Technical details
+
+- Concrete commands used during the site DB phase:
+  - `go mod tidy`
+  - `go test ./pkg/sites/migrate ./pkg/cmd`
+  - `go test ./...`

@@ -30,7 +30,7 @@ RelatedFiles:
 ExternalSources:
     - local:scraper.md
 Summary: Detailed analysis and implementation guide for porting the current NEREVAL prototype into a generic Go scraping engine with embedded JavaScript built on go-go-goja.
-LastUpdated: 2026-03-23T12:10:00-04:00
+LastUpdated: 2026-03-23T14:05:00-04:00
 WhatFor: Explain how the imported scraper architecture maps to the current NEREVAL prototype and define a concrete, intern-oriented plan for implementing the new engine in scraper/.
 WhenToUse: Use when bootstrapping the scraper codebase, designing the engine/store/runtime split, or porting NEREVAL from the JS prototype to the Go/goja system.
 ---
@@ -692,6 +692,8 @@ sites/nereval/migrations/
   003_backfill_owner_normalization.js
 ```
 
+Implementation note after phase 4: SQL and JS migrations share one numeric version sequence. The runner orders all site migrations by that numeric prefix across both file types and rejects duplicate version numbers, so a site should use a single monotonically increasing sequence for all migration files.
+
 Recommended migration contract for JS migrations:
 
 ```javascript
@@ -722,6 +724,14 @@ The migration runtime should be deliberately narrow:
 - `m.log(level, msg, fields?)`
 
 It should not expose workflow emission or network access.
+
+The first explicit operator entrypoint for this model is:
+
+```text
+scraper site migrate <site> --sites-dir state/sites
+```
+
+That command opens or creates the site DB, applies pending site migrations, and records migration history in the site DB itself.
 
 ### Projection writing for NEREVAL
 

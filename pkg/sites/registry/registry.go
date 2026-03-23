@@ -5,21 +5,24 @@ import (
 	"io/fs"
 	"sort"
 
+	gggengine "github.com/go-go-golems/go-go-goja/engine"
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	"github.com/spf13/cobra"
 )
 
 type Definition struct {
-	Name              model.SiteName
-	ScriptsFS         fs.FS
-	ScriptsRoot       string
-	SQLMigrationsFS   fs.FS
-	SQLMigrationsRoot string
-	JSMigrationsFS    fs.FS
-	JSMigrationsRoot  string
-	HelpFS            fs.FS
-	HelpRoot          string
-	RegisterCLI       func(root *cobra.Command) error
+	Name                    model.SiteName
+	DatabaseFileName        string
+	ScriptsFS               fs.FS
+	ScriptsRoot             string
+	SQLMigrationsFS         fs.FS
+	SQLMigrationsRoot       string
+	JSMigrationsFS          fs.FS
+	JSMigrationsRoot        string
+	HelpFS                  fs.FS
+	HelpRoot                string
+	RuntimeModuleRegistrars []gggengine.RuntimeModuleRegistrar
+	RegisterCLI             func(root *cobra.Command) error
 }
 
 type Registry struct {
