@@ -1039,7 +1039,7 @@ This step completed the first real JS execution slice for the scraper engine. Be
 
 **Inferred user intent:** Turn the architectural design into working runtime code so future phases can run real site scripts through the engine instead of only through migration helpers.
 
-**Commit (code):** Pending at the time of writing this diary entry; the JS runtime milestone changes are validated locally and ready to commit.
+**Commit (code):** `1bebe66` — Add JS runtime executor and runner
 
 ### What I did
 
