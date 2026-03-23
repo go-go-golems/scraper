@@ -40,6 +40,7 @@ func newRootCommand(version string, siteRegistry *siteregistry.Registry) (*cobra
 	helpcmd.SetupCobraRootCommand(helpSystem, rootCmd)
 
 	rootCmd.AddCommand(newEngineCommand())
+	rootCmd.AddCommand(newWorkerCommand(siteRegistry))
 	siteCmd, err := newSiteCommand(siteRegistry)
 	if err != nil {
 		return nil, err
