@@ -51,7 +51,7 @@
 - [x] Add tests covering migration application, fresh database bootstrap, and upgrade from an older schema version
 - [ ] Add CLI/admin visibility for checking engine DB health if needed
 - [x] Record the engine DB and migration work in the implementation diary
-- [ ] Commit the engine DB milestone
+- [x] Commit the engine DB milestone
 
 ### Phase 4. Site registry and per-site databases
 

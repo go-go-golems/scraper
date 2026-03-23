@@ -579,7 +579,7 @@ Then work on the tasks one by one committing at appropriate intervals and keepin
 
 **Inferred user intent:** Keep converting the design into working code, one stable layer at a time.
 
-**Commit (code):** Pending at the time of writing this diary entry; the engine DB milestone is prepared for commit after validation and ticket updates.
+**Commit (code):** `d70fb56` — Add engine SQLite store and migrations
 
 ### What I did
 
