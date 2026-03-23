@@ -30,7 +30,7 @@ RelatedFiles:
 ExternalSources:
     - local:scraper.md
 Summary: Detailed analysis and implementation guide for porting the current NEREVAL prototype into a generic Go scraping engine with embedded JavaScript built on go-go-goja.
-LastUpdated: 2026-03-23T13:55:57-04:00
+LastUpdated: 2026-03-23T14:05:00-04:00
 WhatFor: Explain how the imported scraper architecture maps to the current NEREVAL prototype and define a concrete, intern-oriented plan for implementing the new engine in scraper/.
 WhenToUse: Use when bootstrapping the scraper codebase, designing the engine/store/runtime split, or porting NEREVAL from the JS prototype to the Go/goja system.
 ---
@@ -892,6 +892,51 @@ The important constraint for milestone one is still unchanged:
 - no `ctx.fetch()`
 
 Fetches remain Go-owned work executed through separate ops. JS decides what to emit next and how to project data, but it does not own transport.
+
+### HTTP runner contract
+
+Implementation note after phase 7: the first Go-backed fetch runner now exists as kind `http/fetch`.
+
+The current input envelope is:
+
+```json
+{
+  "request": {
+    "method": "POST",
+    "url": "https://example.test/list?page={{ .input.page }}",
+    "headers": {
+      "X-Test-Token": "{{ .input.token }}"
+    },
+    "form": {
+      "town": "{{ .workflow.input.defaultTown }}",
+      "page": "{{ .input.page }}"
+    }
+  },
+  "persistBody": true,
+  "artifactName": "response.html"
+}
+```
+
+The runner currently supports:
+
+- method selection
+- URL templating
+- header templating
+- form payload rendering
+- raw body rendering
+- response metadata capture
+- optional response-body artifact persistence
+- retry classification based on transport errors, `429`, and `5xx` status codes
+
+The result data currently contains a request/response envelope with:
+
+- rendered request method and URL
+- rendered request headers and body text
+- response status code and status text
+- final URL after redirects
+- response headers
+- response content type and body length
+- optional `bodyArtifactID`
 
 ### Site migration contract
 

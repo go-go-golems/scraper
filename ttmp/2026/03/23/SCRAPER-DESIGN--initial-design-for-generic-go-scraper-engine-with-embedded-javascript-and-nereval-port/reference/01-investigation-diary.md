@@ -22,7 +22,7 @@ RelatedFiles:
 ExternalSources:
     - local:scraper.md
 Summary: Chronological diary of the initial SCRAPER-DESIGN research and documentation pass.
-LastUpdated: 2026-03-23T13:55:57-04:00
+LastUpdated: 2026-03-23T14:05:00-04:00
 WhatFor: Record the research steps, commands, decisions, and rough edges encountered while producing the initial design guide.
 WhenToUse: Use when reviewing how the initial design doc was produced or when continuing the implementation work later.
 ---
@@ -1263,4 +1263,125 @@ This step turned the engine from a durable store plus runnable ops into a real w
 - Concrete commands used during the scheduler phase:
   - `gofmt -w pkg/engine/model/types.go pkg/engine/store/store.go pkg/engine/store/sqlite/store.go pkg/engine/scheduler/scheduler.go pkg/engine/scheduler/scheduler_test.go`
   - `go test ./pkg/engine/model ./pkg/engine/store/sqlite ./pkg/engine/scheduler`
+  - `go test ./...`
+
+## Step 11: Add the first generic HTTP fetch runner
+
+This step completed phase 7 by adding the first Go-backed acquisition runner. Before this change, the engine could schedule and execute JS work, but there was still no real fetch primitive for those JS scripts to depend on. The new `http/fetch` runner closes that gap with a generic request envelope, templated request rendering, response metadata capture, optional body artifact persistence, and retry classification.
+
+### Prompt Context
+
+**User prompt (verbatim):** "continue"
+
+**Assistant interpretation:** Move from the scheduler milestone into phase 7 and implement the first concrete HTTP acquisition runner.
+
+**Inferred user intent:** Keep building the engine until it can perform real HTTP work that later NEREVAL scripts can consume as dependency results.
+
+**Commit (code):** Pending at the time of writing this diary entry; the HTTP milestone changes are validated locally and ready to commit.
+
+### What I did
+
+- Added `pkg/engine/runner/http.go` implementing kind `http/fetch`.
+- Defined the first fetch input envelope:
+  - `request.method`
+  - `request.url`
+  - `request.headers`
+  - `request.form`
+  - `request.body`
+  - top-level `persistBody`
+  - top-level `artifactName`
+- Added template rendering for:
+  - URL strings
+  - header values
+  - form values
+  - raw request body text
+- Bound the template context to:
+  - `.input` from op input JSON
+  - `.workflow.input` from workflow input JSON
+  - `.op` metadata such as ID, site, queue, and dedup key
+- Added automatic request defaults for:
+  - `GET` method when unspecified
+  - configured `User-Agent` when unspecified
+  - form `Content-Type` for rendered form payloads
+- Added response result-envelope capture including:
+  - rendered request method and URL
+  - rendered request headers and body text
+  - response status code and status string
+  - final URL after redirects
+  - response headers
+  - response content type and body length
+  - optional `bodyArtifactID`
+- Added optional persisted body artifacts with:
+  - deterministic artifact IDs
+  - content type
+  - request/response metadata
+- Added retry classification:
+  - transport errors are retryable
+  - `429` is retryable
+  - `5xx` is retryable
+  - `4xx` such as `404` are non-retryable
+- Added runner tests for:
+  - successful HTML fetch with templated POST form data and artifact persistence
+  - retryable `502` failure
+  - non-retryable `404` failure
+
+### Why
+
+- The scheduler milestone made the engine capable of executing work, but phase 8 needs a real acquisition primitive for list/detail page fetches.
+- The user already narrowed milestone one by removing `ctx.fetch()`, which means fetch has to exist as a Go-owned op runner instead of a JS helper.
+- Testing the runner with `httptest` fixtures gives a stable base for the later NEREVAL port.
+
+### What worked
+
+- A simple `text/template`-based rendering layer was enough to cover the current request-shaping needs without inventing a custom DSL.
+- Returning a structured request/response envelope fits naturally into the existing `OpResult.Data` field.
+- Persisting the response body as a normal artifact aligns well with the result/artifact split we already committed to in the design docs.
+- The retryable/non-retryable status split maps cleanly onto the scheduler’s existing retry flow.
+
+### What didn't work
+
+- The first success test assumed form fields would preserve insertion order in the encoded request body.
+- Resolution:
+  - update the test to expect the stable `url.Values.Encode()` ordering
+- The first exact JSON assertion for response metadata was too strict because `httptest` adds headers such as `Date`.
+- Resolution:
+  - decode the result JSON and assert only the stable fields we actually care about
+
+### What I learned
+
+- The fetch runner does not need to know anything about DOM parsing to be useful. Its job is just to produce a stable transport artifact and metadata envelope.
+- Capturing the actual sent headers in the result envelope is more useful than only reporting the explicit input headers, because it reflects defaulted values such as `User-Agent` and `Content-Type`.
+
+### What was tricky to build
+
+- The subtle part was drawing the boundary between request input and request diagnostics. I kept the op input small and expressive, then reported the fully rendered request separately in the result envelope so later debugging and fixture generation can see what was actually sent.
+- The other small design choice was whether to introduce proxy support immediately. I intentionally left that out of this phase because it is not required for the current milestone and would complicate the runner surface prematurely.
+
+### What warrants a second pair of eyes
+
+- Whether the template context should eventually include dependency-derived values directly, or whether those should remain the responsibility of upstream JS ops that emit the fetch op.
+- Whether the request envelope should later gain explicit query-parameter support instead of relying on templated URLs.
+- Whether the fetch runner should later classify additional `4xx` statuses as retryable for specific sites.
+
+### What should be done in the future
+
+- Port NEREVAL list-page GET, next-page POST, and detail-page GET onto this runner in phase 8.
+- Add richer request options only when a real site requires them, such as proxy selection or cookie jar behavior.
+- Consider a small helper layer for emitting common fetch shapes from JS once the NEREVAL port makes those patterns obvious.
+
+### Code review instructions
+
+- Review the fetch runner first:
+  - `scraper/pkg/engine/runner/http.go`
+  - `scraper/pkg/engine/runner/http_test.go`
+- Then review the operator-facing contract sync:
+  - `scraper/pkg/doc/topics/scraper-architecture-overview.md`
+  - `scraper/ttmp/.../tasks.md`
+  - `scraper/ttmp/.../design-doc/01-generic-go-scraper-engine-and-nereval-port-design-guide.md`
+
+### Technical details
+
+- Concrete commands used during the HTTP phase:
+  - `gofmt -w pkg/engine/runner/http.go pkg/engine/runner/http_test.go`
+  - `go test ./pkg/engine/runner`
   - `go test ./...`

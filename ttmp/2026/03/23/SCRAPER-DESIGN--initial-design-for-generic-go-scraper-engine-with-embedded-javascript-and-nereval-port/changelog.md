@@ -2,6 +2,17 @@
 
 ## 2026-03-23
 
+Added the first generic `http/fetch` runner with templated request rendering, form/body support, response metadata capture, optional body artifact persistence, and retry classification tests.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/runner/http.go — Added the Go-backed HTTP fetch runner
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/runner/http_test.go — Added fixture-style tests for success, retryable server errors, and non-retryable client errors
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md — Updated the help topic with the current `http/fetch` input contract
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/reference/01-investigation-diary.md — Recorded the HTTP milestone
+
+## 2026-03-23
+
 Added the first real scheduler loop with workflow submission, dependency promotion/cancellation, retry and backoff handling, expired-lease recovery, queue-domain leasing, and integration tests against the SQLite store.
 
 ### Related Files

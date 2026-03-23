@@ -91,13 +91,13 @@
 
 ### Phase 7. Generic HTTP scraper primitives
 
-- [ ] Implement the first Go-backed HTTP scrape op runner
-- [ ] Persist response body, metadata, and request diagnostics as artifacts/results
-- [ ] Support request templates, headers, method selection, form payloads, and retry classification
-- [ ] Add queue keys appropriate for shared HTTP rate domains
-- [ ] Add fixture-driven tests for HTML fetch success, retryable errors, and non-retryable failures
-- [ ] Record the HTTP primitive work in the implementation diary
-- [ ] Commit the HTTP primitive milestone
+- [x] Implement the first Go-backed HTTP scrape op runner
+- [x] Persist response body, metadata, and request diagnostics as artifacts/results
+- [x] Support request templates, headers, method selection, form payloads, and retry classification
+- [x] Add queue keys appropriate for shared HTTP rate domains
+- [x] Add fixture-driven tests for HTML fetch success, retryable errors, and non-retryable failures
+- [x] Record the HTTP primitive work in the implementation diary
+- [x] Commit the HTTP primitive milestone
 
 ### Phase 8. NEREVAL site port
 

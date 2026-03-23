@@ -30,6 +30,8 @@ When JavaScript needs database access, the runtime should expose preconfigured m
 
 In the current codebase, JS ops are loaded from the site script filesystem declared in the site registry, and the `js` runner expects op metadata to include a `script` entry naming the module to execute.
 
+The current HTTP runner uses kind `http/fetch` and expects op input to carry a `request` object plus optional `persistBody` and `artifactName` fields. Request URLs, headers, form fields, and body text may be rendered from the op/workflow input template context before the request is sent.
+
 The current scheduler layer recovers expired leases back to `ready`, promotes dependency-satisfied ops automatically, cancels pending ops blocked by required failed dependencies, and treats each `site + queue` pair as a single active rate domain.
 
 Use the CLI help system as the top-level guide for operators and new contributors:
