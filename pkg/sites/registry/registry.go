@@ -15,6 +15,8 @@ type Definition struct {
 	DatabaseFileName        string
 	ScriptsFS               fs.FS
 	ScriptsRoot             string
+	VerbsFS                 fs.FS
+	VerbsRoot               string
 	Modules                 []gggengine.ModuleSpec
 	SQLMigrationsFS         fs.FS
 	SQLMigrationsRoot       string

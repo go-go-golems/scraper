@@ -6,6 +6,7 @@ import (
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	sitemigrate "github.com/go-go-golems/scraper/pkg/sites/migrate"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
+	submitverbs "github.com/go-go-golems/scraper/pkg/sites/submitverbs"
 	"github.com/spf13/cobra"
 )
 
@@ -50,6 +51,9 @@ func newSiteCommand(siteRegistry *siteregistry.Registry) (*cobra.Command, error)
 	siteCmd.AddCommand(migrateCmd)
 
 	for _, def := range siteRegistry.List() {
+		if err := submitverbs.RegisterSite(siteCmd, siteRegistry, def); err != nil {
+			return nil, fmt.Errorf("register submit verbs for site %s: %w", def.Name, err)
+		}
 		if def.RegisterCLI == nil {
 			continue
 		}

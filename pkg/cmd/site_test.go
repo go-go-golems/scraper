@@ -85,10 +85,11 @@ func TestJSDemoRunSeedCommand(t *testing.T) {
 	err = rootCmd.Execute()
 	require.NoError(t, err)
 	require.Contains(t, stdout.String(), "Site: js-demo")
-	require.Contains(t, stdout.String(), "Entrypoint: seed")
-	require.Contains(t, stdout.String(), "Status: succeeded")
-	require.Contains(t, stdout.String(), `"itemCount": 3`)
-	require.Contains(t, stdout.String(), `"totalBase": 24`)
+	require.Contains(t, stdout.String(), "Command: site js-demo run seed")
+	require.Contains(t, stdout.String(), "Workflow: cmd-js-demo")
+	require.Contains(t, stdout.String(), "Submitted ops: 1")
+	require.Contains(t, stdout.String(), "Target op: cmd-js-demo:seed:summary")
+	require.Contains(t, stdout.String(), `"submittedEntrypoint": "seed"`)
 }
 
 func TestJSDemoRunItemCommand(t *testing.T) {
@@ -110,9 +111,10 @@ func TestJSDemoRunItemCommand(t *testing.T) {
 
 	err = rootCmd.Execute()
 	require.NoError(t, err)
-	require.Contains(t, stdout.String(), "Entrypoint: item")
-	require.Contains(t, stdout.String(), `"itemKey": "cmd-03"`)
-	require.Contains(t, stdout.String(), `"baseValue": 12`)
+	require.Contains(t, stdout.String(), "Command: site js-demo run item")
+	require.Contains(t, stdout.String(), "Submitted ops: 1")
+	require.Contains(t, stdout.String(), "Target op: cmd-js-demo-item:item:03")
+	require.Contains(t, stdout.String(), `"submittedEntrypoint": "item"`)
 }
 
 func TestJSDemoRunSummaryCommand(t *testing.T) {
@@ -134,9 +136,78 @@ func TestJSDemoRunSummaryCommand(t *testing.T) {
 
 	err = rootCmd.Execute()
 	require.NoError(t, err)
-	require.Contains(t, stdout.String(), "Entrypoint: summary")
-	require.Contains(t, stdout.String(), `"itemCount": 3`)
-	require.Contains(t, stdout.String(), `"totalSquared": 350`)
+	require.Contains(t, stdout.String(), "Command: site js-demo run summary")
+	require.Contains(t, stdout.String(), "Submitted ops: 4")
+	require.Contains(t, stdout.String(), "Target op: cmd-js-demo-summary:summary")
+	require.Contains(t, stdout.String(), `"submittedEntrypoint": "summary"`)
+}
+
+func TestJSDemoRunSeedHelpIncludesJSFlags(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"site", "js-demo", "run", "seed", "--help"})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "--count")
+	require.Contains(t, stdout.String(), "--multiplier")
+	require.Contains(t, stdout.String(), "--prefix")
+}
+
+func TestJSDemoSubmitThenWorkerRun(t *testing.T) {
+	sitesDir := t.TempDir()
+	engineDB := filepath.Join(t.TempDir(), "engine.db")
+
+	runCommand := func(args ...string) string {
+		rootCmd, err := NewRootCommand("test-version")
+		require.NoError(t, err)
+
+		var stdout bytes.Buffer
+		rootCmd.SetOut(&stdout)
+		rootCmd.SetErr(&stdout)
+		rootCmd.SetArgs(args)
+
+		err = rootCmd.Execute()
+		require.NoError(t, err)
+		return stdout.String()
+	}
+
+	submitOutput := runCommand(
+		"site", "js-demo", "run", "seed",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--workflow-id", "cmd-js-demo-worker",
+		"--count", "3",
+		"--multiplier", "4",
+		"--prefix", "cmd",
+	)
+	require.Contains(t, submitOutput, "Submitted ops: 1")
+	require.Contains(t, submitOutput, "Target op: cmd-js-demo-worker:seed:summary")
+
+	statusBefore := runCommand("engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusBefore, "Workflows: 1")
+	require.Contains(t, statusBefore, "ready: 1")
+	require.Contains(t, statusBefore, "succeeded: 0")
+
+	workerOutput := runCommand(
+		"worker", "run",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--max-cycles", "16",
+		"--poll-interval", "5ms",
+	)
+	require.Contains(t, workerOutput, "Cycles:")
+	require.Contains(t, workerOutput, "Succeeded:")
+
+	statusAfter := runCommand("engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusAfter, "Workflows: 1")
+	require.Contains(t, statusAfter, "ready: 0")
+	require.Contains(t, statusAfter, "succeeded: 5")
+	require.Contains(t, statusAfter, "Results: 5")
 }
 
 func TestHackerNewsRunSeedCommand(t *testing.T) {

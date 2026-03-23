@@ -8,7 +8,7 @@ import (
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 )
 
-//go:embed scripts/*.js scripts/lib/*.js migrations/*.sql
+//go:embed scripts/*.js scripts/lib/*.js verbs/*.js migrations/*.sql
 var siteFS embed.FS
 
 func Definition() siteregistry.Definition {
@@ -17,10 +17,11 @@ func Definition() siteregistry.Definition {
 		DatabaseFileName:  "js-demo.db",
 		ScriptsFS:         siteFS,
 		ScriptsRoot:       "scripts",
+		VerbsFS:           siteFS,
+		VerbsRoot:         "verbs",
 		Modules:           []gggengine.ModuleSpec{gggengine.DefaultRegistryModules()},
 		SQLMigrationsFS:   siteFS,
 		SQLMigrationsRoot: "migrations",
-		RegisterCLI:       registerCLI,
 	}
 }
 
