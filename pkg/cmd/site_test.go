@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"bytes"
+	"database/sql"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
@@ -10,7 +13,9 @@ import (
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	hackernews "github.com/go-go-golems/scraper/pkg/sites/hackernews"
 	"github.com/go-go-golems/scraper/pkg/sites/jsdemo"
+	"github.com/go-go-golems/scraper/pkg/sites/nereval"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -452,6 +457,148 @@ func TestSlashdotRunExtractFrontpageCommand(t *testing.T) {
 	require.Contains(t, stdout.String(), "Entrypoint: extract-frontpage")
 	require.Contains(t, stdout.String(), `"storyCount": 2`)
 	require.Contains(t, stdout.String(), `"181087016"`)
+}
+
+func TestNerevalRunSeedHelpIncludesFlags(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"site", "nereval", "run", "seed", "--help"})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "--town")
+	require.Contains(t, stdout.String(), "--base-url")
+	require.Contains(t, stdout.String(), "--max-pages")
+}
+
+func TestNerevalSubmitThenWorkerRun(t *testing.T) {
+	sitesDir := t.TempDir()
+	engineDB := filepath.Join(t.TempDir(), "engine.db")
+	server := newNerevalFixtureServer(t)
+
+	runCommand := func(args ...string) string {
+		rootCmd, err := NewRootCommand("test-version")
+		require.NoError(t, err)
+
+		var stdout bytes.Buffer
+		rootCmd.SetOut(&stdout)
+		rootCmd.SetErr(&stdout)
+		rootCmd.SetArgs(args)
+
+		err = rootCmd.Execute()
+		require.NoError(t, err)
+		return stdout.String()
+	}
+
+	submitOutput := runCommand(
+		"site", "nereval", "run", "seed",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--workflow-id", "cmd-nereval",
+		"--town", "Providence",
+		"--base-url", server.URL,
+		"--max-pages", "2",
+	)
+	require.Contains(t, submitOutput, "Site: nereval")
+	require.Contains(t, submitOutput, "Command: site nereval run seed")
+	require.Contains(t, submitOutput, "Submitted ops: 1")
+	require.Contains(t, submitOutput, `"submittedEntrypoint": "seed"`)
+
+	statusBefore := runCommand("engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusBefore, "ready: 1")
+	require.Contains(t, statusBefore, "succeeded: 0")
+
+	workerOutput := runCommand(
+		"worker", "run",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--max-cycles", "24",
+		"--poll-interval", "5ms",
+	)
+	require.Contains(t, workerOutput, "Processed:")
+	require.Contains(t, workerOutput, "Succeeded:")
+
+	statusAfter := runCommand("engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusAfter, "ready: 0")
+	require.Contains(t, statusAfter, "succeeded: 11")
+	require.Contains(t, statusAfter, "Results: 11")
+	require.Contains(t, statusAfter, "Artifacts: 5")
+
+	siteDB, err := sql.Open("sqlite3", filepath.Join(sitesDir, "nereval.db"))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, siteDB.Close()) }()
+
+	var properties int
+	require.NoError(t, siteDB.QueryRow("SELECT COUNT(*) FROM properties").Scan(&properties))
+	require.Equal(t, 3, properties)
+
+	var owners int
+	require.NoError(t, siteDB.QueryRow("SELECT COUNT(*) FROM owners").Scan(&owners))
+	require.Equal(t, 4, owners)
+
+	var assessments int
+	require.NoError(t, siteDB.QueryRow("SELECT COUNT(*) FROM assessments").Scan(&assessments))
+	require.Equal(t, 3, assessments)
+
+	var sales int
+	require.NoError(t, siteDB.QueryRow("SELECT COUNT(*) FROM sales").Scan(&sales))
+	require.Equal(t, 3, sales)
+
+	var parcelTotal string
+	require.NoError(t, siteDB.QueryRow("SELECT parcel_total FROM assessments WHERE account_number = '24038'").Scan(&parcelTotal))
+	require.Equal(t, "$650,000", parcelTotal)
+}
+
+func newNerevalFixtureServer(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	listPage1, err := nereval.ReadFixture("list-page-1.html")
+	require.NoError(t, err)
+	listPage2, err := nereval.ReadFixture("list-page-2.html")
+	require.NoError(t, err)
+	detail24038, err := nereval.ReadFixture("detail-24038.html")
+	require.NoError(t, err)
+	detail24058, err := nereval.ReadFixture("detail-24058.html")
+	require.NoError(t, err)
+	detail24100, err := nereval.ReadFixture("detail-24100.html")
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/PropertyList.aspx":
+			_, _ = w.Write(listPage1)
+		case r.Method == http.MethodPost && r.URL.Path == "/PropertyList.aspx":
+			require.NoError(t, r.ParseForm())
+			if r.Form.Get("__VIEWSTATE") == "vs-page-1" && r.Form.Get("__EVENTVALIDATION") == "ev-page-1" {
+				_, _ = w.Write(listPage2)
+				return
+			}
+			http.Error(w, "unexpected form state", http.StatusBadRequest)
+		case r.Method == http.MethodGet && r.URL.Path == "/PropertyDetail.aspx":
+			account := r.URL.Query().Get("accountnumber")
+			switch account {
+			case "24038":
+				_, _ = w.Write(detail24038)
+			case "24058":
+				_, _ = w.Write(detail24058)
+			case "24100":
+				_, _ = w.Write(detail24100)
+			default:
+				http.Error(w, "missing detail fixture", http.StatusNotFound)
+			}
+		default:
+			http.Error(w, "unexpected request "+r.Method+" "+r.URL.String(), http.StatusNotFound)
+		}
+	}))
+
+	t.Cleanup(server.Close)
+	return server
 }
 
 var _ fs.FS = fstest.MapFS{}
