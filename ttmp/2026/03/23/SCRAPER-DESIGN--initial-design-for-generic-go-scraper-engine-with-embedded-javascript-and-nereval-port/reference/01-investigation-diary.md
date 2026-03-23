@@ -707,7 +707,7 @@ Both commands accept `--engine-db <path>`. They are intentionally non-destructiv
 
 **Inferred user intent:** Prioritize observability and inspectability early so future smoke tests and debugging sessions do not depend on opening SQLite directly.
 
-**Commit (code):** Pending at the time of writing this diary entry; the engine visibility milestone is prepared for commit after validation and ticket updates.
+**Commit (code):** `995aa29` — Add engine visibility commands
 
 ### What I did
 
