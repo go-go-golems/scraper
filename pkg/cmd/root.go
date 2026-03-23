@@ -5,12 +5,18 @@ import (
 	"github.com/go-go-golems/glazed/pkg/help"
 	helpcmd "github.com/go-go-golems/glazed/pkg/help/cmd"
 	scraperdoc "github.com/go-go-golems/scraper/pkg/doc"
+	"github.com/go-go-golems/scraper/pkg/sites/defaults"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	"github.com/spf13/cobra"
 )
 
 func NewRootCommand(version string) (*cobra.Command, error) {
-	return newRootCommand(version, siteregistry.New())
+	siteRegistry, err := defaults.NewRegistry()
+	if err != nil {
+		return nil, err
+	}
+
+	return newRootCommand(version, siteRegistry)
 }
 
 func newRootCommand(version string, siteRegistry *siteregistry.Registry) (*cobra.Command, error) {

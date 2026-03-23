@@ -17,7 +17,7 @@ SectionType: GeneralTopic
 
 # Scraper Architecture Overview
 
-The `scraper` CLI is the operator entrypoint for a durable scraping engine. The engine is responsible for workflow state, leases, retries, artifacts, and execution scheduling. Site packages, such as NEREVAL, provide the site-specific behavior on top of those primitives.
+The `scraper` CLI is the operator entrypoint for a durable scraping engine. The engine is responsible for workflow state, leases, retries, artifacts, and execution scheduling. Site packages, such as Hacker News, Slashdot, and later NEREVAL, provide the site-specific behavior on top of those primitives.
 
 The implementation is intentionally split into two layers:
 
@@ -41,4 +41,5 @@ Use the CLI help system as the top-level guide for operators and new contributor
 - `scraper engine status` for a quick engine DB and runtime-state smoke check
 - `scraper engine migrations status` for applied-vs-known migration visibility
 - `scraper site migrate <site>` to initialize or upgrade a site-specific database
+- built-in exercise sites currently include `hackernews` and `slashdot`, which are useful for smoke-testing the `js -> http/fetch -> js -> site-db` path before moving on to NEREVAL
 - ticket `SCRAPER-DESIGN` in `ttmp/` for the detailed implementation guide and diary

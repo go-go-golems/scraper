@@ -49,4 +49,19 @@ func TestSiteMigrateUnknownSite(t *testing.T) {
 	require.Contains(t, err.Error(), `site "missing" is not registered`)
 }
 
+func TestRootCommandIncludesBuiltinSites(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"site", "migrate", "hackernews", "--sites-dir", t.TempDir()})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "Site: hackernews")
+	require.Contains(t, stdout.String(), "Current schema version: 1")
+}
+
 var _ fs.FS = fstest.MapFS{}

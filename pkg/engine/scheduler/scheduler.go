@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	databasemod "github.com/go-go-golems/go-go-goja/modules/database"
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	"github.com/go-go-golems/scraper/pkg/engine/runner"
 	storecontract "github.com/go-go-golems/scraper/pkg/engine/store"
@@ -70,12 +71,14 @@ func (f ObserverFunc) OnSchedulerEvent(ctx context.Context, event Event) {
 }
 
 type Scheduler struct {
-	config   Config
-	store    storecontract.Store
-	runners  *runner.Registry
-	workerID string
-	observer Observer
-	now      func() time.Time
+	config         Config
+	store          storecontract.Store
+	runners        *runner.Registry
+	workerID       string
+	observer       Observer
+	scraperDB      databasemod.QueryExecer
+	siteDBProvider func(ctx context.Context, site model.SiteName) (databasemod.QueryExecer, error)
+	now            func() time.Time
 }
 
 func New(store storecontract.Store, runners *runner.Registry, config Config, workerID string, observer Observer) (*Scheduler, error) {
@@ -102,6 +105,22 @@ func New(store storecontract.Store, runners *runner.Registry, config Config, wor
 			return time.Now().UTC()
 		},
 	}, nil
+}
+
+func (s *Scheduler) SetScraperDB(db databasemod.QueryExecer) {
+	if s == nil {
+		return
+	}
+	s.scraperDB = db
+}
+
+func (s *Scheduler) SetSiteDBProvider(
+	provider func(ctx context.Context, site model.SiteName) (databasemod.QueryExecer, error),
+) {
+	if s == nil {
+		return
+	}
+	s.siteDBProvider = provider
 }
 
 func (s *Scheduler) CreateWorkflow(ctx context.Context, params storecontract.CreateWorkflowParams) error {
@@ -246,12 +265,22 @@ func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease 
 		return s.failLeasedOp(ctx, op, lease, now, opErr)
 	}
 
+	var siteDB databasemod.QueryExecer
+	if s.siteDBProvider != nil {
+		siteDB, err = s.siteDBProvider(ctx, op.Site)
+		if err != nil {
+			return fmt.Errorf("resolve site db for %s: %w", op.Site, err)
+		}
+	}
+
 	opResult, runErr := impl.Run(ctx, runner.RunContext{
 		Workflow:     *workflow,
 		Op:           op,
 		Lease:        lease,
 		Now:          now,
 		Dependencies: dependencyResolverAdapter{store: s.store},
+		ScraperDB:    s.scraperDB,
+		SiteDB:       siteDB,
 	})
 	if runErr != nil {
 		opErr := classifyRunError(runErr, now)
