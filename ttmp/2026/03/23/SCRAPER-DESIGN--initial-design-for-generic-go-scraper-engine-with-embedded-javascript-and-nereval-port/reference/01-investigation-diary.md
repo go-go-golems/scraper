@@ -22,7 +22,7 @@ RelatedFiles:
 ExternalSources:
     - local:scraper.md
 Summary: Chronological diary of the initial SCRAPER-DESIGN research and documentation pass.
-LastUpdated: 2026-03-23T13:05:00-04:00
+LastUpdated: 2026-03-23T13:25:00-04:00
 WhatFor: Record the research steps, commands, decisions, and rough edges encountered while producing the initial design guide.
 WhenToUse: Use when reviewing how the initial design doc was produced or when continuing the implementation work later.
 ---
@@ -687,3 +687,117 @@ Then work on the tasks one by one committing at appropriate intervals and keepin
   - `gofmt -w ...`
   - `go mod tidy`
   - `go test ./...`
+
+## Step 6: Add engine visibility commands for smoke tests and debugging
+
+This step added the first operator-facing engine inspection commands. The goal was pragmatic: make it easy to check whether the engine DB exists, whether migrations are current, and what the current workflow/op/lease/result counts look like without opening SQLite manually. That is useful both for user-facing smoke tests and for my own debugging while the scheduler and site runtime are still being built.
+
+The resulting commands are:
+
+- `scraper engine status`
+- `scraper engine migrations status`
+
+Both commands accept `--engine-db <path>`. They are intentionally non-destructive when the DB file does not exist; in that case they report the missing DB and the latest known migration version instead of creating a new engine DB.
+
+### Prompt Context
+
+**User prompt (verbatim):** "no, make the visibility commands, that's useful for me and for you to debug things as they go along and we do smoke tests"
+
+**Assistant interpretation:** Implement the deferred engine visibility/admin commands now, not later, and make them useful for both operator workflows and development debugging.
+
+**Inferred user intent:** Prioritize observability and inspectability early so future smoke tests and debugging sessions do not depend on opening SQLite directly.
+
+**Commit (code):** Pending at the time of writing this diary entry; the engine visibility milestone is prepared for commit after validation and ticket updates.
+
+### What I did
+
+- Added an inspection layer in `pkg/engine/store/sqlite/status.go`.
+- Added inspection data types:
+  - `MigrationStatus`
+  - `EngineStatus`
+- Added helpers to inspect:
+  - DB existence
+  - schema initialization
+  - current schema version
+  - latest known migration
+  - applied vs pending migrations
+  - workflow count
+  - op counts by status
+  - active and expired lease counts
+  - result count
+  - artifact count
+- Added CLI commands in `pkg/cmd/engine.go`:
+  - `scraper engine status`
+  - `scraper engine migrations status`
+- Registered the new engine command tree on the root command.
+- Added tests for:
+  - inspecting a missing DB
+  - inspecting a populated DB
+  - CLI output for `engine status`
+  - CLI output for `engine migrations status`
+- Added a brief note in the embedded help topic so the commands are discoverable from `scraper help`.
+- Ran:
+  - `go test ./...`
+  - `go run ./cmd/scraper engine status --engine-db /tmp/does-not-exist-engine.db`
+
+### Why
+
+- The user explicitly asked for these commands because they are useful during incremental build-out and smoke testing.
+- The engine DB is now real, so basic observability is more valuable than waiting for the full scheduler and site runtime.
+- A non-destructive inspection path is a better operator tool than implicitly creating the DB on read-only status commands.
+
+### What worked
+
+- The inspector layer fits naturally next to the SQLite store implementation.
+- A single inspection pass can populate both commands:
+  - summary status
+  - migration status
+- The missing-DB behavior is useful and clear. The smoke test output now shows:
+  - path
+  - missing/existing state
+  - initialization state
+  - current version or `n/a`
+  - latest known migration
+
+### What didn't work
+
+- N/A
+
+### What I learned
+
+- Even minimal admin commands immediately improve the development loop because they provide a stable, human-readable “is the engine sane?” check.
+- The migration listing is especially useful because it avoids ambiguity between:
+  - missing DB
+  - existing but uninitialized DB
+  - initialized but out-of-date DB
+
+### What was tricky to build
+
+- The main design choice was to keep inspection non-destructive. Reusing `Open()` would have auto-migrated or created the DB, which is wrong for a pure status command. The solution was to implement a separate inspection path that opens the DB only if the file already exists and checks `sqlite_master` before assuming the schema is initialized.
+
+### What warrants a second pair of eyes
+
+- Whether future admin commands should move under a broader `scraper inspect ...` tree instead of staying under `scraper engine ...`.
+- Whether result and artifact counts should eventually become per-workflow or per-site filtered summaries once more CLI surfaces exist.
+
+### What should be done in the future
+
+- Add workflow- and op-level visibility commands once the scheduler starts producing richer runtime state.
+- Consider a machine-readable output mode later if these commands become part of scripted smoke tests.
+
+### Code review instructions
+
+- Review:
+  - `pkg/engine/store/sqlite/status.go`
+  - `pkg/engine/store/sqlite/status_test.go`
+  - `pkg/cmd/engine.go`
+  - `pkg/cmd/engine_test.go`
+- Then run:
+  - `scraper engine status --engine-db state/engine.db`
+  - `scraper engine migrations status --engine-db state/engine.db`
+
+### Technical details
+
+- Concrete commands used during the visibility phase:
+  - `go test ./...`
+  - `go run ./cmd/scraper engine status --engine-db /tmp/does-not-exist-engine.db`

@@ -49,7 +49,7 @@
 - [x] Add migration startup logic and engine schema version checks
 - [x] Implement the first SQLite-backed engine store
 - [x] Add tests covering migration application, fresh database bootstrap, and upgrade from an older schema version
-- [ ] Add CLI/admin visibility for checking engine DB health if needed
+- [x] Add CLI/admin visibility for checking engine DB health if needed
 - [x] Record the engine DB and migration work in the implementation diary
 - [x] Commit the engine DB milestone
 

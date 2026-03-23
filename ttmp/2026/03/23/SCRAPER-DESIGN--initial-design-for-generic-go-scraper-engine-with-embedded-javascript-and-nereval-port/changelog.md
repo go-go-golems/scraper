@@ -79,3 +79,16 @@ Added the first engine SQLite implementation with embedded SQL migrations, schem
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/store.go — First concrete SQLite-backed engine store
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/store_test.go — Migration and round-trip store tests
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/reference/01-investigation-diary.md — Recorded the engine DB milestone
+
+
+## 2026-03-23
+
+Added `scraper engine status` and `scraper engine migrations status` so engine DB existence, schema state, migration state, and runtime counts can be inspected during smoke tests and debugging.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/engine.go — Added engine visibility commands
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/engine_test.go — Added CLI tests for the visibility commands
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/status.go — Added non-destructive engine DB inspection helpers
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/status_test.go — Added status inspection tests
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md — Added command discovery notes for the new engine status commands

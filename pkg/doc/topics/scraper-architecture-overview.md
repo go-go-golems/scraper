@@ -30,4 +30,6 @@ Use the CLI help system as the top-level guide for operators and new contributor
 
 - `scraper help` for the command tree
 - `scraper help scraper-architecture-overview` for this design summary
+- `scraper engine status` for a quick engine DB and runtime-state smoke check
+- `scraper engine migrations status` for applied-vs-known migration visibility
 - ticket `SCRAPER-DESIGN` in `ttmp/` for the detailed implementation guide and diary

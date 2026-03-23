@@ -28,6 +28,7 @@ func NewRootCommand(version string) (*cobra.Command, error) {
 	}
 	helpcmd.SetupCobraRootCommand(helpSystem, rootCmd)
 
+	rootCmd.AddCommand(newEngineCommand())
 	rootCmd.AddCommand(newVersionCommand(version))
 
 	return rootCmd, nil
