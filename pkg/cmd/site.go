@@ -49,5 +49,12 @@ func newSiteCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 
 	siteCmd.AddCommand(migrateCmd)
 
+	for _, def := range siteRegistry.List() {
+		if def.RegisterCLI == nil {
+			continue
+		}
+		_ = def.RegisterCLI(siteCmd)
+	}
+
 	return siteCmd
 }

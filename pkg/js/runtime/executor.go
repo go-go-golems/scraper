@@ -29,6 +29,7 @@ type DependencyResolver interface {
 type ExecutorConfig struct {
 	ScriptsFS               fs.FS
 	ScriptsRoot             string
+	Modules                 []gggengine.ModuleSpec
 	RuntimeModuleRegistrars []gggengine.RuntimeModuleRegistrar
 	ScraperDB               databasemod.QueryExecer
 	SiteDB                  databasemod.QueryExecer
@@ -59,6 +60,7 @@ func (e *Executor) Execute(ctx context.Context, req ExecutionRequest) (*model.Op
 	loader := moduleLoader(e.config.ScriptsFS, e.config.ScriptsRoot)
 	builder := gggengine.NewBuilder().
 		WithRequireOptions(require.WithLoader(loader)).
+		WithModules(e.config.Modules...).
 		WithRuntimeModuleRegistrars(NewDatabaseRegistrar(DatabaseRegistrarConfig{
 			ScraperDB: e.config.ScraperDB,
 			SiteDB:    e.config.SiteDB,

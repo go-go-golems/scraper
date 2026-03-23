@@ -2,6 +2,7 @@ package defaults
 
 import (
 	hackernews "github.com/go-go-golems/scraper/pkg/sites/hackernews"
+	"github.com/go-go-golems/scraper/pkg/sites/jsdemo"
 	"github.com/go-go-golems/scraper/pkg/sites/registry"
 	"github.com/go-go-golems/scraper/pkg/sites/slashdot"
 )
@@ -22,6 +23,9 @@ func Register(r *registry.Registry) error {
 		return err
 	}
 	if err := slashdot.Register(r); err != nil {
+		return err
+	}
+	if err := jsdemo.Register(r); err != nil {
 		return err
 	}
 	return nil

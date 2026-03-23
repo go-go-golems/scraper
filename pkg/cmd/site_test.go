@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"io/fs"
+	"path/filepath"
 	"testing"
 	"testing/fstest"
 
@@ -62,6 +63,31 @@ func TestRootCommandIncludesBuiltinSites(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, stdout.String(), "Site: hackernews")
 	require.Contains(t, stdout.String(), "Current schema version: 1")
+}
+
+func TestJSDemoRunCommand(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{
+		"site", "js-demo", "run",
+		"--sites-dir", t.TempDir(),
+		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
+		"--workflow-id", "cmd-js-demo",
+		"--count", "3",
+		"--multiplier", "4",
+		"--prefix", "cmd",
+	})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "Site: js-demo")
+	require.Contains(t, stdout.String(), "Status: succeeded")
+	require.Contains(t, stdout.String(), `"itemCount": 3`)
+	require.Contains(t, stdout.String(), `"totalBase": 24`)
 }
 
 var _ fs.FS = fstest.MapFS{}
