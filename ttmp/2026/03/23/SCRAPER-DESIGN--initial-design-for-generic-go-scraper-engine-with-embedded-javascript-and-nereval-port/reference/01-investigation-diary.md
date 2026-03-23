@@ -22,7 +22,7 @@ RelatedFiles:
 ExternalSources:
     - local:scraper.md
 Summary: Chronological diary of the initial SCRAPER-DESIGN research and documentation pass.
-LastUpdated: 2026-03-23T12:35:00-04:00
+LastUpdated: 2026-03-23T13:05:00-04:00
 WhatFor: Record the research steps, commands, decisions, and rough edges encountered while producing the initial design guide.
 WhenToUse: Use when reviewing how the initial design doc was produced or when continuing the implementation work later.
 ---
@@ -441,7 +441,7 @@ Then work on the tasks one by one committing at appropriate intervals and keepin
 
 **Inferred user intent:** Move steadily through the phased plan instead of stopping after the CLI bootstrap.
 
-**Commit (code):** Pending at the time of writing this diary entry; the engine contract milestone is prepared for commit after validation and ticket updates.
+**Commit (code):** `163d52a` — Add engine contracts and site registry
 
 ### What I did
 
@@ -561,4 +561,129 @@ Then work on the tasks one by one committing at appropriate intervals and keepin
 
 - Concrete commands used during the contract phase:
   - `gofmt -w ...`
+  - `go test ./...`
+
+## Step 5: Implement engine SQLite migrations and the first concrete store
+
+This step turned the abstract engine contracts into a working persistence layer. The goal was to get a real engine database in place with ordered SQL migrations, schema version tracking, and a first SQLite-backed implementation of the store interfaces. I kept the scope focused on engine state only: workflows, ops, dependencies, leases, results, and artifacts. Site-owned databases and site migrations remain in a later phase.
+
+The resulting `pkg/engine/store/sqlite` package can open or create the engine DB, apply embedded SQL migrations, create workflows, enqueue ops, lease ready ops, heartbeat leases, record completions and failures, persist artifacts, and read results back for dependency consumers.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Cool, add a detailed list of tasks to the ticket on how to build this, using the glazed framework for CLI (don't forget to properly initialize the help system and logging, see skills), and decompose the task into a set of phases. 
+
+Then work on the tasks one by one committing at appropriate intervals and keeping a detailed diary as you work."
+
+**Assistant interpretation:** Continue through the next planned milestone by implementing the engine DB schema and store layer, and record the results in the diary and task tracker.
+
+**Inferred user intent:** Keep converting the design into working code, one stable layer at a time.
+
+**Commit (code):** Pending at the time of writing this diary entry; the engine DB milestone is prepared for commit after validation and ticket updates.
+
+### What I did
+
+- Added ordered SQL migrations under `pkg/engine/store/sqlite/migrations/`:
+  - `001_engine_core.sql`
+  - `002_engine_runtime.sql`
+- Added embedded migration loading and application logic in `pkg/engine/store/sqlite/migrations.go`.
+- Added schema version tracking through the `schema_migrations` table and a `CurrentVersion` helper.
+- Implemented a first concrete SQLite store in `pkg/engine/store/sqlite/store.go`.
+- Implemented workflow operations:
+  - create workflow plus initial ops
+  - fetch workflow
+  - update workflow status
+- Implemented op operations:
+  - enqueue ops
+  - fetch op by ID
+  - lease the next ready op for a site and queue
+  - heartbeat a lease
+  - complete an op
+  - fail an op
+- Implemented result and artifact persistence:
+  - durable `results` table entries
+  - separate `artifacts` table entries
+  - reload artifacts when reading a result back
+- Added emitted-op normalization during completion so child ops inherit:
+  - workflow ID
+  - site
+  - parent op ID
+  when those fields are omitted by the caller.
+- Added tests covering:
+  - migration application on a fresh DB
+  - upgrade from version 1 to version 2
+  - workflow creation, leasing, completion, and result round-trip
+- Ran:
+  - `go mod tidy`
+  - `go test ./...`
+
+### Why
+
+- Phase 2 defined the contract, but without a real store there was still no durable engine.
+- Ordered SQL migrations are the cleanest way to make the engine schema explicit and reviewable.
+- A first working store gives later phases a stable place to connect the scheduler and JS runtime.
+
+### What worked
+
+- The two-migration split made the upgrade test straightforward:
+  - migration 1 creates the core workflow/op tables
+  - migration 2 adds dependencies, leases, results, and artifacts
+- The contract from phase 2 mapped cleanly into SQLite tables and store methods.
+- The round-trip test now proves a minimal durable flow:
+  - create workflow
+  - lease an op
+  - complete it
+  - read the result back
+
+### What didn't work
+
+- The first pass at result persistence tried to infer `workflow_id` from emitted child ops, which is wrong when an op completes without emitting anything.
+- Resolution:
+  - query the parent op context during completion
+  - normalize emitted child ops against that parent context
+  - persist results and artifacts using the parent workflow ID
+
+### What I learned
+
+- The engine really benefits from keeping artifacts in a dedicated table even in the first version. It keeps result envelopes smaller while preserving durable raw outputs.
+- `EmittedIDs` is useful even with persisted child ops because it gives a durable fan-out summary directly on the result row.
+- The site-scoped queue and lease model already feels natural in the concrete SQLite implementation.
+
+### What was tricky to build
+
+- The main tricky part was choosing where to normalize emitted child ops. Doing it in `CompleteOp` is pragmatic because the parent op context is available there and the scheduler has not been implemented yet.
+- The second tricky part was keeping the migration logic simple without painting the future site migration story into a corner. I therefore kept engine migrations embedded and engine-local, with no attempt yet to reuse that code for per-site DBs.
+
+### What warrants a second pair of eyes
+
+- Whether `GetResult` should eventually return artifacts lazily instead of loading them eagerly.
+- Whether `FailOp` should also persist a dedicated failure/result row for terminal failures instead of only updating retry state and status.
+- Whether `OpStatusPending` and `OpStatusReady` remain the right split once dependency readiness is computed by the real scheduler.
+
+### What should be done in the future
+
+- Add CLI visibility for engine DB health or migration status if the operator workflow needs it.
+- Implement the actual scheduler loop against this store.
+- Add more store tests once retries, dependency completion, and multi-op fan-out are wired through a real scheduler.
+
+### Code review instructions
+
+- Review the migration files first:
+  - `pkg/engine/store/sqlite/migrations/001_engine_core.sql`
+  - `pkg/engine/store/sqlite/migrations/002_engine_runtime.sql`
+- Then review:
+  - `pkg/engine/store/sqlite/migrations.go`
+  - `pkg/engine/store/sqlite/store.go`
+  - `pkg/engine/store/sqlite/store_test.go`
+- Pay special attention to:
+  - schema version handling
+  - lease acquisition conditions
+  - completion-time result and artifact persistence
+  - emitted-op normalization
+
+### Technical details
+
+- Concrete commands used during the engine DB phase:
+  - `gofmt -w ...`
+  - `go mod tidy`
   - `go test ./...`

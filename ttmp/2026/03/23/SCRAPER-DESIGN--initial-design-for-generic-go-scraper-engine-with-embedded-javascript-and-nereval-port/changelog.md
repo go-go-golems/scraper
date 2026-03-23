@@ -65,3 +65,17 @@ Added the phase-2 engine contracts: durable workflow/op/result types, store inte
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/scheduler/scheduler.go — Added scheduler config validation
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/registry/registry.go — Added the site registration contract
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/reference/01-investigation-diary.md — Recorded the contract milestone
+
+
+## 2026-03-23
+
+Added the first engine SQLite implementation with embedded SQL migrations, schema version tracking, and a concrete store for workflows, ops, leases, results, and artifacts.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/migrations/001_engine_core.sql — Initial core engine schema
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/migrations/002_engine_runtime.sql — Runtime tables for dependencies, leases, results, and artifacts
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/migrations.go — Embedded migration loader and applier
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/store.go — First concrete SQLite-backed engine store
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/store_test.go — Migration and round-trip store tests
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/reference/01-investigation-diary.md — Recorded the engine DB milestone

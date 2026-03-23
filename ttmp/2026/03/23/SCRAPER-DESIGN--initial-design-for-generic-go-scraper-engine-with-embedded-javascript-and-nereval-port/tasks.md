@@ -40,17 +40,17 @@
 - [x] Define the site registration contract so sites can contribute scripts, migrations, help text, and commands
 - [x] Add package-level tests for the pure type and interface contracts that can be validated without SQLite
 - [x] Record the engine skeleton work in the implementation diary
-- [ ] Commit the engine skeleton milestone
+- [x] Commit the engine skeleton milestone
 
 ### Phase 3. Engine database and migrations
 
-- [ ] Create the engine SQLite schema for workflows, ops, dependencies, results, artifacts, and leases
-- [ ] Add ordered SQL migrations for the engine database under `pkg/engine/migrations`
-- [ ] Add migration startup logic and engine schema version checks
-- [ ] Implement the first SQLite-backed engine store
-- [ ] Add tests covering migration application, fresh database bootstrap, and upgrade from an older schema version
+- [x] Create the engine SQLite schema for workflows, ops, dependencies, results, artifacts, and leases
+- [x] Add ordered SQL migrations for the engine database under `pkg/engine/migrations`
+- [x] Add migration startup logic and engine schema version checks
+- [x] Implement the first SQLite-backed engine store
+- [x] Add tests covering migration application, fresh database bootstrap, and upgrade from an older schema version
 - [ ] Add CLI/admin visibility for checking engine DB health if needed
-- [ ] Record the engine DB and migration work in the implementation diary
+- [x] Record the engine DB and migration work in the implementation diary
 - [ ] Commit the engine DB milestone
 
 ### Phase 4. Site registry and per-site databases
