@@ -17,22 +17,29 @@ RelatedFiles:
       Note: Primary runtime behavior examined during the research pass
     - Path: ../../../../../../../go-go-goja/engine/factory.go
       Note: Primary go-go-goja runtime composition file reviewed during the research pass
+    - Path: pkg/cmd/site_test.go
+      Note: Built-in site migration smoke test used in the exercise-site milestone
+    - Path: pkg/sites/hackernews/site_test.go
+      Note: End-to-end Hacker News workflow test used in Step 12
+    - Path: pkg/sites/slashdot/site_test.go
+      Note: End-to-end Slashdot workflow test used in Step 12
     - Path: ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/sources/local/scraper.md
       Note: Imported source investigated during the diary step
 ExternalSources:
     - local:scraper.md
-Summary: Chronological diary of the initial SCRAPER-DESIGN research and documentation pass.
-LastUpdated: 2026-03-23T14:05:00-04:00
+Summary: Chronological diary of the SCRAPER-DESIGN research and implementation work, including the exercise-site milestone before the NEREVAL port.
+LastUpdated: 2026-03-23T14:24:00-04:00
 WhatFor: Record the research steps, commands, decisions, and rough edges encountered while producing the initial design guide.
 WhenToUse: Use when reviewing how the initial design doc was produced or when continuing the implementation work later.
 ---
+
 
 
 # Investigation diary
 
 ## Goal
 
-Capture the exact research and documentation work used to create the initial design for the new Go/goja scraper engine and the NEREVAL port plan.
+Capture the exact research and implementation work used to create the new Go/goja scraper engine, validate it on smaller exercise sites, and prepare for the NEREVAL port.
 
 ## Step 1: Create the ticket, import the sketch, and connect it to the existing NEREVAL evidence
 
@@ -1385,3 +1392,148 @@ This step completed phase 7 by adding the first Go-backed acquisition runner. Be
   - `gofmt -w pkg/engine/runner/http.go pkg/engine/runner/http_test.go`
   - `go test ./pkg/engine/runner`
   - `go test ./...`
+
+## Step 12: Add Hacker News and Slashdot as smaller exercise sites before NEREVAL
+
+This step deliberately paused the NEREVAL port and inserted two smaller site packages first: Hacker News and Slashdot. The intent was to force the current engine shape through a complete real workflow on simpler HTML before committing to the more complex ASP.NET and detail-fan-out behavior in NEREVAL.
+
+The resulting milestone is a much better proving ground for the system that now exists. Both sites run through the actual scheduler, the real `http/fetch` runner, the real JS runner, and a real site DB with migrations. That means the remaining NEREVAL work can focus on NEREVAL-specific behavior instead of still debugging the generic engine path.
+
+### Prompt Context
+
+**User prompt (verbatim):** "before we do nereval, actually make a scraper for hacker news and one for slashdot. that way we can exercise on something smaller."
+
+**Assistant interpretation:** Pause the planned NEREVAL port and first add two simpler built-in sites, Hacker News and Slashdot, so the reusable runtime, scheduler, HTTP, JS, and site DB path can be exercised on smaller HTML targets.
+
+**Inferred user intent:** De-risk the upcoming NEREVAL work by validating the generic scraper engine against simpler sites first, while also creating smoke-test targets that are easier to reason about during operator testing and future debugging.
+
+**Commit (code):** `ceb4a98` — Add exercise scraper sites for Hacker News and Slashdot
+
+### What I did
+
+- Added a built-in site registry package:
+  - `pkg/sites/defaults/defaults.go`
+  - `pkg/sites/defaults/defaults_test.go`
+- Switched the production root command to the built-in site registry in:
+  - `pkg/cmd/root.go`
+- Extended the scheduler so Go can inject pre-opened DB handles into runner execution:
+  - `pkg/engine/scheduler/scheduler.go`
+  - added `SetScraperDB(...)`
+  - added `SetSiteDBProvider(...)`
+- Added the Hacker News site package with:
+  - `pkg/sites/hackernews/site.go`
+  - `pkg/sites/hackernews/migrations/001_init.sql`
+  - `pkg/sites/hackernews/scripts/seed.js`
+  - `pkg/sites/hackernews/scripts/extract_frontpage.js`
+  - `pkg/sites/hackernews/scripts/lib/frontpage.js`
+  - `pkg/sites/hackernews/fixtures/frontpage.html`
+  - `pkg/sites/hackernews/site_test.go`
+- Added the Slashdot site package with:
+  - `pkg/sites/slashdot/site.go`
+  - `pkg/sites/slashdot/migrations/001_init.sql`
+  - `pkg/sites/slashdot/scripts/seed.js`
+  - `pkg/sites/slashdot/scripts/extract_frontpage.js`
+  - `pkg/sites/slashdot/scripts/lib/frontpage.js`
+  - `pkg/sites/slashdot/fixtures/frontpage.html`
+  - `pkg/sites/slashdot/site_test.go`
+- Added a built-in CLI smoke test in:
+  - `pkg/cmd/site_test.go`
+- Updated the embedded operator help entry in:
+  - `pkg/doc/topics/scraper-architecture-overview.md`
+- Ran:
+  - `gofmt -w pkg/cmd/root.go pkg/cmd/site_test.go pkg/engine/scheduler/scheduler.go pkg/sites/defaults/defaults.go pkg/sites/defaults/defaults_test.go pkg/sites/hackernews/site.go pkg/sites/hackernews/site_test.go pkg/sites/slashdot/site.go pkg/sites/slashdot/site_test.go`
+  - `go test ./pkg/sites/hackernews -run TestHackerNewsFrontpageWorkflow -v`
+  - `go test ./pkg/sites/slashdot -run TestSlashdotFrontpageWorkflow -v`
+  - `go test ./...`
+
+### Why
+
+- The engine already had enough moving parts that jumping straight into NEREVAL would have mixed engine bugs with site-specific bugs.
+- Hacker News and Slashdot are useful exercise targets because:
+  - each has a public front page,
+  - each has simpler HTML than NEREVAL,
+  - each still forces the engine through the same durable op flow,
+  - each produces queryable site DB rows.
+- Wiring the built-in site registry into the production CLI makes smoke testing easier for both implementation and operator workflows.
+
+### What worked
+
+- The current architecture was already strong enough to support real site packages without structural changes to the runner APIs.
+- The `seed.js -> http/fetch -> extract_frontpage.js` pattern mapped naturally onto both sites.
+- The scheduler-side site DB injection worked cleanly once it was threaded through `runner.RunContext`.
+- The Slashdot path passed quickly once the first parser and site fixture were in place.
+- The final `go test ./...` run passed after the Hacker News parser was tightened.
+
+### What didn't work
+
+- The first full run failed because both extractor scripts treated the dependency as failed too eagerly. The failing command was:
+  - `go test ./...`
+- The visible symptom in both sites was:
+  - scheduler logs showed `error_code":"fetch_failed"`
+  - the workflow transitioned to `failed` during the extract op
+- Resolution:
+  - narrow the JS guard from `if (dep.error)` to `if (dep.error && dep.error.code)`
+- After that, Slashdot passed but Hacker News still failed with:
+  - `Error: "[]" should have 2 item(s), but has 0`
+  - command: `go test ./pkg/sites/hackernews -run TestHackerNewsFrontpageWorkflow -v`
+- Resolution:
+  - relax the Hacker News front-page regex so it tolerates whitespace in the paired subtext row and title link markup.
+
+### What I learned
+
+- The generic execution path is now real, not hypothetical:
+  - JS can emit fetch ops,
+  - fetch ops can persist body artifacts,
+  - downstream JS can read those artifacts through dependency results,
+  - site DB writes can happen against a preconfigured DB handle,
+  - the scheduler can drive the whole chain to completion.
+- Smaller fixture-backed sites are a very effective intermediate layer between unit tests and a full NEREVAL port.
+- The exercise-site milestone also clarified that the site registry should be a first-class production concern, not only a testing seam.
+
+### What was tricky to build
+
+- The sharpest edge was the boundary between dependency result shape and JS ergonomics. The extractor scripts need to interpret dependency results defensively because absent or nullish fields can look different after JS export than they do in Go.
+- The other tricky part was deciding how “real” the exercise sites should be. I intentionally kept them to one front-page workflow each, because the point is to validate the reusable engine path, not to build a large crawler for those sites.
+- The scheduler DB injection had to stay narrow. The scheduler now resolves the site DB per op site and passes it down into the runner context, but it still does not let arbitrary site JS discover DB paths or open DBs itself.
+
+### What warrants a second pair of eyes
+
+- The regex-based HTML extraction is intentionally lightweight for the exercise sites, but it is also brittle by nature. Reviewers should treat these as proving fixtures, not as the final pattern for more complex sites.
+- The built-in site registry is now wired into `NewRootCommand`, so any future production root-command changes should be reviewed against duplicate registration or startup errors.
+- The scheduler DB injection path should be reviewed to make sure later multi-site or concurrent worker setups do not accidentally share the wrong site DB handle.
+
+### What should be done in the future
+
+- Keep Hacker News and Slashdot as permanent smoke-test sites while NEREVAL is being ported.
+- Consider adding a minimal workflow-start command once the operator CLI phase begins so these sites can be run outside tests without custom harness code.
+- Start the NEREVAL port next, but keep the same discipline:
+  - fixture first,
+  - smaller fan-out slices,
+  - end-to-end assertions against the site DB.
+
+### Code review instructions
+
+- Start with the site registry and scheduler injection:
+  - `scraper/pkg/sites/defaults/defaults.go`
+  - `scraper/pkg/engine/scheduler/scheduler.go`
+- Then review the concrete site packages:
+  - `scraper/pkg/sites/hackernews/site.go`
+  - `scraper/pkg/sites/hackernews/scripts/extract_frontpage.js`
+  - `scraper/pkg/sites/hackernews/site_test.go`
+  - `scraper/pkg/sites/slashdot/site.go`
+  - `scraper/pkg/sites/slashdot/scripts/extract_frontpage.js`
+  - `scraper/pkg/sites/slashdot/site_test.go`
+- Validate with:
+  - `go test ./pkg/sites/hackernews -run TestHackerNewsFrontpageWorkflow -v`
+  - `go test ./pkg/sites/slashdot -run TestSlashdotFrontpageWorkflow -v`
+  - `go test ./...`
+
+### Technical details
+
+- The Hacker News workflow shape is:
+  - `seed.js`
+  - emits `http/fetch`
+  - `extract_frontpage.js` depends on the fetch op
+  - extraction writes into `hackernews.db`
+- The Slashdot workflow shape is the same, but the site DB schema differs to capture source-link and comment metadata.
+- The built-in exercise sites are now available to the production CLI via `NewRootCommand(...)`, so commands such as `scraper site migrate hackernews` and `scraper site migrate slashdot` no longer require a custom registry in tests.

@@ -99,7 +99,18 @@
 - [x] Record the HTTP primitive work in the implementation diary
 - [x] Commit the HTTP primitive milestone
 
-### Phase 8. NEREVAL site port
+### Phase 8. Exercise sites before NEREVAL
+
+- [x] Add a built-in Hacker News site package with SQL migrations, JS scripts, and HTML fixtures
+- [x] Add a built-in Slashdot site package with SQL migrations, JS scripts, and HTML fixtures
+- [x] Wire the default site registry into the root CLI so built-in sites are available without custom test wiring
+- [x] Expose preconfigured site DB handles from the scheduler to JS runners during workflow execution
+- [x] Add end-to-end scheduler tests for `js -> http/fetch -> js -> site-db` on both sites
+- [x] Add an operator-facing smoke test for `scraper site migrate <site>` against a built-in site
+- [x] Record the exercise-site milestone in the implementation diary
+- [x] Commit the exercise-site milestone
+
+### Phase 9. NEREVAL site port
 
 - [ ] Create the NEREVAL site package and register it with the engine
 - [ ] Port NEREVAL list-page fetch behavior into the new HTTP op model
@@ -112,7 +123,7 @@
 - [ ] Record the NEREVAL port work in the implementation diary
 - [ ] Commit the NEREVAL port milestone
 
-### Phase 9. CLI workflows and operator ergonomics
+### Phase 10. CLI workflows and operator ergonomics
 
 - [ ] Add user-facing commands to initialize state, run workflows, inspect workflows, inspect ops, and migrate sites
 - [ ] Add Glazed help entries for workflow concepts, site registration, migrations, and NEREVAL usage
@@ -121,7 +132,7 @@
 - [ ] Record the CLI workflow work in the implementation diary
 - [ ] Commit the operator CLI milestone
 
-### Phase 10. Validation and handoff
+### Phase 11. Validation and handoff
 
 - [ ] Run full `go test ./...` validation
 - [ ] Run a local end-to-end NEREVAL scrape against fixtures or a constrained live target

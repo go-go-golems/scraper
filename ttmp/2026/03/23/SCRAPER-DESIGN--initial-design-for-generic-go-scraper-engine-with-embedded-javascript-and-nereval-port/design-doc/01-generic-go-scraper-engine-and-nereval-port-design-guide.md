@@ -25,6 +25,14 @@ RelatedFiles:
       Note: Runtime factory and composition model for Go/goja embedding
     - Path: ../../../../../../../go-go-goja/engine/runtime_modules.go
       Note: Runtime-scoped module injection model for JS ops
+    - Path: pkg/engine/scheduler/scheduler.go
+      Note: Scheduler now injects site DB handles into runner execution for built-in site workflows
+    - Path: pkg/sites/defaults/defaults.go
+      Note: Built-in site registry for exercise sites before the NEREVAL port
+    - Path: pkg/sites/hackernews/site.go
+      Note: Hacker News site package proving the generic js-http-js-site-db path
+    - Path: pkg/sites/slashdot/site.go
+      Note: Slashdot site package proving the generic js-http-js-site-db path
     - Path: ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/sources/local/scraper.md
       Note: Imported architecture sketch and API model
 ExternalSources:
@@ -34,6 +42,7 @@ LastUpdated: 2026-03-23T14:05:00-04:00
 WhatFor: Explain how the imported scraper architecture maps to the current NEREVAL prototype and define a concrete, intern-oriented plan for implementing the new engine in scraper/.
 WhenToUse: Use when bootstrapping the scraper codebase, designing the engine/store/runtime split, or porting NEREVAL from the JS prototype to the Go/goja system.
 ---
+
 
 
 # Generic Go scraper engine and nereval port design guide
@@ -1063,7 +1072,32 @@ For NEREVAL this runner must support:
 - next page POST using explicit form fields,
 - detail page GET.
 
-### Phase 6: Port NEREVAL as the first site package
+### Phase 6: Add two small exercise sites first
+
+Goal: prove the generic path on smaller HTML targets before taking on ASP.NET-specific NEREVAL behavior.
+
+Implement:
+
+- `sites/hackernews/seed.js`
+- `sites/hackernews/extract_frontpage.js`
+- `sites/hackernews/migrations/*.sql`
+- `sites/hackernews/fixtures/*.html`
+- `sites/slashdot/seed.js`
+- `sites/slashdot/extract_frontpage.js`
+- `sites/slashdot/migrations/*.sql`
+- `sites/slashdot/fixtures/*.html`
+- scheduler wiring that injects the pre-opened site DB into JS execution
+
+Verification:
+
+- `scraper site migrate hackernews` succeeds with the built-in registry
+- `scraper site migrate slashdot` succeeds with the built-in registry
+- one workflow for each site completes through the full `js -> http/fetch -> js -> site-db` path
+- site DB assertions confirm the extracted rows and URLs are persisted as expected
+
+These sites are deliberately smaller than NEREVAL. They exercise the generic engine shape, artifact passing, dependency reads, and site DB writes without forcing the system to solve ASP.NET form-state and detail-page fan-out at the same time.
+
+### Phase 7: Port NEREVAL as the first complex site package
 
 Goal: reproduce the prototype's useful behavior without reproducing its coupling.
 
@@ -1078,7 +1112,7 @@ Implement:
 
 Use fixture HTML from the prototype's known DOM structure as the first tests. Only after fixtures pass should you run live-site smoke tests.
 
-### Phase 7: Add operator-facing CLI commands
+### Phase 8: Add operator-facing CLI commands
 
 Goal: make the engine usable without a web app.
 
@@ -1098,12 +1132,16 @@ The old `app.mjs` functionality should not be ported before the CLI and engine s
 
 Save representative HTML from:
 
+- Hacker News front page,
+- Slashdot front page,
+
 - NEREVAL list page 1,
 - at least one later list page,
 - several detail pages with different shapes.
 
 Then test:
 
+- front-page extraction for the smaller exercise sites,
 - list row extraction count,
 - account number parsing,
 - next-page detection,
@@ -1143,7 +1181,14 @@ Test that:
 - migration history prevents duplicate application,
 - failed site migrations stop projector startup cleanly.
 
-### 5. End-to-end NEREVAL smoke tests
+### 5. End-to-end site smoke tests
+
+Run smaller end-to-end workflows first:
+
+- Hacker News front page workflow against a fixture-backed local HTTP server,
+- Slashdot front page workflow against a fixture-backed local HTTP server.
+
+Then run NEREVAL:
 
 Keep live tests small and polite:
 

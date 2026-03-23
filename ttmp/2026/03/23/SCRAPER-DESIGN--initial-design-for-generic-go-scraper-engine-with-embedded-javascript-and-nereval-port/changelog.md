@@ -2,6 +2,21 @@
 
 ## 2026-03-23
 
+Added two smaller built-in exercise sites, Hacker News and Slashdot, so the generic scheduler/runtime path can be validated end to end before starting the NEREVAL port.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/site.go — Added the Hacker News site definition, embedded scripts, migrations, and fixtures
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/site_test.go — Added the end-to-end Hacker News workflow test using the real scheduler, HTTP runner, JS runner, and site DB
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/site.go — Added the Slashdot site definition, embedded scripts, migrations, and fixtures
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/slashdot/site_test.go — Added the end-to-end Slashdot workflow test using the real scheduler, HTTP runner, JS runner, and site DB
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/defaults/defaults.go — Added the built-in site registry wiring used by the CLI
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/root.go — Switched the production root command to the built-in site registry
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/scheduler/scheduler.go — Added scheduler-side injection of preconfigured site DB handles into runner execution
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/reference/01-investigation-diary.md — Recorded the exercise-site milestone and debugging notes
+
+## 2026-03-23
+
 Added the first generic `http/fetch` runner with templated request rendering, form/body support, response metadata capture, optional body artifact persistence, and retry classification tests.
 
 ### Related Files
