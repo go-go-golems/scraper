@@ -133,6 +133,11 @@ func (e *Executor) Execute(ctx context.Context, req ExecutionRequest) (*model.Op
 	return result, nil
 }
 
+type LogEntry struct {
+	Timestamp string `json:"timestamp"`
+	Message   string `json:"message"`
+}
+
 type executionState struct {
 	now            time.Time
 	records        []model.RecordWrite
@@ -141,6 +146,7 @@ type executionState struct {
 	emittedCount   int
 	artifactCount  int
 	dependencyMemo map[model.OpID]*model.OpResult
+	logEntries     []LogEntry
 }
 
 func buildJSContext(vm *goja.Runtime, req ExecutionRequest, state *executionState) (goja.Value, error) {
@@ -186,12 +192,17 @@ func buildJSContext(vm *goja.Runtime, req ExecutionRequest, state *executionStat
 		for _, arg := range call.Arguments {
 			parts = append(parts, fmt.Sprint(arg.Export()))
 		}
+		msg := strings.Join(parts, " ")
 		log.Info().
 			Str("component", "js-runner").
 			Str("site", string(req.Op.Site)).
 			Str("workflow_id", string(req.Workflow.ID)).
 			Str("op_id", string(req.Op.ID)).
-			Msg(strings.Join(parts, " "))
+			Msg(msg)
+		state.logEntries = append(state.logEntries, LogEntry{
+			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+			Message:   msg,
+		})
 		return goja.Undefined()
 	})
 
@@ -266,6 +277,20 @@ func buildOpResult(req ExecutionRequest, state *executionState, returned any) (*
 	}
 	for _, emitted := range state.emitted {
 		result.EmittedIDs = append(result.EmittedIDs, emitted.ID)
+	}
+
+	// Persist captured log entries as a special artifact
+	if len(state.logEntries) > 0 {
+		logBody, err := json.Marshal(state.logEntries)
+		if err == nil {
+			result.Artifacts = append(result.Artifacts, model.ArtifactWrite{
+				ID:          model.ArtifactID(fmt.Sprintf("%s:execution-log", req.Op.ID)),
+				Name:        "execution-log",
+				Kind:        "execution-log",
+				ContentType: "application/json",
+				Body:        logBody,
+			})
+		}
 	}
 
 	if returned == nil {
