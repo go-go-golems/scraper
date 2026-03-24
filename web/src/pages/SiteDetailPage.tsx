@@ -85,7 +85,7 @@ export function SiteDetailPage() {
           {tabIndex === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Typography variant="subtitle2">Queue Policies</Typography>
-              {detail.queuePolicies.length > 0 ? (
+              {(detail.queuePolicies ?? []).length > 0 ? (
                 <TableContainer>
                   <Table size="small">
                     <TableHead>
@@ -97,7 +97,7 @@ export function SiteDetailPage() {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {detail.queuePolicies.map((p) => (
+                      {(detail.queuePolicies ?? []).map((p) => (
                         <TableRow key={p.queue}>
                           <TableCell>
                             <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
