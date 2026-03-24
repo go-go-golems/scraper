@@ -76,8 +76,9 @@ export function OpDetailDrawer({
   if (!op) return null;
 
   const { op: spec } = op;
-  const logArtifact = artifacts.find((a) => a.kind === 'execution-log');
-  const nonLogArtifacts = artifacts.filter((a) => a.kind !== 'execution-log');
+  const safeArtifacts = artifacts ?? [];
+  const logArtifact = safeArtifacts.find((a) => a.kind === 'execution-log');
+  const nonLogArtifacts = safeArtifacts.filter((a) => a.kind !== 'execution-log');
   const logEntries: { timestamp: string; message: string }[] = [];
   if (logArtifact && artifactBodies[logArtifact.id]) {
     try {

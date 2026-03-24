@@ -28,9 +28,9 @@ export function SiteCard({ site, onClick }: SiteCardProps) {
             <Chip label={`${site.scriptCount} scripts`} size="small" color="secondary" variant="outlined" />
           </Box>
 
-          {site.queuePolicies.length > 0 ? (
+          {(site.queuePolicies ?? []).length > 0 ? (
             <Box>
-              {site.queuePolicies.map((p) => (
+              {(site.queuePolicies ?? []).map((p) => (
                 <Typography key={p.queue} variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                   {p.queue}: MaxInFlight: {p.maxInFlight}
                   {p.rateLimit ? `, Rate: ${p.rateLimit.ratePerSecond}/sec` : ''}
