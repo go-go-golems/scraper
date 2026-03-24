@@ -8,7 +8,7 @@ import (
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 )
 
-//go:embed scripts/*.js scripts/lib/*.js migrations/*.sql fixtures/*.html
+//go:embed scripts/*.js scripts/lib/*.js verbs/*.js migrations/*.sql fixtures/*.html
 var siteFS embed.FS
 
 func Definition() siteregistry.Definition {
@@ -17,9 +17,10 @@ func Definition() siteregistry.Definition {
 		DatabaseFileName:  "hackernews.db",
 		ScriptsFS:         siteFS,
 		ScriptsRoot:       "scripts",
+		VerbsFS:           siteFS,
+		VerbsRoot:         "verbs",
 		SQLMigrationsFS:   siteFS,
 		SQLMigrationsRoot: "migrations",
-		RegisterCLI:       registerCLI,
 	}
 }
 

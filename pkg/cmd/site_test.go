@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"testing/fstest"
 
@@ -14,8 +15,10 @@ import (
 	hackernews "github.com/go-go-golems/scraper/pkg/sites/hackernews"
 	"github.com/go-go-golems/scraper/pkg/sites/jsdemo"
 	"github.com/go-go-golems/scraper/pkg/sites/nereval"
+	slashdot "github.com/go-go-golems/scraper/pkg/sites/slashdot"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
 
@@ -298,32 +301,87 @@ func TestJSDemoSubmitThenWorkerRunWithQueueRateLimit(t *testing.T) {
 }
 
 func TestHackerNewsRunSeedCommand(t *testing.T) {
-	rootCmd, err := NewRootCommand("test-version")
+	sitesDir := t.TempDir()
+	engineDB := filepath.Join(t.TempDir(), "engine.db")
+	fixture, err := hackernews.ReadFixture("frontpage.html")
 	require.NoError(t, err)
+	server := newStaticFixtureServer(t, fixture)
 
-	var stdout bytes.Buffer
-	rootCmd.SetOut(&stdout)
-	rootCmd.SetErr(&stdout)
-	rootCmd.SetArgs([]string{
+	submitOutput := runRootCommand(t, nil,
 		"site", "hackernews", "run", "seed",
-		"--fixture",
-		"--sites-dir", t.TempDir(),
-		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
 		"--workflow-id", "cmd-hackernews-seed",
-		"--max-pages", "2",
-	})
+		"--base-url", server.URL+"/",
+		"--max-pages", "1",
+	)
+	require.Contains(t, submitOutput, "Site: hackernews")
+	require.Contains(t, submitOutput, "Command: site hackernews run seed")
+	require.Contains(t, submitOutput, "Submitted ops: 1")
+	require.Contains(t, submitOutput, "Target op: cmd-hackernews-seed:seed:frontpage-extract")
+	require.Contains(t, submitOutput, `"submittedEntrypoint": "seed"`)
 
-	err = rootCmd.Execute()
+	statusBefore := runRootCommand(t, nil, "engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusBefore, "ready: 1")
+	require.Contains(t, statusBefore, "succeeded: 0")
+
+	workerOutput := runRootCommand(t, nil,
+		"worker", "run",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--max-cycles", "16",
+		"--poll-interval", "5ms",
+	)
+	require.Contains(t, workerOutput, "Succeeded:")
+
+	statusAfter := runRootCommand(t, nil, "engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusAfter, "ready: 0")
+	require.Contains(t, statusAfter, "succeeded: 3")
+	require.Contains(t, statusAfter, "Results: 3")
+
+	siteDB, err := sql.Open("sqlite3", filepath.Join(sitesDir, "hackernews.db"))
 	require.NoError(t, err)
-	require.Contains(t, stdout.String(), "Site: hackernews")
-	require.Contains(t, stdout.String(), "Entrypoint: seed")
-	require.Contains(t, stdout.String(), "Status: succeeded")
-	require.Contains(t, stdout.String(), "Fixture: true")
-	require.Contains(t, stdout.String(), `"storyCount": 2`)
-	require.Contains(t, stdout.String(), `"47490070"`)
+	defer func() { require.NoError(t, siteDB.Close()) }()
+
+	var stories int
+	require.NoError(t, siteDB.QueryRow("SELECT COUNT(*) FROM stories").Scan(&stories))
+	require.Equal(t, 2, stories)
+
+	var topStoryID string
+	require.NoError(t, siteDB.QueryRow("SELECT story_id FROM stories ORDER BY rank LIMIT 1").Scan(&topStoryID))
+	require.Equal(t, "47490070", topStoryID)
 }
 
 func TestHackerNewsRunSeedCommandWithQueueRateLimit(t *testing.T) {
+	pageOne := hackerNewsFixturePage(
+		[]hackerNewsFixtureStory{
+			{ID: "47490070", Rank: 1, Title: "First & Strong Story", StoryURL: "https://example.com/first-story", SiteName: "example.com", Score: 236, Author: "anemll", AgeText: "3 hours ago", CommentsText: "138 comments"},
+			{ID: "47490080", Rank: 2, Title: "Ask HN: Building Smaller Scrapers?", StoryURL: "item?id=47490080", SiteName: "", Score: 87, Author: "somebody", AgeText: "2 hours ago", CommentsText: "discuss"},
+		},
+		"?p=2",
+	)
+	pageTwo := hackerNewsFixturePage(
+		[]hackerNewsFixtureStory{
+			{ID: "47490100", Rank: 31, Title: "A Deeper Page Story", StoryURL: "https://example.com/deeper-story", SiteName: "example.com", Score: 55, Author: "deeper", AgeText: "1 hour ago", CommentsText: "12 comments"},
+			{ID: "47490110", Rank: 32, Title: "Ask HN: Page Two", StoryURL: "item?id=47490110", SiteName: "", Score: 21, Author: "pager", AgeText: "50 minutes ago", CommentsText: "5 comments"},
+		},
+		"",
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		switch r.URL.RawQuery {
+		case "":
+			_, _ = w.Write([]byte(pageOne))
+		case "p=2":
+			_, _ = w.Write([]byte(pageTwo))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	sitesDir := t.TempDir()
+	engineDB := filepath.Join(t.TempDir(), "engine.db")
 	registry := siteregistry.New()
 	def := hackernews.Definition()
 	def.QueuePolicies = map[model.QueueKey]model.QueuePolicy{
@@ -338,27 +396,43 @@ func TestHackerNewsRunSeedCommandWithQueueRateLimit(t *testing.T) {
 	}
 	require.NoError(t, registry.Register(def))
 
-	rootCmd, err := newRootCommand("test-version", registry)
-	require.NoError(t, err)
-
-	var stdout bytes.Buffer
-	rootCmd.SetOut(&stdout)
-	rootCmd.SetErr(&stdout)
-	rootCmd.SetArgs([]string{
+	submitOutput := runRootCommand(t, registry,
 		"site", "hackernews", "run", "seed",
-		"--fixture",
-		"--sites-dir", t.TempDir(),
-		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
 		"--workflow-id", "cmd-hackernews-rate",
+		"--base-url", server.URL+"/",
 		"--max-pages", "2",
-	})
+	)
+	require.Contains(t, submitOutput, "Submitted ops: 1")
 
-	err = rootCmd.Execute()
-	require.NoError(t, err)
-	require.Contains(t, stdout.String(), "Site: hackernews")
-	require.Contains(t, stdout.String(), "Entrypoint: seed")
-	require.Contains(t, stdout.String(), "Status: succeeded")
-	require.Contains(t, stdout.String(), `"storyCount": 2`)
+	firstWorkerRun := runRootCommand(t, registry,
+		"worker", "run",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--max-workers", "4",
+		"--max-cycles", "3",
+		"--poll-interval", "120ms",
+	)
+	require.Contains(t, firstWorkerRun, "Succeeded:")
+
+	statusMid := runRootCommand(t, registry, "engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusMid, "Workflows: 1")
+	require.Contains(t, statusMid, "ready: 1")
+
+	secondWorkerRun := runRootCommand(t, registry,
+		"worker", "run",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--max-workers", "4",
+		"--max-cycles", "8",
+		"--poll-interval", "120ms",
+	)
+	require.Contains(t, secondWorkerRun, "Succeeded:")
+
+	statusAfter := runRootCommand(t, registry, "engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusAfter, "ready: 0")
+	require.Contains(t, statusAfter, "succeeded: 5")
 }
 
 func TestHackerNewsRunSeedHelpIncludesMaxPages(t *testing.T) {
@@ -376,51 +450,93 @@ func TestHackerNewsRunSeedHelpIncludesMaxPages(t *testing.T) {
 }
 
 func TestHackerNewsRunExtractFrontpageCommand(t *testing.T) {
-	rootCmd, err := NewRootCommand("test-version")
+	sitesDir := t.TempDir()
+	engineDB := filepath.Join(t.TempDir(), "engine.db")
+	fixture, err := hackernews.ReadFixture("frontpage.html")
 	require.NoError(t, err)
+	server := newStaticFixtureServer(t, fixture)
 
-	var stdout bytes.Buffer
-	rootCmd.SetOut(&stdout)
-	rootCmd.SetErr(&stdout)
-	rootCmd.SetArgs([]string{
+	submitOutput := runRootCommand(t, nil,
 		"site", "hackernews", "run", "extract-frontpage",
-		"--fixture",
-		"--sites-dir", t.TempDir(),
-		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
 		"--workflow-id", "cmd-hackernews-extract",
-	})
+		"--base-url", server.URL+"/",
+	)
+	require.Contains(t, submitOutput, "Command: site hackernews run extract-frontpage")
+	require.Contains(t, submitOutput, "Submitted ops: 2")
+	require.Contains(t, submitOutput, "Target op: cmd-hackernews-extract:frontpage-extract")
+	require.Contains(t, submitOutput, `"submittedEntrypoint": "extract-frontpage"`)
 
-	err = rootCmd.Execute()
+	workerOutput := runRootCommand(t, nil,
+		"worker", "run",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--max-cycles", "12",
+		"--poll-interval", "5ms",
+	)
+	require.Contains(t, workerOutput, "Succeeded:")
+
+	statusAfter := runRootCommand(t, nil, "engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusAfter, "succeeded: 2")
+
+	siteDB, err := sql.Open("sqlite3", filepath.Join(sitesDir, "hackernews.db"))
 	require.NoError(t, err)
-	require.Contains(t, stdout.String(), "Entrypoint: extract-frontpage")
-	require.Contains(t, stdout.String(), `"storyCount": 2`)
-	require.Contains(t, stdout.String(), `"47490080"`)
+	defer func() { require.NoError(t, siteDB.Close()) }()
+
+	var stories int
+	require.NoError(t, siteDB.QueryRow("SELECT COUNT(*) FROM stories").Scan(&stories))
+	require.Equal(t, 2, stories)
+
+	var storyID string
+	require.NoError(t, siteDB.QueryRow("SELECT story_id FROM stories WHERE rank = 2").Scan(&storyID))
+	require.Equal(t, "47490080", storyID)
 }
 
 func TestSlashdotRunSeedCommand(t *testing.T) {
-	rootCmd, err := NewRootCommand("test-version")
+	sitesDir := t.TempDir()
+	engineDB := filepath.Join(t.TempDir(), "engine.db")
+	fixture, err := slashdot.ReadFixture("frontpage.html")
 	require.NoError(t, err)
+	server := newStaticFixtureServer(t, fixture)
 
-	var stdout bytes.Buffer
-	rootCmd.SetOut(&stdout)
-	rootCmd.SetErr(&stdout)
-	rootCmd.SetArgs([]string{
+	submitOutput := runRootCommand(t, nil,
 		"site", "slashdot", "run", "seed",
-		"--fixture",
-		"--sites-dir", t.TempDir(),
-		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
 		"--workflow-id", "cmd-slashdot-seed",
-		"--max-pages", "2",
-	})
+		"--base-url", server.URL+"/",
+		"--max-pages", "1",
+	)
+	require.Contains(t, submitOutput, "Site: slashdot")
+	require.Contains(t, submitOutput, "Command: site slashdot run seed")
+	require.Contains(t, submitOutput, "Submitted ops: 1")
+	require.Contains(t, submitOutput, "Target op: cmd-slashdot-seed:seed:frontpage-extract")
+	require.Contains(t, submitOutput, `"submittedEntrypoint": "seed"`)
 
-	err = rootCmd.Execute()
+	workerOutput := runRootCommand(t, nil,
+		"worker", "run",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--max-cycles", "16",
+		"--poll-interval", "5ms",
+	)
+	require.Contains(t, workerOutput, "Succeeded:")
+
+	statusAfter := runRootCommand(t, nil, "engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusAfter, "succeeded: 3")
+
+	siteDB, err := sql.Open("sqlite3", filepath.Join(sitesDir, "slashdot.db"))
 	require.NoError(t, err)
-	require.Contains(t, stdout.String(), "Site: slashdot")
-	require.Contains(t, stdout.String(), "Entrypoint: seed")
-	require.Contains(t, stdout.String(), "Status: succeeded")
-	require.Contains(t, stdout.String(), "Fixture: true")
-	require.Contains(t, stdout.String(), `"storyCount": 2`)
-	require.Contains(t, stdout.String(), `"181087690"`)
+	defer func() { require.NoError(t, siteDB.Close()) }()
+
+	var stories int
+	require.NoError(t, siteDB.QueryRow("SELECT COUNT(*) FROM stories").Scan(&stories))
+	require.Equal(t, 2, stories)
+
+	var topStoryID string
+	require.NoError(t, siteDB.QueryRow("SELECT story_id FROM stories ORDER BY position LIMIT 1").Scan(&topStoryID))
+	require.Equal(t, "181087690", topStoryID)
 }
 
 func TestSlashdotRunSeedHelpIncludesMaxPages(t *testing.T) {
@@ -438,25 +554,47 @@ func TestSlashdotRunSeedHelpIncludesMaxPages(t *testing.T) {
 }
 
 func TestSlashdotRunExtractFrontpageCommand(t *testing.T) {
-	rootCmd, err := NewRootCommand("test-version")
+	sitesDir := t.TempDir()
+	engineDB := filepath.Join(t.TempDir(), "engine.db")
+	fixture, err := slashdot.ReadFixture("frontpage.html")
 	require.NoError(t, err)
+	server := newStaticFixtureServer(t, fixture)
 
-	var stdout bytes.Buffer
-	rootCmd.SetOut(&stdout)
-	rootCmd.SetErr(&stdout)
-	rootCmd.SetArgs([]string{
+	submitOutput := runRootCommand(t, nil,
 		"site", "slashdot", "run", "extract-frontpage",
-		"--fixture",
-		"--sites-dir", t.TempDir(),
-		"--engine-db", filepath.Join(t.TempDir(), "engine.db"),
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
 		"--workflow-id", "cmd-slashdot-extract",
-	})
+		"--base-url", server.URL+"/",
+	)
+	require.Contains(t, submitOutput, "Command: site slashdot run extract-frontpage")
+	require.Contains(t, submitOutput, "Submitted ops: 2")
+	require.Contains(t, submitOutput, "Target op: cmd-slashdot-extract:frontpage-extract")
+	require.Contains(t, submitOutput, `"submittedEntrypoint": "extract-frontpage"`)
 
-	err = rootCmd.Execute()
+	workerOutput := runRootCommand(t, nil,
+		"worker", "run",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--max-cycles", "12",
+		"--poll-interval", "5ms",
+	)
+	require.Contains(t, workerOutput, "Succeeded:")
+
+	statusAfter := runRootCommand(t, nil, "engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusAfter, "succeeded: 2")
+
+	siteDB, err := sql.Open("sqlite3", filepath.Join(sitesDir, "slashdot.db"))
 	require.NoError(t, err)
-	require.Contains(t, stdout.String(), "Entrypoint: extract-frontpage")
-	require.Contains(t, stdout.String(), `"storyCount": 2`)
-	require.Contains(t, stdout.String(), `"181087016"`)
+	defer func() { require.NoError(t, siteDB.Close()) }()
+
+	var stories int
+	require.NoError(t, siteDB.QueryRow("SELECT COUNT(*) FROM stories").Scan(&stories))
+	require.Equal(t, 2, stories)
+
+	var storyID string
+	require.NoError(t, siteDB.QueryRow("SELECT story_id FROM stories WHERE position = 2").Scan(&storyID))
+	require.Equal(t, "181087016", storyID)
 }
 
 func TestNerevalRunSeedHelpIncludesFlags(t *testing.T) {
@@ -599,6 +737,79 @@ func newNerevalFixtureServer(t *testing.T) *httptest.Server {
 
 	t.Cleanup(server.Close)
 	return server
+}
+
+func runRootCommand(t *testing.T, registry *siteregistry.Registry, args ...string) string {
+	t.Helper()
+
+	var (
+		rootCmd *cobra.Command
+		err     error
+	)
+	if registry == nil {
+		rootCmd, err = NewRootCommand("test-version")
+	} else {
+		rootCmd, err = newRootCommand("test-version", registry)
+	}
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs(args)
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	return stdout.String()
+}
+
+func newStaticFixtureServer(t *testing.T, body []byte) *httptest.Server {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+type hackerNewsFixtureStory struct {
+	ID           string
+	Rank         int
+	Title        string
+	StoryURL     string
+	SiteName     string
+	Score        int
+	Author       string
+	AgeText      string
+	CommentsText string
+}
+
+func hackerNewsFixturePage(stories []hackerNewsFixtureStory, nextHref string) string {
+	page := "<html><body><table class=\"itemlist\">"
+	for _, story := range stories {
+		siteMarkup := ""
+		if story.SiteName != "" {
+			siteMarkup = "<span class=\"sitebit comhead\"> (<a href=\"from?site=" + story.SiteName + "\"><span class=\"sitestr\">" + story.SiteName + "</span></a>) </span>"
+		}
+		page += "<tr class=\"athing submission\" id=\"" + story.ID + "\">" +
+			"<td class=\"title\"><span class=\"rank\">" + strconv.Itoa(story.Rank) + ".</span></td>" +
+			"<td class=\"title\"><span class=\"titleline\"><a href=\"" + story.StoryURL + "\">" + story.Title + "</a>" + siteMarkup + "</span></td>" +
+			"</tr>" +
+			"<tr><td colspan=\"2\"></td><td class=\"subtext\">" +
+			"<span class=\"score\" id=\"score_" + story.ID + "\">" + strconv.Itoa(story.Score) + " points</span> by " +
+			"<a href=\"user?id=" + story.Author + "\" class=\"hnuser\">" + story.Author + "</a> " +
+			"<span class=\"age\" title=\"2026-03-23T10:00:00 1742724000\"><a href=\"item?id=" + story.ID + "\">" + story.AgeText + "</a></span> " +
+			"<a href=\"item?id=" + story.ID + "\">" + story.CommentsText + "</a>" +
+			"</td></tr>"
+	}
+	page += "</table>"
+	if nextHref != "" {
+		page += "<a class=\"morelink\" href=\"" + nextHref + "\">More</a>"
+	}
+	page += "</body></html>"
+	return page
 }
 
 var _ fs.FS = fstest.MapFS{}
