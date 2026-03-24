@@ -1,4 +1,5 @@
 import type {
+  ArtifactSummary,
   EngineStatus,
   OpStatus,
   OpResult,
@@ -206,4 +207,53 @@ export function createOpResult(overrides: {
       : {}),
     CompletedAt: '2026-03-23T14:32:05Z',
   };
+}
+
+export function createArtifactSummary(overrides: Partial<ArtifactSummary> = {}): ArtifactSummary {
+  return {
+    id: 'art-001',
+    opID: 'wf-001:seed',
+    workflowID: 'wf-001',
+    name: 'page.html',
+    kind: 'page',
+    contentType: 'text/html',
+    size: 24_320,
+    createdAt: '2026-03-23T14:32:05Z',
+    ...overrides,
+  };
+}
+
+const logMessages = [
+  'Starting JS extraction for hackernews',
+  'Loaded seed.js script (2.4 KB)',
+  'Navigating to https://news.ycombinator.com/',
+  'Page loaded, running extraction function',
+  'Querying DOM: document.querySelectorAll(".athing")',
+  'Found 30 items on page 1',
+  'Extracting title, URL, score for each item',
+  'Processing item 1/30: Show HN: A cool project',
+  'Processing item 15/30: Ask HN: Best practices',
+  'Processing item 30/30: New in Go 1.24',
+  'All items extracted successfully',
+  'Checking for pagination link',
+  'Found next page: /news?p=2',
+  'Emitting 30 child ops for detail pages',
+  'Extraction complete',
+  'Writing 30 records to collection "items"',
+  'Saving page HTML as artifact (24.3 KB)',
+  'Saving extracted data as artifact (5.1 KB)',
+  'Op finished in 6.8s',
+  'Cleaning up resources',
+];
+
+export function createLogEntries(count: number): { timestamp: string; message: string }[] {
+  return Array.from({ length: count }, (_, i) => {
+    const seconds = Math.floor(i * 0.45);
+    const ms = String(Math.floor((i * 450) % 1000)).padStart(3, '0');
+    const s = String(58 + seconds).padStart(2, '0');
+    return {
+      timestamp: `2026-03-23T14:31:${s}.${ms}Z`,
+      message: logMessages[i % logMessages.length],
+    };
+  });
 }

@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { WorkflowListItem, WorkflowSummary, WorkflowOp, OpResult } from './types';
+import type { WorkflowListItem, WorkflowSummary, WorkflowOp, OpResult, ArtifactSummary } from './types';
 
 interface ListWorkflowsParams {
   site?: string;
@@ -42,6 +42,24 @@ export const workflowApi = createApi({
     getOpResult: builder.query<OpResult | null, { workflowId: string; opId: string }>({
       query: ({ workflowId, opId }) => `/workflows/${workflowId}/ops/${opId}/result`,
     }),
+    getOpArtifacts: builder.query<ArtifactSummary[], { wfId: string; opId: string }>({
+      query: ({ wfId, opId }) => `/workflows/${wfId}/ops/${opId}/artifacts`,
+      transformResponse: (response: { artifacts: ArtifactSummary[] }) => response.artifacts,
+    }),
+    retryOp: builder.mutation<void, { wfId: string; opId: string }>({
+      query: ({ wfId, opId }) => ({
+        url: `/workflows/${wfId}/ops/${opId}:retry`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['WorkflowOps'],
+    }),
+    cancelWorkflow: builder.mutation<void, string>({
+      query: (wfId) => ({
+        url: `/workflows/${wfId}:cancel`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['Workflow', 'WorkflowList'],
+    }),
   }),
 });
 
@@ -50,4 +68,7 @@ export const {
   useGetWorkflowQuery,
   useGetWorkflowOpsQuery,
   useGetOpResultQuery,
+  useGetOpArtifactsQuery,
+  useRetryOpMutation,
+  useCancelWorkflowMutation,
 } = workflowApi;

@@ -168,3 +168,15 @@ export interface FieldSummary {
   choices?: string[];
   required: boolean;
 }
+
+export interface ArtifactSummary {
+  id: string;
+  opID: string;
+  workflowID: string;
+  name: string;
+  kind: string;
+  contentType: string;
+  metadata?: Record<string, string>;
+  size: number;
+  createdAt: string;
+}
