@@ -41,6 +41,7 @@ func newRootCommand(version string, siteRegistry *siteregistry.Registry) (*cobra
 
 	rootCmd.AddCommand(newEngineCommand())
 	rootCmd.AddCommand(newWorkerCommand(siteRegistry))
+	rootCmd.AddCommand(newAPICommand(version, siteRegistry))
 	siteCmd, err := newSiteCommand(siteRegistry)
 	if err != nil {
 		return nil, err
