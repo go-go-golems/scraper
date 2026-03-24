@@ -72,6 +72,15 @@ func (h *CatalogHandler) Verb(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"verb": verb})
 }
 
+func (h *CatalogHandler) SiteDetail(w http.ResponseWriter, r *http.Request) {
+	detail, err := h.service.GetSiteDetail(model.SiteName(r.PathValue("site")))
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"site": detail})
+}
+
 func (h *CatalogHandler) Scripts(w http.ResponseWriter, r *http.Request) {
 	scripts, err := h.service.ListScripts(model.SiteName(r.PathValue("site")))
 	if err != nil {

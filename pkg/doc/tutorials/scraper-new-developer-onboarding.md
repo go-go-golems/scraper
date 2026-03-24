@@ -16,7 +16,6 @@ Commands:
 Flags:
 - engine-db
 - sites-dir
-- fixture
 - max-pages
 IsTopLevel: true
 IsTemplate: false
@@ -37,7 +36,7 @@ Before starting, the reader should have:
 - the ability to run `go test ./...`
 - basic familiarity with Go, Cobra, and JavaScript
 
-All commands below assume the current working directory is [scraper](/home/manuel/workspaces/2026-03-23/js-scraper/scraper).
+All commands below assume the current working directory is the `scraper/` repository root.
 
 ## Step 1 — Read The Architecture Pages
 
@@ -51,9 +50,9 @@ Read these pages in order:
 
 Then skim these code files:
 
-1. [pkg/cmd/root.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/root.go)
-2. [pkg/cmd/site.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site.go)
-3. [pkg/cmd/worker.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/worker.go)
+1. `pkg/cmd/root.go`
+2. `pkg/cmd/site.go`
+3. `pkg/cmd/worker.go`
 
 ## Step 2 — Run The Full Test Suite
 
@@ -83,6 +82,8 @@ go run ./cmd/scraper site js-demo run seed \
   --prefix smoke
 ```
 
+The flags `--count`, `--multiplier`, and `--prefix` are defined in `pkg/sites/jsdemo/verbs/seed.js` using `__verb__` metadata. The submit-verb host discovers these JS declarations and wires them into Cobra CLI flags automatically. This pattern is used by all built-in sites.
+
 Then inspect the engine DB:
 
 ```bash
@@ -101,24 +102,36 @@ go run ./cmd/scraper worker run \
 
 Re-run engine status after that. The workflow should now be succeeded and the result/artifact counts should be non-zero.
 
-## Step 4 — Smoke-Test An HTTP Site With Fixtures
+## Step 4 — Smoke-Test An HTTP Site
 
-Now move to a site that uses the full `js -> http/fetch -> js -> site-db` path but still avoids live traffic. Both Hacker News and Slashdot support `--fixture`.
+Now move to a site that uses the full `js -> http/fetch -> js -> site-db` path. Hacker News is the simplest HTTP site.
 
-Example:
+All sites use the same two-step pattern: submit work with a verb, then run the worker. The hackernews verb defines `--base-url` and `--max-pages` flags in `pkg/sites/hackernews/verbs/seed.js`.
 
 ```bash
 tmpdir=$(mktemp -d)
 
 go run ./cmd/scraper site hackernews run seed \
-  --fixture \
   --sites-dir "$tmpdir/sites" \
   --engine-db "$tmpdir/engine.db" \
-  --workflow-id hn-fixture \
-  --max-pages 2
+  --workflow-id hn-test \
+  --base-url "https://news.ycombinator.com/" \
+  --max-pages 1
 ```
 
-This path executes locally and proves that JS emits HTTP work, the HTTP runner persists artifacts, and the follow-up JS extractor writes rows into the site DB.
+Then run the worker to execute the queued ops:
+
+```bash
+go run ./cmd/scraper worker run \
+  --sites-dir "$tmpdir/sites" \
+  --engine-db "$tmpdir/engine.db" \
+  --max-cycles 32 \
+  --poll-interval 25ms
+```
+
+This path proves that JS emits HTTP work, the HTTP runner persists artifacts, and the follow-up JS extractor writes rows into the site DB.
+
+For fully offline testing, the `go test ./...` suite uses fixture-backed tests that serve embedded HTML from local HTTP test servers.
 
 ## Step 5 — Inspect A Complex Site Without Going Live
 
@@ -131,16 +144,16 @@ The first complex site is `nereval`. Its value is not just parsing HTML. It prov
 
 Do not run it live as part of onboarding. Instead, study these files:
 
-- [pkg/sites/nereval/site.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/site.go)
-- [pkg/sites/nereval/verbs/seed.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/verbs/seed.js)
-- [pkg/sites/nereval/scripts/seed.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/seed.js)
-- [pkg/sites/nereval/scripts/extract_list.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/extract_list.js)
-- [pkg/sites/nereval/scripts/extract_detail.js](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/scripts/extract_detail.js)
-- [pkg/sites/nereval/migrations/001_init.sql](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/nereval/migrations/001_init.sql)
+- `pkg/sites/nereval/site.go`
+- `pkg/sites/nereval/verbs/seed.js`
+- `pkg/sites/nereval/scripts/seed.js`
+- `pkg/sites/nereval/scripts/extract_list.js`
+- `pkg/sites/nereval/scripts/extract_detail.js`
+- `pkg/sites/nereval/migrations/001_init.sql`
 
 Then read the fixture-backed test:
 
-- [pkg/cmd/site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go)
+- `pkg/cmd/site_test.go`
 
 ## Step 6 — Learn The Debugging Commands
 
@@ -166,11 +179,10 @@ These commands are enough to answer:
 
 The ticket docs are still valuable, but they should now be second-pass reading rather than the only onboarding path.
 
-Read these if you need deeper implementation history:
+Read these if you need deeper implementation history (search for these ticket IDs in the `ttmp/` directory):
 
-- [SCRAPER-DESIGN design guide](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/design-doc/01-generic-go-scraper-engine-and-nereval-port-design-guide.md)
-- [SCRAPER-DESIGN diary](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-DESIGN--initial-design-for-generic-go-scraper-engine-with-embedded-javascript-and-nereval-port/reference/01-investigation-diary.md)
-- [SCRAPER-RATE-LIMITER guide](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-RATE-LIMITER--configurable-queue-rate-limiter-for-durable-scheduler/design-doc/01-queue-rate-limiter-analysis-and-implementation-guide.md)
+- `SCRAPER-DESIGN` — initial design guide and investigation diary
+- `SCRAPER-RATE-LIMITER` — queue rate limiter analysis and implementation guide
 
 ## Troubleshooting
 
@@ -179,10 +191,11 @@ Read these if you need deeper implementation history:
 | `go test ./...` fails immediately | Workspace dependencies or generated docs are not loading | Fix the environment before debugging scraper logic |
 | `site js-demo run seed` works but nothing completes | The worker was never run | Use `worker run` against the same temp DBs |
 | You do not know whether a bug is engine or site specific | Too many layers are being changed at once | Reproduce first on `js-demo`, then on `hackernews` or `slashdot`, then on `nereval` |
-| `nereval` feels too big to start with | You skipped the simpler sites | Go back to `js-demo` and one fixture-backed HTTP site first |
+| `nereval` feels too big to start with | You skipped the simpler sites | Go back to `js-demo` and one HTTP site first |
 
 ## See Also
 
-- [scraper-architecture-overview](scraper help scraper-architecture-overview) — High-level map of the repository
-- [scraper-runtime-model](scraper help scraper-runtime-model) — Submit verbs, workers, and op execution explained in more detail
-- [scraper-adding-a-site](scraper help scraper-adding-a-site) — Step-by-step site-authoring path once onboarding is complete
+- `scraper help scraper-architecture-overview` — High-level map of the repository
+- `scraper help scraper-runtime-model` — Submit verbs, workers, and op execution explained in more detail
+- `scraper help scraper-js-api-reference` — Complete JavaScript API reference
+- `scraper help scraper-adding-a-site` — Step-by-step site-authoring path once onboarding is complete

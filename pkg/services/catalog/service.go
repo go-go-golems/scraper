@@ -32,6 +32,26 @@ type SiteSummary struct {
 	HasSubmitVerbs   bool           `json:"hasSubmitVerbs"`
 }
 
+type QueuePolicySummary struct {
+	Queue       model.QueueKey `json:"queue"`
+	MaxInFlight int            `json:"maxInFlight"`
+	RateLimit   *RateLimitInfo `json:"rateLimit,omitempty"`
+}
+
+type RateLimitInfo struct {
+	Kind          string  `json:"kind"`
+	RatePerSecond float64 `json:"ratePerSecond"`
+	Burst         int     `json:"burst"`
+}
+
+type SiteDetail struct {
+	SiteSummary
+	VerbCount     int                  `json:"verbCount"`
+	ScriptCount   int                  `json:"scriptCount"`
+	Scripts       []string             `json:"scripts"`
+	QueuePolicies []QueuePolicySummary `json:"queuePolicies"`
+}
+
 type VerbSummary struct {
 	Name         string           `json:"name"`
 	FullPath     string           `json:"fullPath"`
@@ -197,6 +217,72 @@ func summarizeFields(defs *fields.Definitions) []FieldSummary {
 		})
 	})
 	sort.Slice(ret, func(i, j int) bool { return ret[i].Name < ret[j].Name })
+	return ret
+}
+
+func (s *Service) GetSiteDetail(site model.SiteName) (*SiteDetail, error) {
+	summary, def, err := s.GetSite(site)
+	if err != nil {
+		return nil, err
+	}
+	scripts, _ := s.ListScripts(site)
+	verbs, _ := s.ListVerbs(site)
+
+	detail := &SiteDetail{
+		SiteSummary:   *summary,
+		VerbCount:     len(verbs),
+		ScriptCount:   len(scripts),
+		Scripts:       scripts,
+		QueuePolicies: buildQueuePolicies(def),
+	}
+	return detail, nil
+}
+
+func (s *Service) GetAllQueuePolicies() map[string]QueuePolicySummary {
+	if s == nil || s.siteRegistry == nil {
+		return nil
+	}
+	result := map[string]QueuePolicySummary{}
+	for _, def := range s.siteRegistry.List() {
+		for queue, policy := range def.QueuePolicies {
+			normalized := policy.Normalize()
+			summary := QueuePolicySummary{
+				Queue:       queue,
+				MaxInFlight: normalized.MaxInFlight,
+			}
+			if normalized.RateLimit != nil {
+				summary.RateLimit = &RateLimitInfo{
+					Kind:          string(normalized.RateLimit.Kind),
+					RatePerSecond: normalized.RateLimit.RatePerSecond,
+					Burst:         normalized.RateLimit.Burst,
+				}
+			}
+			result[string(def.Name)+":"+string(queue)] = summary
+		}
+	}
+	return result
+}
+
+func buildQueuePolicies(def siteregistry.Definition) []QueuePolicySummary {
+	if len(def.QueuePolicies) == 0 {
+		return nil
+	}
+	ret := make([]QueuePolicySummary, 0, len(def.QueuePolicies))
+	for queue, policy := range def.QueuePolicies {
+		normalized := policy.Normalize()
+		summary := QueuePolicySummary{
+			Queue:       queue,
+			MaxInFlight: normalized.MaxInFlight,
+		}
+		if normalized.RateLimit != nil {
+			summary.RateLimit = &RateLimitInfo{
+				Kind:          string(normalized.RateLimit.Kind),
+				RatePerSecond: normalized.RateLimit.RatePerSecond,
+				Burst:         normalized.RateLimit.Burst,
+			}
+		}
+		ret = append(ret, summary)
+	}
 	return ret
 }
 

@@ -29,13 +29,14 @@ func New(cfg Config, siteRegistry *siteregistry.Registry) *http.Server {
 
 	catalogHandler := handlers.NewCatalogHandler(catalogService, cfg.Version, cfg.Address, cfg.EngineDB, cfg.SitesDir)
 	submissionHandler := handlers.NewSubmissionHandler(submissionService, cfg.EngineDB, cfg.SitesDir)
-	engineHandler := handlers.NewEngineHandler(engineService)
+	engineHandler := handlers.NewEngineHandler(engineService, catalogService)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", catalogHandler.Healthz)
 	mux.HandleFunc("GET /api/v1/info", catalogHandler.Info)
 	mux.HandleFunc("GET /api/v1/sites", catalogHandler.Sites)
 	mux.HandleFunc("GET /api/v1/sites/{site}", catalogHandler.Site)
+	mux.HandleFunc("GET /api/v1/sites/{site}/detail", catalogHandler.SiteDetail)
 	mux.HandleFunc("GET /api/v1/sites/{site}/verbs", catalogHandler.Verbs)
 	mux.HandleFunc("GET /api/v1/sites/{site}/verbs/{verb}", catalogHandler.Verb)
 	mux.HandleFunc("GET /api/v1/engine/status", engineHandler.Status)

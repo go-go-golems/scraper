@@ -36,9 +36,9 @@ In this codebase, the queue key lives on each op. The policy lives in site regis
 
 ## Where The Code Lives
 
-The shared queue-policy types are in [pkg/engine/model/types.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/model/types.go). The scheduler resolves queue policy in [pkg/engine/scheduler/scheduler.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/scheduler/scheduler.go). The SQLite store enforces it transactionally in [pkg/engine/store/sqlite/store.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/store.go). Site declarations can attach queue policies through [pkg/sites/registry/registry.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/registry/registry.go).
+The shared queue-policy types are in `pkg/engine/model/types.go`. The scheduler resolves queue policy in `pkg/engine/scheduler/scheduler.go`. The SQLite store enforces it transactionally in `pkg/engine/store/sqlite/store.go`. Site declarations can attach queue policies through `pkg/sites/registry/registry.go`.
 
-The durable table for token state is created in [002_engine_runtime.sql](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/engine/store/sqlite/migrations/002_engine_runtime.sql).
+The durable table for token state is created in `pkg/engine/store/sqlite/migrations/002_engine_runtime.sql`.
 
 ## How The Scheduler Uses Policy
 
@@ -46,8 +46,8 @@ The scheduler does not do token math itself. It asks for queue candidates, resol
 
 That boundary matters because it keeps the scheduling loop readable:
 
-- scheduler decides “which queues should I try?”
-- store decides “may this queue start another op right now?”
+- scheduler decides "which queues should I try?"
+- store decides "may this queue start another op right now?"
 
 The scheduler can also attempt more than one lease from the same queue in one cycle when `MaxInFlight > 1`.
 
@@ -95,6 +95,6 @@ The main validation points already in the repo are:
 
 ## See Also
 
-- [scraper-runtime-model](scraper help scraper-runtime-model) — How queue policy fits into the worker/runtime split
-- [scraper-architecture-overview](scraper help scraper-architecture-overview) — Broader engine and site model
-- [scraper-new-developer-onboarding](scraper help scraper-new-developer-onboarding) — Suggested first validation path for a new contributor
+- `scraper help scraper-runtime-model` — How queue policy fits into the worker/runtime split
+- `scraper help scraper-architecture-overview` — Broader engine and site model
+- `scraper help scraper-new-developer-onboarding` — Suggested first validation path for a new contributor

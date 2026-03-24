@@ -6,15 +6,17 @@ import (
 
 	apitypes "github.com/go-go-golems/scraper/pkg/api/types"
 	"github.com/go-go-golems/scraper/pkg/engine/model"
+	"github.com/go-go-golems/scraper/pkg/services/catalog"
 	"github.com/go-go-golems/scraper/pkg/services/engineview"
 )
 
 type EngineHandler struct {
-	service *engineview.Service
+	service        *engineview.Service
+	catalogService *catalog.Service
 }
 
-func NewEngineHandler(service *engineview.Service) *EngineHandler {
-	return &EngineHandler{service: service}
+func NewEngineHandler(service *engineview.Service, catalogService *catalog.Service) *EngineHandler {
+	return &EngineHandler{service: service, catalogService: catalogService}
 }
 
 func (h *EngineHandler) Status(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +85,22 @@ func (h *EngineHandler) Queues(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeServiceError(w, err)
 		return
+	}
+	// Enrich with configured policy from registry
+	if h.catalogService != nil {
+		policies := h.catalogService.GetAllQueuePolicies()
+		for i := range queues {
+			key := string(queues[i].Site) + ":" + string(queues[i].Queue)
+			if policy, ok := policies[key]; ok {
+				queues[i].MaxInFlight = policy.MaxInFlight
+				if policy.RateLimit != nil {
+					rps := policy.RateLimit.RatePerSecond
+					burst := policy.RateLimit.Burst
+					queues[i].RatePerSec = &rps
+					queues[i].Burst = &burst
+				}
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, apitypes.QueueListResponse{Queues: queues})
 }
