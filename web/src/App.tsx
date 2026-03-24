@@ -4,6 +4,8 @@ import { EngineOverviewPage } from './pages/EngineOverviewPage';
 import { WorkflowsPage } from './pages/WorkflowsPage';
 import { WorkflowDetailPage } from './pages/WorkflowDetailPage';
 import { QueueMonitorPage } from './pages/QueueMonitorPage';
+import { SitesListPage } from './pages/SitesListPage';
+import { SiteDetailPage } from './pages/SiteDetailPage';
 import { SubmitWorkflowPage } from './pages/SubmitWorkflowPage';
 
 function App() {
@@ -15,6 +17,8 @@ function App() {
           <Route path="/workflows" element={<WorkflowsPage />} />
           <Route path="/workflows/:workflowId" element={<WorkflowDetailPage />} />
           <Route path="/queues" element={<QueueMonitorPage />} />
+          <Route path="/sites" element={<SitesListPage />} />
+          <Route path="/sites/:siteName" element={<SiteDetailPage />} />
           <Route path="/submit" element={<SubmitWorkflowPage />} />
         </Routes>
       </AppShell>

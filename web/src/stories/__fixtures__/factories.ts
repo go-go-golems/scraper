@@ -8,6 +8,7 @@ import type {
   QueueStatus,
   WorkflowSummary,
   WorkflowOp,
+  SiteDetail,
   SiteSummary,
   VerbSummary,
 } from '../../api/types';
@@ -149,6 +150,23 @@ export function createSiteSummary(name: string = 'hackernews'): SiteSummary {
     databaseFileName: `${name}.db`,
     hasScripts: true,
     hasSubmitVerbs: true,
+  };
+}
+
+export function createSiteDetail(
+  name: string = 'hackernews',
+  overrides: Partial<Omit<SiteDetail, 'name'>> = {},
+): SiteDetail {
+  return {
+    name,
+    databaseFileName: `${name}.db`,
+    hasScripts: true,
+    hasSubmitVerbs: true,
+    verbCount: 2,
+    scriptCount: 3,
+    scripts: ['seed.js', 'detail.js', 'export.js'],
+    queuePolicies: [],
+    ...overrides,
   };
 }
 

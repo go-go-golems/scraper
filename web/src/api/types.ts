@@ -169,6 +169,27 @@ export interface FieldSummary {
   required: boolean;
 }
 
+export interface SiteDetail {
+  name: string;
+  databaseFileName: string;
+  hasScripts: boolean;
+  hasSubmitVerbs: boolean;
+  verbCount: number;
+  scriptCount: number;
+  scripts: string[];
+  queuePolicies: QueuePolicySummary[];
+}
+
+export interface QueuePolicySummary {
+  queue: string;
+  maxInFlight: number;
+  rateLimit?: {
+    kind: string;
+    ratePerSecond: number;
+    burst: number;
+  };
+}
+
 export interface ArtifactSummary {
   id: string;
   opID: string;

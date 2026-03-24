@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { SiteSummary, VerbSummary } from './types';
+import type { SiteDetail, SiteSummary, VerbSummary } from './types';
 
 export interface ScriptDetail {
   path: string;
@@ -26,6 +26,11 @@ export const catalogApi = createApi({
       transformResponse: (response: { scripts: string[] }) => response.scripts,
       providesTags: (_result, _error, site) => [{ type: 'Scripts', id: site }],
     }),
+    getSiteDetail: builder.query<SiteDetail, string>({
+      query: (site) => `/sites/${site}/detail`,
+      transformResponse: (response: { site: SiteDetail }) => response.site,
+      providesTags: (_result, _error, site) => [{ type: 'Sites', id: site }],
+    }),
     getScript: builder.query<ScriptDetail, { site: string; path: string }>({
       query: ({ site, path }) => `/sites/${site}/scripts/${path}`,
       transformResponse: (response: ScriptDetail) => response,
@@ -40,5 +45,6 @@ export const {
   useListSitesQuery,
   useListVerbsQuery,
   useListScriptsQuery,
+  useGetSiteDetailQuery,
   useGetScriptQuery,
 } = catalogApi;

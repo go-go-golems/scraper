@@ -100,12 +100,36 @@ export function QueueStatusTable({ queues, loading }: QueueStatusTableProps) {
                       </Typography>
                     </Box>
                   </TableCell>
-                  <TableCell align="right">{q.maxInFlight}</TableCell>
-                  <TableCell align="right">{q.tokens !== undefined ? q.tokens : '-'}</TableCell>
                   <TableCell align="right">
-                    {q.ratePerSecond !== undefined ? q.ratePerSecond : '-'}
+                    {q.maxInFlight === 1 ? (
+                      <Typography component="span" variant="body2" color="text.disabled">
+                        1 (default)
+                      </Typography>
+                    ) : (
+                      q.maxInFlight
+                    )}
                   </TableCell>
-                  <TableCell align="right">{q.burst !== undefined ? q.burst : '-'}</TableCell>
+                  <TableCell align="right">
+                    {q.tokens != null ? q.tokens : (
+                      <Typography component="span" variant="body2" color="text.disabled">
+                        none
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell align="right">
+                    {q.ratePerSecond != null ? q.ratePerSecond : (
+                      <Typography component="span" variant="body2" color="text.disabled">
+                        none
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell align="right">
+                    {q.burst != null ? q.burst : (
+                      <Typography component="span" variant="body2" color="text.disabled">
+                        none
+                      </Typography>
+                    )}
+                  </TableCell>
                 </TableRow>
               );
             })}
