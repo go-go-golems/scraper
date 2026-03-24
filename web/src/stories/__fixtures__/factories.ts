@@ -1,6 +1,7 @@
 import type {
   EngineStatus,
   OpStatus,
+  OpResult,
   WorkflowListItem,
   WorkflowStatus,
   QueueStatus,
@@ -171,5 +172,38 @@ export function createVerbSummary(overrides: { name?: string; site?: string } = 
         ],
       },
     ],
+  };
+}
+
+export function createOpResult(overrides: {
+  opId?: string;
+  data?: unknown;
+  artifacts?: { id: string; name: string; kind: string; contentType: string }[];
+  emittedIds?: string[];
+  error?: { code: string; message: string; retryable: boolean };
+} = {}): OpResult {
+  return {
+    OpID: overrides.opId ?? 'wf-001:seed',
+    Data: overrides.data ?? null,
+    Records: [],
+    Artifacts: (overrides.artifacts ?? []).map((a) => ({
+      ID: a.id,
+      Name: a.name,
+      Kind: a.kind,
+      ContentType: a.contentType,
+    })),
+    EmittedIDs: overrides.emittedIds ?? [],
+    ...(overrides.error
+      ? {
+          Error: {
+            Code: overrides.error.code,
+            Message: overrides.error.message,
+            Retryable: overrides.error.retryable,
+            Details: null,
+            OccurredAt: '2026-03-23T14:32:10Z',
+          },
+        }
+      : {}),
+    CompletedAt: '2026-03-23T14:32:05Z',
   };
 }
