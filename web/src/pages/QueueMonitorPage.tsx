@@ -1,5 +1,7 @@
-import { Box, Card, CardContent, Typography } from '@mui/material';
+import { useState, useCallback } from 'react';
+import { Box, Card, CardContent, Collapse, Typography } from '@mui/material';
 import { QueueStatusTable } from '../components/queues/QueueStatusTable';
+import { QueueDetailPanel } from '../components/queues/QueueDetailPanel';
 import { ThroughputChart } from '../components/queues/ThroughputChart';
 import { useListQueuesQuery } from '../api/queueApi';
 import type { ThroughputSeries } from '../components/queues/ThroughputChart';
@@ -26,6 +28,11 @@ export function QueueMonitorPage() {
   const { data: queues, isLoading } = useListQueuesQuery(undefined, {
     pollingInterval: 5000,
   });
+  const [expandedQueue, setExpandedQueue] = useState<string | null>(null);
+
+  const handleToggleExpand = useCallback((queueKey: string) => {
+    setExpandedQueue((prev) => (prev === queueKey ? null : queueKey));
+  }, []);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -39,6 +46,34 @@ export function QueueMonitorPage() {
             Queue Status
           </Typography>
           <QueueStatusTable queues={queues ?? []} loading={isLoading} />
+
+          {/* Expandable detail panels below the table */}
+          {(queues ?? []).map((q) => {
+            const key = `${q.site}:${q.queue}`;
+            const isExpanded = expandedQueue === key;
+            return (
+              <Box key={key}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    cursor: 'pointer',
+                    color: 'primary.main',
+                    display: 'block',
+                    mt: 0.5,
+                    '&:hover': { textDecoration: 'underline' },
+                  }}
+                  onClick={() => handleToggleExpand(key)}
+                >
+                  {isExpanded ? '▾' : '▸'} {q.queue}
+                </Typography>
+                <Collapse in={isExpanded}>
+                  <Box sx={{ mt: 1, mb: 2 }}>
+                    <QueueDetailPanel queue={q} />
+                  </Box>
+                </Collapse>
+              </Box>
+            );
+          })}
         </CardContent>
       </Card>
 

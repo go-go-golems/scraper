@@ -9,7 +9,11 @@ import type { RootState } from '../store';
 
 const sites = ['hackernews', 'slashdot', 'js-demo', 'nereval'];
 
-export function WorkflowsPage() {
+interface WorkflowsPageProps {
+  onWorkflowClick: (id: string) => void;
+}
+
+export function WorkflowsPage({ onWorkflowClick }: WorkflowsPageProps) {
   const dispatch = useDispatch();
   const { site, status } = useSelector((state: RootState) => state.ui.workflowFilters);
 
@@ -32,10 +36,6 @@ export function WorkflowsPage() {
     [dispatch],
   );
 
-  const handleWorkflowClick = useCallback((_id: string) => {
-    // Navigation to detail page will be wired in Phase 3
-  }, []);
-
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Typography variant="h6">Workflows</Typography>
@@ -53,7 +53,7 @@ export function WorkflowsPage() {
           <WorkflowTable
             workflows={data?.workflows ?? []}
             loading={isLoading}
-            onWorkflowClick={handleWorkflowClick}
+            onWorkflowClick={onWorkflowClick}
           />
         </CardContent>
       </Card>
