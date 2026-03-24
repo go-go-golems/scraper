@@ -52,3 +52,19 @@ func TestRootAPIServeHelp(t *testing.T) {
 	require.Contains(t, stdout.String(), "--engine-db")
 	require.Contains(t, stdout.String(), "--sites-dir")
 }
+
+func TestRootHelpLoadsEmbeddedHTTPAPIDoc(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"help", "scraper-http-api"})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "Scraper HTTP API")
+	require.Contains(t, stdout.String(), "/api/v1/sites/js-demo/verbs/seed:submit")
+	require.Contains(t, stdout.String(), "scraper api serve")
+}
