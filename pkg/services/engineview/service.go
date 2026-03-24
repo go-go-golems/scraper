@@ -61,6 +61,23 @@ type QueueStatus struct {
 	RatePerSec  *float64       `json:"ratePerSecond,omitempty"`
 }
 
+type ArtifactSummary struct {
+	ID          model.ArtifactID  `json:"id"`
+	OpID        model.OpID        `json:"opID"`
+	WorkflowID  model.WorkflowID  `json:"workflowID"`
+	Name        string            `json:"name"`
+	Kind        string            `json:"kind"`
+	ContentType string            `json:"contentType"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	Size        int               `json:"size"`
+	CreatedAt   time.Time         `json:"createdAt"`
+}
+
+type ArtifactDetail struct {
+	ArtifactSummary
+	Body []byte `json:"-"`
+}
+
 type Service struct {
 	engineDB string
 }
@@ -347,6 +364,146 @@ func (s *Service) ListQueues(ctx context.Context) ([]QueueStatus, error) {
 		result = append(result, *queueMap[key])
 	}
 	return result, nil
+}
+
+func (s *Service) ListArtifacts(ctx context.Context, workflowID model.WorkflowID, opID model.OpID) ([]ArtifactSummary, error) {
+	db, err := s.openReadDB()
+	if err != nil {
+		return nil, err
+	}
+	if db == nil {
+		return nil, nil
+	}
+	defer func() { _ = db.Close() }()
+
+	rows, err := db.QueryContext(ctx,
+		`SELECT id, workflow_id, op_id, name, kind, content_type, metadata_json, length(body), created_at
+		 FROM artifacts
+		 WHERE workflow_id = ? AND op_id = ?
+		 ORDER BY created_at, id`,
+		workflowID, opID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list artifacts: %w", err)
+	}
+	defer rows.Close()
+
+	var ret []ArtifactSummary
+	for rows.Next() {
+		var a ArtifactSummary
+		var metadataText string
+		var createdAt string
+		if err := rows.Scan(&a.ID, &a.WorkflowID, &a.OpID, &a.Name, &a.Kind, &a.ContentType, &metadataText, &a.Size, &createdAt); err != nil {
+			return nil, fmt.Errorf("scan artifact: %w", err)
+		}
+		_ = json.Unmarshal([]byte(metadataText), &a.Metadata)
+		a.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+		ret = append(ret, a)
+	}
+	return ret, rows.Err()
+}
+
+func (s *Service) GetArtifact(ctx context.Context, artifactID model.ArtifactID) (*ArtifactDetail, error) {
+	db, err := s.openReadDB()
+	if err != nil {
+		return nil, err
+	}
+	if db == nil {
+		return nil, nil
+	}
+	defer func() { _ = db.Close() }()
+
+	row := db.QueryRowContext(ctx,
+		`SELECT id, workflow_id, op_id, name, kind, content_type, metadata_json, body, length(body), created_at
+		 FROM artifacts
+		 WHERE id = ?`,
+		artifactID,
+	)
+	var a ArtifactDetail
+	var metadataText string
+	var createdAt string
+	if err := row.Scan(&a.ID, &a.WorkflowID, &a.OpID, &a.Name, &a.Kind, &a.ContentType, &metadataText, &a.Body, &a.Size, &createdAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get artifact: %w", err)
+	}
+	_ = json.Unmarshal([]byte(metadataText), &a.Metadata)
+	a.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+	return &a, nil
+}
+
+func (s *Service) RetryOp(ctx context.Context, workflowID model.WorkflowID, opID model.OpID) error {
+	db, err := s.openReadDB()
+	if err != nil {
+		return err
+	}
+	if db == nil {
+		return fmt.Errorf("engine db not found")
+	}
+	defer func() { _ = db.Close() }()
+
+	result, err := db.ExecContext(ctx,
+		`UPDATE ops SET status = 'ready', retry_state_json = '{}', next_attempt_at = NULL, updated_at = ?
+		 WHERE id = ? AND workflow_id = ? AND status = 'failed'`,
+		time.Now().UTC().Format(time.RFC3339Nano), opID, workflowID,
+	)
+	if err != nil {
+		return fmt.Errorf("retry op: %w", err)
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return fmt.Errorf("op %s is not in failed status", opID)
+	}
+	// Also ensure workflow is running
+	_, _ = db.ExecContext(ctx,
+		`UPDATE workflows SET status = 'running', updated_at = ? WHERE id = ? AND status IN ('failed', 'canceled')`,
+		time.Now().UTC().Format(time.RFC3339Nano), workflowID,
+	)
+	return nil
+}
+
+func (s *Service) CancelWorkflow(ctx context.Context, workflowID model.WorkflowID) error {
+	db, err := s.openReadDB()
+	if err != nil {
+		return err
+	}
+	if db == nil {
+		return fmt.Errorf("engine db not found")
+	}
+	defer func() { _ = db.Close() }()
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	// Cancel non-terminal ops
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE ops SET status = 'canceled', updated_at = ? WHERE workflow_id = ? AND status IN ('pending', 'ready', 'running')`,
+		now, workflowID,
+	); err != nil {
+		return fmt.Errorf("cancel ops: %w", err)
+	}
+	// Delete leases for canceled running ops
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM leases WHERE op_id IN (SELECT id FROM ops WHERE workflow_id = ? AND status = 'canceled')`,
+		workflowID,
+	); err != nil {
+		return fmt.Errorf("delete leases: %w", err)
+	}
+	// Set workflow status
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE workflows SET status = 'canceled', updated_at = ? WHERE id = ? AND status NOT IN ('succeeded')`,
+		now, workflowID,
+	); err != nil {
+		return fmt.Errorf("cancel workflow: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 func (s *Service) openStore(ctx context.Context) (*sqlitestore.Store, error) {

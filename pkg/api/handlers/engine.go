@@ -103,3 +103,54 @@ func (h *EngineHandler) WorkflowOps(w http.ResponseWriter, r *http.Request) {
 		Ops:        ops,
 	})
 }
+
+func (h *EngineHandler) OpArtifacts(w http.ResponseWriter, r *http.Request) {
+	workflowID := model.WorkflowID(r.PathValue("workflowID"))
+	opID := model.OpID(r.PathValue("opID"))
+	artifacts, err := h.service.ListArtifacts(r.Context(), workflowID, opID)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, apitypes.ArtifactListResponse{Artifacts: artifacts})
+}
+
+func (h *EngineHandler) ArtifactDownload(w http.ResponseWriter, r *http.Request) {
+	artifactID := model.ArtifactID(r.PathValue("artifactID"))
+	artifact, err := h.service.GetArtifact(r.Context(), artifactID)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	if artifact == nil {
+		writeError(w, http.StatusNotFound, "not_found", "artifact not found")
+		return
+	}
+	ct := artifact.ContentType
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Content-Disposition", "inline; filename=\""+artifact.Name+"\"")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(artifact.Body)
+}
+
+func (h *EngineHandler) RetryOp(w http.ResponseWriter, r *http.Request) {
+	workflowID := model.WorkflowID(r.PathValue("workflowID"))
+	opID := model.OpID(r.PathValue("opID"))
+	if err := h.service.RetryOp(r.Context(), workflowID, opID); err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "opID": opID})
+}
+
+func (h *EngineHandler) CancelWorkflow(w http.ResponseWriter, r *http.Request) {
+	workflowID := model.WorkflowID(r.PathValue("workflowID"))
+	if err := h.service.CancelWorkflow(r.Context(), workflowID); err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "workflowID": workflowID})
+}

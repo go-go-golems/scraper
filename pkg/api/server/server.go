@@ -43,7 +43,28 @@ func New(cfg Config, siteRegistry *siteregistry.Registry) *http.Server {
 	mux.HandleFunc("GET /api/v1/workflows", engineHandler.Workflows)
 	mux.HandleFunc("GET /api/v1/workflows/{workflowID}", engineHandler.Workflow)
 	mux.HandleFunc("GET /api/v1/workflows/{workflowID}/ops", engineHandler.WorkflowOps)
+	mux.HandleFunc("GET /api/v1/workflows/{workflowID}/ops/{opID}/artifacts", engineHandler.OpArtifacts)
+	mux.HandleFunc("GET /api/v1/artifacts/{artifactID}", engineHandler.ArtifactDownload)
+	mux.HandleFunc("POST /api/v1/workflows/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/v1/workflows/")
+		if strings.HasSuffix(path, ":cancel") {
+			wfID := strings.TrimSuffix(path, ":cancel")
+			r.SetPathValue("workflowID", wfID)
+			engineHandler.CancelWorkflow(w, r)
+			return
+		}
+		parts := strings.Split(path, "/")
+		if len(parts) == 3 && parts[1] == "ops" && strings.HasSuffix(parts[2], ":retry") {
+			r.SetPathValue("workflowID", parts[0])
+			r.SetPathValue("opID", strings.TrimSuffix(parts[2], ":retry"))
+			engineHandler.RetryOp(w, r)
+			return
+		}
+		http.NotFound(w, r)
+	})
 	mux.HandleFunc("GET /api/v1/queues", engineHandler.Queues)
+	mux.HandleFunc("GET /api/v1/sites/{site}/scripts", catalogHandler.Scripts)
+	mux.HandleFunc("GET /api/v1/sites/{site}/scripts/{path...}", catalogHandler.Script)
 	mux.HandleFunc("POST /api/v1/sites/", func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, ":submit") {
 			http.NotFound(w, r)

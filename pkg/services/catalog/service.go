@@ -2,7 +2,10 @@ package catalog
 
 import (
 	"fmt"
+	"io/fs"
+	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/go-go-golems/glazed/pkg/cmds"
 	"github.com/go-go-golems/glazed/pkg/cmds/fields"
@@ -195,4 +198,54 @@ func summarizeFields(defs *fields.Definitions) []FieldSummary {
 	})
 	sort.Slice(ret, func(i, j int) bool { return ret[i].Name < ret[j].Name })
 	return ret
+}
+
+func (s *Service) ListScripts(site model.SiteName) ([]string, error) {
+	_, def, err := s.GetSite(site)
+	if err != nil {
+		return nil, err
+	}
+	if def.ScriptsFS == nil || def.ScriptsRoot == "" {
+		return []string{}, nil
+	}
+
+	var scripts []string
+	scriptsFS, fErr := fs.Sub(def.ScriptsFS, def.ScriptsRoot)
+	if fErr != nil {
+		return nil, fmt.Errorf("open scripts fs: %w", fErr)
+	}
+	_ = fs.WalkDir(scriptsFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if strings.HasSuffix(path, ".js") {
+			scripts = append(scripts, path)
+		}
+		return nil
+	})
+	sort.Strings(scripts)
+	return scripts, nil
+}
+
+func (s *Service) ReadScript(site model.SiteName, scriptPath string) (string, error) {
+	_, def, err := s.GetSite(site)
+	if err != nil {
+		return "", err
+	}
+	if def.ScriptsFS == nil || def.ScriptsRoot == "" {
+		return "", &NotFoundError{Kind: "script", Name: string(site) + "/" + scriptPath}
+	}
+
+	// Prevent path traversal
+	cleaned := filepath.ToSlash(filepath.Clean(scriptPath))
+	if strings.Contains(cleaned, "..") {
+		return "", &NotFoundError{Kind: "script", Name: string(site) + "/" + scriptPath}
+	}
+
+	fullPath := filepath.ToSlash(filepath.Join(def.ScriptsRoot, cleaned))
+	body, fErr := fs.ReadFile(def.ScriptsFS, fullPath)
+	if fErr != nil {
+		return "", &NotFoundError{Kind: "script", Name: string(site) + "/" + scriptPath}
+	}
+	return string(body), nil
 }

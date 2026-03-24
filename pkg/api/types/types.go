@@ -59,6 +59,19 @@ type QueueListResponse struct {
 	Queues []engineview.QueueStatus `json:"queues"`
 }
 
+type ArtifactListResponse struct {
+	Artifacts []engineview.ArtifactSummary `json:"artifacts"`
+}
+
+type ScriptListResponse struct {
+	Scripts []string `json:"scripts"`
+}
+
+type ScriptResponse struct {
+	Path   string `json:"path"`
+	Source string `json:"source"`
+}
+
 type WorkflowResponse struct {
 	Workflow *engineview.WorkflowSummary `json:"workflow"`
 }
