@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Box, Card, CardContent, Typography } from '@mui/material';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Box, Card, CardContent, IconButton, Typography } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { WorkflowHeader } from '../components/workflows/WorkflowHeader';
 import { WorkflowProgressBar } from '../components/workflows/WorkflowProgressBar';
 import { OpTable } from '../components/workflows/OpTable';
@@ -15,36 +17,35 @@ import {
 } from '../api/workflowApi';
 import { useGetScriptQuery } from '../api/catalogApi';
 
-interface WorkflowDetailPageProps {
-  workflowId: string;
-}
-
-export function WorkflowDetailPage({ workflowId }: WorkflowDetailPageProps) {
+export function WorkflowDetailPage() {
+  const { workflowId } = useParams<{ workflowId: string }>();
+  const navigate = useNavigate();
   const [selectedOpId, setSelectedOpId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [artifactBodies, setArtifactBodies] = useState<Record<string, string>>({});
 
-  const { data: workflow, isLoading: workflowLoading } = useGetWorkflowQuery(workflowId, {
+  const { data: workflow, isLoading: workflowLoading } = useGetWorkflowQuery(workflowId!, {
+    skip: !workflowId,
     pollingInterval: 3000,
   });
 
-  const { data: ops } = useGetWorkflowOpsQuery(workflowId, {
+  const { data: ops } = useGetWorkflowOpsQuery(workflowId!, {
+    skip: !workflowId,
     pollingInterval: 3000,
   });
 
   const selectedOp = ops?.find((o) => o.op.ID === selectedOpId) ?? null;
 
   const { data: opResult } = useGetOpResultQuery(
-    { workflowId, opId: selectedOpId ?? '' },
-    { skip: !selectedOpId },
+    { workflowId: workflowId!, opId: selectedOpId ?? '' },
+    { skip: !workflowId || !selectedOpId },
   );
 
   const { data: artifacts } = useGetOpArtifactsQuery(
-    { wfId: workflowId, opId: selectedOpId ?? '' },
-    { skip: !selectedOpId },
+    { wfId: workflowId!, opId: selectedOpId ?? '' },
+    { skip: !workflowId || !selectedOpId },
   );
 
-  // Fetch script source for the selected op
   const scriptPath = selectedOp?.op.Metadata?.script;
   const siteName = selectedOp?.op.Site;
   const { data: scriptData, isLoading: scriptLoading } = useGetScriptQuery(
@@ -55,12 +56,10 @@ export function WorkflowDetailPage({ workflowId }: WorkflowDetailPageProps) {
   const [retryOp, { isLoading: retryLoading }] = useRetryOpMutation();
   const [cancelWorkflow, { isLoading: cancelLoading }] = useCancelWorkflowMutation();
 
-  // Fetch artifact bodies on demand
   useEffect(() => {
     if (!artifacts || artifacts.length === 0) return;
     for (const a of artifacts) {
       if (artifactBodies[a.id]) continue;
-      // Only fetch text-based artifacts inline
       if (
         a.contentType.startsWith('text/') ||
         a.contentType === 'application/json' ||
@@ -87,32 +86,38 @@ export function WorkflowDetailPage({ workflowId }: WorkflowDetailPageProps) {
   }, []);
 
   const handleRetryOp = useCallback(() => {
-    if (!selectedOpId) return;
+    if (!selectedOpId || !workflowId) return;
     retryOp({ wfId: workflowId, opId: selectedOpId });
   }, [workflowId, selectedOpId, retryOp]);
 
   const handleCancelWorkflow = useCallback(() => {
+    if (!workflowId) return;
     cancelWorkflow(workflowId);
   }, [workflowId, cancelWorkflow]);
 
+  if (!workflowId) {
+    return <Typography color="text.disabled">No workflow ID</Typography>;
+  }
+
   if (workflowLoading) {
-    return (
-      <Typography variant="body2" color="text.secondary">
-        Loading workflow...
-      </Typography>
-    );
+    return <Typography color="text.secondary">Loading workflow...</Typography>;
   }
 
   if (!workflow) {
-    return (
-      <Typography variant="body2" color="text.disabled">
-        Workflow not found
-      </Typography>
-    );
+    return <Typography color="text.disabled">Workflow not found</Typography>;
   }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <IconButton onClick={() => navigate('/workflows')} size="small">
+          <ArrowBackIcon />
+        </IconButton>
+        <Typography variant="body2" color="text.secondary">
+          Back to Workflows
+        </Typography>
+      </Box>
+
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
         <Box sx={{ flexGrow: 1 }}>
           <WorkflowHeader workflow={workflow} />

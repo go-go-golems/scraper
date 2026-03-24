@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { Box, Card, CardContent, Typography } from '@mui/material';
 import { WorkflowFilters } from '../components/workflows/WorkflowFilters';
 import { WorkflowTable } from '../components/workflows/WorkflowTable';
@@ -9,12 +10,9 @@ import type { RootState } from '../store';
 
 const sites = ['hackernews', 'slashdot', 'js-demo', 'nereval'];
 
-interface WorkflowsPageProps {
-  onWorkflowClick: (id: string) => void;
-}
-
-export function WorkflowsPage({ onWorkflowClick }: WorkflowsPageProps) {
+export function WorkflowsPage() {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { site, status } = useSelector((state: RootState) => state.ui.workflowFilters);
 
   const { data, isLoading } = useListWorkflowsQuery(
@@ -36,6 +34,11 @@ export function WorkflowsPage({ onWorkflowClick }: WorkflowsPageProps) {
     [dispatch],
   );
 
+  const handleWorkflowClick = useCallback(
+    (id: string) => navigate(`/workflows/${encodeURIComponent(id)}`),
+    [navigate],
+  );
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Typography variant="h6">Workflows</Typography>
@@ -53,7 +56,7 @@ export function WorkflowsPage({ onWorkflowClick }: WorkflowsPageProps) {
           <WorkflowTable
             workflows={data?.workflows ?? []}
             loading={isLoading}
-            onWorkflowClick={onWorkflowClick}
+            onWorkflowClick={handleWorkflowClick}
           />
         </CardContent>
       </Card>

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { MemoryRouter } from 'react-router-dom';
 import { AppShell } from './AppShell';
 import { Typography } from '@mui/material';
 
@@ -6,8 +7,6 @@ const meta: Meta<typeof AppShell> = {
   title: 'Layout/AppShell',
   component: AppShell,
   args: {
-    currentTab: 'overview',
-    onTabChange: () => {},
     children: <Typography sx={{ p: 4, color: 'text.secondary' }}>Page content goes here</Typography>,
   },
 };
@@ -15,16 +14,42 @@ const meta: Meta<typeof AppShell> = {
 export default meta;
 type Story = StoryObj<typeof AppShell>;
 
-export const Default: Story = {};
+export const OverviewTab: Story = {
+  decorators: [
+    (Story) => (
+      <MemoryRouter initialEntries={['/']}>
+        <Story />
+      </MemoryRouter>
+    ),
+  ],
+};
 
 export const WorkflowsTab: Story = {
-  args: { currentTab: 'workflows' },
+  decorators: [
+    (Story) => (
+      <MemoryRouter initialEntries={['/workflows']}>
+        <Story />
+      </MemoryRouter>
+    ),
+  ],
 };
 
 export const QueuesTab: Story = {
-  args: { currentTab: 'queues' },
+  decorators: [
+    (Story) => (
+      <MemoryRouter initialEntries={['/queues']}>
+        <Story />
+      </MemoryRouter>
+    ),
+  ],
 };
 
 export const SubmitTab: Story = {
-  args: { currentTab: 'submit' },
+  decorators: [
+    (Story) => (
+      <MemoryRouter initialEntries={['/submit']}>
+        <Story />
+      </MemoryRouter>
+    ),
+  ],
 };

@@ -1,15 +1,30 @@
 import { AppBar, Box, Tab, Tabs, Toolbar, Typography } from '@mui/material';
 import StorageIcon from '@mui/icons-material/Storage';
+import { useLocation, useNavigate } from 'react-router-dom';
 
-export type TabId = 'overview' | 'workflows' | 'queues' | 'submit';
+const tabRoutes = [
+  { label: 'Overview', path: '/' },
+  { label: 'Workflows', path: '/workflows' },
+  { label: 'Queues', path: '/queues' },
+  { label: 'Submit', path: '/submit' },
+] as const;
+
+function currentTabIndex(pathname: string): number {
+  if (pathname.startsWith('/workflows')) return 1;
+  if (pathname.startsWith('/queues')) return 2;
+  if (pathname.startsWith('/submit')) return 3;
+  return 0;
+}
 
 interface AppShellProps {
-  currentTab: TabId;
-  onTabChange: (tab: TabId) => void;
   children: React.ReactNode;
 }
 
-export function AppShell({ currentTab, onTabChange, children }: AppShellProps) {
+export function AppShell({ children }: AppShellProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const tabIndex = currentTabIndex(location.pathname);
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <AppBar position="static" elevation={0}>
@@ -19,15 +34,14 @@ export function AppShell({ currentTab, onTabChange, children }: AppShellProps) {
             Scraper Engine
           </Typography>
           <Tabs
-            value={currentTab}
-            onChange={(_, value) => onTabChange(value as TabId)}
+            value={tabIndex}
+            onChange={(_, value) => navigate(tabRoutes[value].path)}
             textColor="inherit"
             indicatorColor="secondary"
           >
-            <Tab label="Overview" value="overview" />
-            <Tab label="Workflows" value="workflows" />
-            <Tab label="Queues" value="queues" />
-            <Tab label="Submit" value="submit" />
+            {tabRoutes.map((t) => (
+              <Tab key={t.path} label={t.label} />
+            ))}
           </Tabs>
         </Toolbar>
       </AppBar>

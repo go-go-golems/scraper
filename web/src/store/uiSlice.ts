@@ -1,8 +1,6 @@
 import { createSlice } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
 
-export type TabId = 'overview' | 'workflows' | 'queues' | 'submit';
-
 interface RecentSubmission {
   timestamp: string;
   site: string;
@@ -11,13 +9,10 @@ interface RecentSubmission {
 }
 
 interface UiState {
-  currentTab: TabId;
   workflowFilters: {
     site: string;
     status: string;
   };
-  selectedOpId: string | null;
-  opDrawerOpen: boolean;
   submitForm: {
     selectedSite: string | null;
     selectedVerb: string | null;
@@ -27,10 +22,7 @@ interface UiState {
 }
 
 const initialState: UiState = {
-  currentTab: 'overview',
   workflowFilters: { site: '', status: '' },
-  selectedOpId: null,
-  opDrawerOpen: false,
   submitForm: { selectedSite: null, selectedVerb: null, fieldValues: {} },
   recentSubmissions: [],
 };
@@ -39,19 +31,9 @@ export const uiSlice = createSlice({
   name: 'ui',
   initialState,
   reducers: {
-    setTab: (state, action: PayloadAction<TabId>) => {
-      state.currentTab = action.payload;
-    },
     setWorkflowFilters: (state, action: PayloadAction<{ site?: string; status?: string }>) => {
       if (action.payload.site !== undefined) state.workflowFilters.site = action.payload.site;
       if (action.payload.status !== undefined) state.workflowFilters.status = action.payload.status;
-    },
-    selectOp: (state, action: PayloadAction<string | null>) => {
-      state.selectedOpId = action.payload;
-      state.opDrawerOpen = action.payload !== null;
-    },
-    closeOpDrawer: (state) => {
-      state.opDrawerOpen = false;
     },
     setSelectedSite: (state, action: PayloadAction<string | null>) => {
       state.submitForm.selectedSite = action.payload;
@@ -73,10 +55,7 @@ export const uiSlice = createSlice({
 });
 
 export const {
-  setTab,
   setWorkflowFilters,
-  selectOp,
-  closeOpDrawer,
   setSelectedSite,
   setSelectedVerb,
   setFieldValue,
