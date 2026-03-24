@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	apitypes "github.com/go-go-golems/scraper/pkg/api/types"
 	"github.com/go-go-golems/scraper/pkg/engine/model"
@@ -54,6 +55,36 @@ func (h *EngineHandler) Workflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, apitypes.WorkflowResponse{Workflow: workflow})
+}
+
+func (h *EngineHandler) Workflows(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	opts := engineview.ListWorkflowsOptions{
+		Site:   model.SiteName(q.Get("site")),
+		Status: model.WorkflowStatus(q.Get("status")),
+		Limit:  limit,
+		Offset: offset,
+	}
+	result, err := h.service.ListWorkflows(r.Context(), opts)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, apitypes.WorkflowListResponse{
+		Workflows: result.Workflows,
+		Total:     result.Total,
+	})
+}
+
+func (h *EngineHandler) Queues(w http.ResponseWriter, r *http.Request) {
+	queues, err := h.service.ListQueues(r.Context())
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, apitypes.QueueListResponse{Queues: queues})
 }
 
 func (h *EngineHandler) WorkflowOps(w http.ResponseWriter, r *http.Request) {

@@ -50,6 +50,15 @@ type EngineStatusResponse struct {
 	Status *sqlite.EngineStatus `json:"status"`
 }
 
+type WorkflowListResponse struct {
+	Workflows []engineview.WorkflowListItem `json:"workflows"`
+	Total     int                           `json:"total"`
+}
+
+type QueueListResponse struct {
+	Queues []engineview.QueueStatus `json:"queues"`
+}
+
 type WorkflowResponse struct {
 	Workflow *engineview.WorkflowSummary `json:"workflow"`
 }

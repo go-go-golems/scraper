@@ -40,8 +40,10 @@ func New(cfg Config, siteRegistry *siteregistry.Registry) *http.Server {
 	mux.HandleFunc("GET /api/v1/sites/{site}/verbs/{verb}", catalogHandler.Verb)
 	mux.HandleFunc("GET /api/v1/engine/status", engineHandler.Status)
 	mux.HandleFunc("GET /api/v1/engine/migrations", engineHandler.Migrations)
+	mux.HandleFunc("GET /api/v1/workflows", engineHandler.Workflows)
 	mux.HandleFunc("GET /api/v1/workflows/{workflowID}", engineHandler.Workflow)
 	mux.HandleFunc("GET /api/v1/workflows/{workflowID}/ops", engineHandler.WorkflowOps)
+	mux.HandleFunc("GET /api/v1/queues", engineHandler.Queues)
 	mux.HandleFunc("POST /api/v1/sites/", func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, ":submit") {
 			http.NotFound(w, r)

@@ -28,6 +28,39 @@ type WorkflowOp struct {
 	Lease         *model.Lease   `json:"lease,omitempty"`
 }
 
+type ListWorkflowsOptions struct {
+	Site   model.SiteName
+	Status model.WorkflowStatus
+	Limit  int
+	Offset int
+}
+
+type WorkflowListItem struct {
+	Workflow model.WorkflowRun `json:"workflow"`
+	OpTotal int               `json:"opTotal"`
+	OpDone  int               `json:"opDone"`
+}
+
+type WorkflowListResult struct {
+	Workflows []WorkflowListItem `json:"workflows"`
+	Total     int                `json:"total"`
+}
+
+type QueueStatus struct {
+	Site        model.SiteName `json:"site"`
+	Queue       model.QueueKey `json:"queue"`
+	Pending     int            `json:"pending"`
+	Ready       int            `json:"ready"`
+	Running     int            `json:"running"`
+	Succeeded   int            `json:"succeeded"`
+	Failed      int            `json:"failed"`
+	InFlight    int            `json:"inFlight"`
+	MaxInFlight int            `json:"maxInFlight"`
+	Tokens      *float64       `json:"tokens,omitempty"`
+	Burst       *int           `json:"burst,omitempty"`
+	RatePerSec  *float64       `json:"ratePerSecond,omitempty"`
+}
+
 type Service struct {
 	engineDB string
 }
@@ -157,6 +190,163 @@ func (s *Service) WorkflowOps(ctx context.Context, workflowID model.WorkflowID) 
 		return nil, err
 	}
 	return ret, nil
+}
+
+func (s *Service) ListWorkflows(ctx context.Context, opts ListWorkflowsOptions) (*WorkflowListResult, error) {
+	db, err := s.openReadDB()
+	if err != nil {
+		return nil, err
+	}
+	if db == nil {
+		return &WorkflowListResult{}, nil
+	}
+	defer func() { _ = db.Close() }()
+
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	offset := opts.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	where := "1=1"
+	args := []any{}
+	if opts.Site != "" {
+		where += " AND w.site = ?"
+		args = append(args, string(opts.Site))
+	}
+	if opts.Status != "" {
+		where += " AND w.status = ?"
+		args = append(args, string(opts.Status))
+	}
+
+	countQuery := "SELECT COUNT(1) FROM workflows w WHERE " + where
+	var total int
+	if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("count workflows: %w", err)
+	}
+
+	query := `SELECT w.id, w.site, w.name, w.status, w.input_json, w.metadata_json, w.created_at, w.updated_at,
+		COALESCE((SELECT COUNT(1) FROM ops o WHERE o.workflow_id = w.id), 0),
+		COALESCE((SELECT COUNT(1) FROM ops o WHERE o.workflow_id = w.id AND o.status IN ('succeeded','failed','canceled')), 0)
+		FROM workflows w
+		WHERE ` + where + `
+		ORDER BY w.created_at DESC
+		LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list workflows: %w", err)
+	}
+	defer rows.Close()
+
+	result := &WorkflowListResult{Total: total, Workflows: []WorkflowListItem{}}
+	for rows.Next() {
+		var item WorkflowListItem
+		var inputText, metadataText, createdAt, updatedAt string
+		if err := rows.Scan(
+			&item.Workflow.ID, &item.Workflow.Site, &item.Workflow.Name, &item.Workflow.Status,
+			&inputText, &metadataText, &createdAt, &updatedAt,
+			&item.OpTotal, &item.OpDone,
+		); err != nil {
+			return nil, fmt.Errorf("scan workflow: %w", err)
+		}
+		item.Workflow.Input = json.RawMessage(inputText)
+		_ = json.Unmarshal([]byte(metadataText), &item.Workflow.Metadata)
+		item.Workflow.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+		item.Workflow.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updatedAt)
+		result.Workflows = append(result.Workflows, item)
+	}
+	return result, rows.Err()
+}
+
+func (s *Service) ListQueues(ctx context.Context) ([]QueueStatus, error) {
+	db, err := s.openReadDB()
+	if err != nil {
+		return nil, err
+	}
+	if db == nil {
+		return []QueueStatus{}, nil
+	}
+	defer func() { _ = db.Close() }()
+
+	query := `SELECT o.site, o.queue_key, o.status, COUNT(1)
+		FROM ops o
+		GROUP BY o.site, o.queue_key, o.status
+		ORDER BY o.site, o.queue_key, o.status`
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list queue op counts: %w", err)
+	}
+	defer rows.Close()
+
+	type queueKey struct {
+		site  model.SiteName
+		queue model.QueueKey
+	}
+	queueMap := map[queueKey]*QueueStatus{}
+	var order []queueKey
+	for rows.Next() {
+		var site model.SiteName
+		var queue model.QueueKey
+		var status model.OpStatus
+		var count int
+		if err := rows.Scan(&site, &queue, &status, &count); err != nil {
+			return nil, fmt.Errorf("scan queue status: %w", err)
+		}
+		key := queueKey{site, queue}
+		qs, ok := queueMap[key]
+		if !ok {
+			qs = &QueueStatus{Site: site, Queue: queue, MaxInFlight: 1}
+			queueMap[key] = qs
+			order = append(order, key)
+		}
+		switch status {
+		case model.OpStatusPending:
+			qs.Pending = count
+		case model.OpStatusReady:
+			qs.Ready = count
+		case model.OpStatusRunning:
+			qs.Running = count
+			qs.InFlight = count
+		case model.OpStatusSucceeded:
+			qs.Succeeded = count
+		case model.OpStatusFailed:
+			qs.Failed = count
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Load token bucket state
+	tokenRows, err := db.QueryContext(ctx, `SELECT site, queue_key, tokens FROM queue_limit_state`)
+	if err == nil {
+		defer tokenRows.Close()
+		for tokenRows.Next() {
+			var site model.SiteName
+			var queue model.QueueKey
+			var tokens float64
+			if err := tokenRows.Scan(&site, &queue, &tokens); err == nil {
+				key := queueKey{site, queue}
+				if qs, ok := queueMap[key]; ok {
+					qs.Tokens = &tokens
+				}
+			}
+		}
+	}
+
+	result := make([]QueueStatus, 0, len(order))
+	for _, key := range order {
+		result = append(result, *queueMap[key])
+	}
+	return result, nil
 }
 
 func (s *Service) openStore(ctx context.Context) (*sqlitestore.Store, error) {
