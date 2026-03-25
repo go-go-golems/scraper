@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Badge,
   Box,
@@ -9,6 +9,7 @@ import {
   List,
   ListItem,
   ListItemText,
+  Stack,
   Tab,
   Tabs,
   Typography,
@@ -16,6 +17,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import CodeIcon from '@mui/icons-material/Code';
 import HttpIcon from '@mui/icons-material/Http';
+import CircleIcon from '@mui/icons-material/Circle';
 import type { WorkflowOp, OpResult, ArtifactSummary } from '../../api/types';
 import { StatusChip } from '../common/StatusChip';
 import { JsonViewer } from '../common/JsonViewer';
@@ -24,6 +26,8 @@ import { ArtifactPreview } from '../artifacts/ArtifactPreview';
 import { OpExecutionLog } from '../logs/OpExecutionLog';
 import { ScriptTab } from '../scripts/ScriptTab';
 import { RetryOpButton } from './RetryOpButton';
+import { RuntimeEventList } from './RuntimeEventList';
+import { useRuntimeEventFeed, type RuntimeEventConnectionState } from '../../features/runtime-events/runtimeEventFeed';
 
 interface OpDetailDrawerProps {
   op: WorkflowOp | null;
@@ -40,7 +44,7 @@ interface OpDetailDrawerProps {
   retryLoading?: boolean;
 }
 
-type TabId = 'input' | 'deps' | 'result' | 'artifacts' | 'script' | 'logs';
+type TabId = 'input' | 'deps' | 'result' | 'artifacts' | 'runtime' | 'script' | 'logs';
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -54,6 +58,19 @@ function KindIcon({ kind }: { kind: string }) {
   if (kind === 'js') return <CodeIcon fontSize="small" sx={{ mr: 0.5 }} />;
   if (kind === 'http' || kind === 'http/fetch') return <HttpIcon fontSize="small" sx={{ mr: 0.5 }} />;
   return null;
+}
+
+function connectionColor(state: RuntimeEventConnectionState): 'disabled' | 'success' | 'warning' | 'error' {
+  switch (state) {
+    case 'live':
+      return 'success';
+    case 'connecting':
+      return 'warning';
+    case 'error':
+      return 'error';
+    default:
+      return 'disabled';
+  }
 }
 
 export function OpDetailDrawer({
@@ -72,14 +89,33 @@ export function OpDetailDrawer({
 }: OpDetailDrawerProps) {
   const [activeTab, setActiveTab] = useState<TabId>('input');
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
+  const selectedSpec = op?.op;
+  const runtimeTabActive = open && activeTab === 'runtime' && Boolean(selectedSpec);
+  const {
+    events: opRuntimeEvents,
+    isLoadingHistory: opRuntimeEventsLoading,
+    connectionState: runtimeConnectionState,
+  } = useRuntimeEventFeed({
+    serverFilters: {
+      workflowId: selectedSpec?.WorkflowID,
+      opId: selectedSpec?.ID,
+      limit: 40,
+    },
+    stream: runtimeTabActive,
+  });
 
   const handleTabChange = useCallback((_: unknown, value: TabId) => {
     setActiveTab(value);
   }, []);
 
-  if (!op) return null;
+  useEffect(() => {
+    setSelectedArtifactId(null);
+    setActiveTab('input');
+  }, [op?.op.ID]);
 
-  const { op: spec } = op;
+  if (!op || !selectedSpec) return null;
+
+  const spec = selectedSpec;
   const safeArtifacts = artifacts ?? [];
   const logArtifact = safeArtifacts.find((a) => a.kind === 'execution-log');
   const nonLogArtifacts = safeArtifacts.filter((a) => a.kind !== 'execution-log');
@@ -159,6 +195,18 @@ export function OpDetailDrawer({
               </Badge>
             }
             value="artifacts"
+            sx={{ minHeight: 36, py: 0 }}
+          />
+          <Tab
+            label={
+              <Badge badgeContent={opRuntimeEvents.length} color="primary" max={99}>
+                <Box sx={{ pr: opRuntimeEvents.length > 0 ? 1.5 : 0, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  Runtime
+                  <CircleIcon sx={{ fontSize: 9, color: `${connectionColor(runtimeConnectionState)}.main` }} />
+                </Box>
+              </Badge>
+            }
+            value="runtime"
             sx={{ minHeight: 36, py: 0 }}
           />
           {spec.Metadata?.script && (
@@ -288,6 +336,20 @@ export function OpDetailDrawer({
                 )}
               </>
             )}
+          </>
+        )}
+
+        {activeTab === 'runtime' && (
+          <>
+            <Stack direction="row" spacing={1} sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
+              <Chip label={`Stream: ${runtimeConnectionState}`} size="small" variant="outlined" />
+              <Chip label={`${opRuntimeEvents.length} events`} size="small" variant="outlined" />
+            </Stack>
+            <RuntimeEventList
+              events={opRuntimeEvents}
+              loading={opRuntimeEventsLoading}
+              emptyMessage="No runtime events for this op yet."
+            />
           </>
         )}
 
