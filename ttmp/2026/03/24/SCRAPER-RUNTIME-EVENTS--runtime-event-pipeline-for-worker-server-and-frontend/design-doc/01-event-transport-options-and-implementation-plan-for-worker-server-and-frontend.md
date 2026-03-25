@@ -24,6 +24,10 @@ RelatedFiles:
       Note: Existing scheduler event seam and observer contract
     - Path: pkg/runtimeevents/codec.go
       Note: Binary and protojson helpers built on the generated event type
+    - Path: pkg/runtimeevents/scheduler.go
+      Note: Pure adapter from scheduler.Event to generated RuntimeEventV1 messages
+    - Path: pkg/runtimeevents/scheduler_test.go
+      Note: Validation of failure and idle scheduler event mapping
     - Path: pkg/runtimeevents/watermill.go
       Note: Topic
     - Path: pkg/runtimeevents/watermill_test.go
@@ -42,6 +46,7 @@ LastUpdated: 2026-03-24T20:16:15-04:00
 WhatFor: Guide the decision and implementation of a runtime event pipeline that can carry scheduler events, logs, and other live operational data from workers and servers to the frontend using Watermill and protobuf-generated Go/TS types.
 WhenToUse: Use when implementing the Watermill-based runtime event pipeline, when wiring protobuf schema generation for Go and TS, or when extending dashboard-facing real-time event handling.
 ---
+
 
 
 

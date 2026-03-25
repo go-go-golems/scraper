@@ -24,6 +24,10 @@ RelatedFiles:
       Note: Primary evidence for current event types and observer behavior
     - Path: pkg/runtimeevents/codec_test.go
       Note: Round-trip validation for binary and protojson event encoding
+    - Path: pkg/runtimeevents/scheduler.go
+      Note: Main implementation artifact for the scheduler mapping slice
+    - Path: pkg/runtimeevents/scheduler_test.go
+      Note: Tests that lock the scheduler-to-runtime-event translation behavior
     - Path: pkg/runtimeevents/watermill.go
       Note: Main implementation artifact for the Watermill wrapper slice
     - Path: pkg/runtimeevents/watermill_test.go
@@ -35,11 +39,12 @@ RelatedFiles:
     - Path: web/package.json
       Note: Shows the added protobuf runtime dependency in the frontend
 ExternalSources: []
-Summary: Chronological diary of the research and documentation work for the runtime-events ticket, including the current architecture evidence, the Watermill decision, the protobuf schema decision, and the first two implementation slices.
+Summary: Chronological diary of the research and documentation work for the runtime-events ticket, including the current architecture evidence, the Watermill decision, the protobuf schema decision, and the first three implementation slices.
 LastUpdated: 2026-03-24T20:51:19-04:00
-WhatFor: Record how the runtime-event architecture was inspected, which alternatives were compared, what failed during investigation, and why the ticket recommendation, Watermill decision, protobuf schema decision, and first two implementation slices were chosen.
+WhatFor: Record how the runtime-event architecture was inspected, which alternatives were compared, what failed during investigation, and why the ticket recommendation, Watermill decision, protobuf schema decision, and first three implementation slices were chosen.
 WhenToUse: Use when reviewing the reasoning behind the runtime-events ticket, resuming the work later, or validating that the proposed direction still matches the codebase.
 ---
+
 
 
 
@@ -569,6 +574,87 @@ git commit -m "Add Watermill runtime event wrapper"
 - Internal Watermill payload format: protobuf binary
 - HTTP/SSE format: `protojson`
 - Local transport backend: Watermill GoChannel
+
+## Step 7: Add the scheduler-to-runtime-event adapter
+
+With schema generation, codecs, and the first Watermill wrapper in place, the next missing seam was straightforward: the scheduler already emits domain-relevant events, but nothing translated them into the shared runtime event contract. I added that adapter as a pure mapping layer first. That keeps the worker wiring task small later because it becomes "publish mapped events" instead of "invent the mapping and the publish path at the same time."
+
+This slice intentionally stopped short of changing `pkg/cmd/worker.go`. The goal was to land the translation logic with tests before introducing transport setup and observer plumbing into the long-running worker command.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 5)
+
+**Assistant interpretation:** Continue moving through the task list in small validated slices, committing once each slice reaches a defensible checkpoint.
+
+**Inferred user intent:** The user wants the runtime event system built incrementally, with each new abstraction validated before it is wired into the process entrypoints.
+
+**Commit (code):** `a217cbf47847e30f634fa2a142e414ed82f417ef` — "Map scheduler events to runtime events"
+
+### What I did
+
+- added `pkg/runtimeevents/scheduler.go`
+- mapped scheduler event kinds to generated runtime event kinds
+- mapped scheduler severity heuristically from event type
+- copied scheduler identifiers and timestamps into the generated event message
+- extracted structured payload details for attempts, workflow status, and op errors
+- added `pkg/runtimeevents/scheduler_test.go`
+
+Commands used:
+
+```bash
+gofmt -w pkg/runtimeevents/scheduler.go pkg/runtimeevents/scheduler_test.go
+go test ./pkg/runtimeevents -count=1
+go test ./... -count=1
+git commit -m "Map scheduler events to runtime events"
+```
+
+### Why
+
+- The worker and server cannot share scheduler-originated events until those events have a canonical translation into `RuntimeEventV1`.
+- Keeping the adapter pure makes it easier to test than embedding the mapping directly in command or transport code.
+
+### What worked
+
+- The mapping stayed small and predictable.
+- The payload extraction covered the most important scheduler-specific details without forcing more fields into the top-level proto yet.
+- `go test ./pkg/runtimeevents -count=1` and `go test ./... -count=1` both passed.
+
+### What didn't work
+
+- N/A in this step. The adapter landed without toolchain or runtime issues.
+
+### What I learned
+
+- The current proto shape is already good enough to represent scheduler events without another schema revision.
+- Keeping attempts and error details in structured payload data is a reasonable short-term compromise while the overall event taxonomy is still settling.
+
+### What was tricky to build
+
+- The main judgment call was how much scheduler-specific detail to flatten into top-level fields. I kept the top-level message stable and put the extra scheduler-only details into the structured payload for now.
+
+### What warrants a second pair of eyes
+
+- Whether the `workflowStatus` and `attempt` fields deserve promotion out of payload into explicit top-level proto fields later.
+- Whether `idle` should stay `DEBUG` severity or be treated as `INFO` for operator-facing timelines.
+
+### What should be done in the future
+
+- Wire `pkg/cmd/worker.go` to build a scheduler observer that publishes these mapped events.
+- Add submission-side and request-side adapters next so the server and worker event shapes stay aligned.
+
+### Code review instructions
+
+- Read `pkg/runtimeevents/scheduler.go`.
+- Then read `pkg/runtimeevents/scheduler_test.go`.
+- Cross-check the mapping against `pkg/engine/scheduler/scheduler.go`.
+- Validate with `go test ./pkg/runtimeevents -count=1` and `go test ./... -count=1`.
+
+### Technical details
+
+- Scheduler source enum: `RUNTIME_EVENT_SOURCE_SCHEDULER`
+- Idle severity mapping: `DEBUG`
+- Failure severity mapping: `ERROR`
 
 ## Quick Reference
 

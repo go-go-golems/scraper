@@ -34,7 +34,7 @@
 ## Phase 3: Worker and Submission Emission
 
 - [ ] Add worker-side event emission from the scheduler observer
-- [ ] Map scheduler events into generated `RuntimeEventV1` messages
+- [x] Map scheduler events into generated `RuntimeEventV1` messages
 - [ ] Add runner/log event emission surfaces where worthwhile
 - [ ] Add server-side event emission for submission lifecycle visibility
 - [ ] Stop dropping submission-time workflow events on the `observer == nil` path

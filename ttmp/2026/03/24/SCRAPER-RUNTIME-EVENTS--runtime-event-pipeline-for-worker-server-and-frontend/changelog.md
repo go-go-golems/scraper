@@ -23,3 +23,8 @@
   - standardized topic and message metadata conventions
   - added `pkg/runtimeevents/watermill.go`
   - added a GoChannel-backed integration test for publish/subscribe round-trips
+- Implemented the scheduler-to-runtime-event adapter in commit `a217cbf47847e30f634fa2a142e414ed82f417ef`:
+  - added `pkg/runtimeevents/scheduler.go`
+  - mapped scheduler event kinds and severity into `RuntimeEventV1`
+  - added scheduler payload extraction for attempt, workflow status, and error details
+  - added tests covering failure and idle event mapping
