@@ -6,6 +6,7 @@ const tabRoutes = [
   { label: 'Overview', path: '/' },
   { label: 'Workflows', path: '/workflows' },
   { label: 'Queues', path: '/queues' },
+  { label: 'Events', path: '/events' },
   { label: 'Sites', path: '/sites' },
   { label: 'Submit', path: '/submit' },
 ] as const;
@@ -13,8 +14,9 @@ const tabRoutes = [
 function currentTabIndex(pathname: string): number {
   if (pathname.startsWith('/workflows')) return 1;
   if (pathname.startsWith('/queues')) return 2;
-  if (pathname.startsWith('/sites')) return 3;
-  if (pathname.startsWith('/submit')) return 4;
+  if (pathname.startsWith('/events')) return 3;
+  if (pathname.startsWith('/sites')) return 4;
+  if (pathname.startsWith('/submit')) return 5;
   return 0;
 }
 

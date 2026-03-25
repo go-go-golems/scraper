@@ -17,23 +17,7 @@ import {
   useCancelWorkflowMutation,
 } from '../api/workflowApi';
 import { useGetScriptQuery } from '../api/catalogApi';
-import { useGetRecentRuntimeEventsQuery, decodeRuntimeEvent } from '../api/runtimeEventsApi';
-import type { RuntimeEventV1 } from '../pb/proto/scraper/runtime/v1/events_pb';
-
-function mergeRuntimeEvents(current: RuntimeEventV1[], incoming: RuntimeEventV1[]): RuntimeEventV1[] {
-  const byId = new Map<string, RuntimeEventV1>();
-  for (const event of current) {
-    byId.set(event.id, event);
-  }
-  for (const event of incoming) {
-    byId.set(event.id, event);
-  }
-  return Array.from(byId.values()).sort((left, right) => {
-    const leftMillis = Number(left.occurredAt?.seconds ?? 0n) * 1000 + Math.floor((left.occurredAt?.nanos ?? 0) / 1_000_000);
-    const rightMillis = Number(right.occurredAt?.seconds ?? 0n) * 1000 + Math.floor((right.occurredAt?.nanos ?? 0) / 1_000_000);
-    return rightMillis - leftMillis;
-  });
-}
+import { useRuntimeEventFeed } from '../features/runtime-events/runtimeEventFeed';
 
 export function WorkflowDetailPage() {
   const { workflowId } = useParams<{ workflowId: string }>();
@@ -41,7 +25,6 @@ export function WorkflowDetailPage() {
   const [selectedOpId, setSelectedOpId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [artifactBodies, setArtifactBodies] = useState<Record<string, string>>({});
-  const [runtimeEvents, setRuntimeEvents] = useState<RuntimeEventV1[]>([]);
 
   const { data: workflow, isLoading: workflowLoading } = useGetWorkflowQuery(workflowId!, {
     skip: !workflowId,
@@ -71,10 +54,10 @@ export function WorkflowDetailPage() {
     { site: siteName ?? '', path: scriptPath ?? '' },
     { skip: !siteName || !scriptPath },
   );
-  const { data: recentRuntimeEvents = [], isLoading: runtimeEventsLoading } = useGetRecentRuntimeEventsQuery(
-    { workflowId, limit: 50 },
-    { skip: !workflowId },
-  );
+  const { events: runtimeEvents, isLoadingHistory: runtimeEventsLoading } = useRuntimeEventFeed({
+    serverFilters: { workflowId, limit: 50 },
+    stream: Boolean(workflowId),
+  });
 
   const [retryOp, { isLoading: retryLoading }] = useRetryOpMutation();
   const [cancelWorkflow, { isLoading: cancelLoading }] = useCancelWorkflowMutation();
@@ -97,30 +80,6 @@ export function WorkflowDetailPage() {
       }
     }
   }, [artifacts, artifactBodies]);
-
-  useEffect(() => {
-    setRuntimeEvents(recentRuntimeEvents);
-  }, [recentRuntimeEvents]);
-
-  useEffect(() => {
-    if (!workflowId) return undefined;
-
-    const eventSource = new EventSource(`/api/v1/runtime-events/stream?workflowId=${encodeURIComponent(workflowId)}`);
-    const onMessage = (event: MessageEvent<string>) => {
-      try {
-        const decoded = decodeRuntimeEvent(JSON.parse(event.data));
-        setRuntimeEvents((current) => mergeRuntimeEvents(current, [decoded]));
-      } catch {
-        // ignore malformed event payloads
-      }
-    };
-
-    eventSource.addEventListener('runtime-event', onMessage as EventListener);
-    return () => {
-      eventSource.removeEventListener('runtime-event', onMessage as EventListener);
-      eventSource.close();
-    };
-  }, [workflowId]);
 
   const handleSelectOp = useCallback((id: string) => {
     setSelectedOpId(id);

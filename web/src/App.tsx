@@ -7,6 +7,7 @@ import { QueueMonitorPage } from './pages/QueueMonitorPage';
 import { SitesListPage } from './pages/SitesListPage';
 import { SiteDetailPage } from './pages/SiteDetailPage';
 import { SubmitWorkflowPage } from './pages/SubmitWorkflowPage';
+import { RuntimeEventsPage } from './pages/RuntimeEventsPage';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
           <Route path="/workflows" element={<WorkflowsPage />} />
           <Route path="/workflows/:workflowId" element={<WorkflowDetailPage />} />
           <Route path="/queues" element={<QueueMonitorPage />} />
+          <Route path="/events" element={<RuntimeEventsPage />} />
           <Route path="/sites" element={<SitesListPage />} />
           <Route path="/sites/:siteName" element={<SiteDetailPage />} />
           <Route path="/submit" element={<SubmitWorkflowPage />} />

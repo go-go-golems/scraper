@@ -5,6 +5,8 @@ import { RuntimeEventSeverity, RuntimeEventSource } from '../../pb/proto/scraper
 interface RuntimeEventListProps {
   events: RuntimeEventV1[];
   loading?: boolean;
+  emptyMessage?: string;
+  onWorkflowClick?: (workflowId: string) => void;
 }
 
 function formatTimestamp(event: RuntimeEventV1): string {
@@ -43,13 +45,18 @@ function payloadSummary(event: RuntimeEventV1): string | null {
   return null;
 }
 
-export function RuntimeEventList({ events, loading = false }: RuntimeEventListProps) {
+export function RuntimeEventList({
+  events,
+  loading = false,
+  emptyMessage = 'No runtime events yet.',
+  onWorkflowClick,
+}: RuntimeEventListProps) {
   if (loading && events.length === 0) {
     return <Typography color="text.secondary">Loading runtime events...</Typography>;
   }
 
   if (events.length === 0) {
-    return <Typography color="text.secondary">No runtime events yet.</Typography>;
+    return <Typography color="text.secondary">{emptyMessage}</Typography>;
   }
 
   return (
@@ -76,6 +83,20 @@ export function RuntimeEventList({ events, loading = false }: RuntimeEventListPr
                     {event.opId && (
                       <Typography variant="caption" color="text.secondary">
                         Op: {event.opId}
+                      </Typography>
+                    )}
+                    {event.workflowId && (
+                      <Chip
+                        label={`Workflow: ${event.workflowId}`}
+                        size="small"
+                        variant="outlined"
+                        onClick={onWorkflowClick ? () => onWorkflowClick(event.workflowId) : undefined}
+                        clickable={Boolean(onWorkflowClick)}
+                      />
+                    )}
+                    {event.site && (
+                      <Typography variant="caption" color="text.secondary">
+                        Site: {event.site}
                       </Typography>
                     )}
                     {event.workerId && (

@@ -7,7 +7,7 @@ interface RuntimeEventsResponse {
   events: JsonValue[];
 }
 
-interface RuntimeEventsParams {
+export interface RuntimeEventsParams {
   workflowId?: string;
   opId?: string;
   site?: string;
