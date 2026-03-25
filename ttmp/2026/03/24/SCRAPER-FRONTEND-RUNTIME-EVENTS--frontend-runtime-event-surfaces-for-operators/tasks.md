@@ -25,9 +25,9 @@
 
 ## Phase 3: Workflow and Op Context Views
 
-- [ ] Refactor `WorkflowDetailPage` to consume the shared runtime event feed abstractions
-- [ ] Add an op-scoped runtime event tab in `OpDetailDrawer`
-- [ ] Add richer payload rendering for retry, error, and artifact-summary payloads
+- [x] Refactor `WorkflowDetailPage` to consume the shared runtime event feed abstractions
+- [x] Add an op-scoped runtime event tab in `OpDetailDrawer`
+- [x] Add richer payload rendering for retry, error, and artifact-summary payloads
 - [ ] Decide default visibility rules for `DEBUG` events in workflow-local views
 
 ## Phase 4: Submit Flow Live Progress

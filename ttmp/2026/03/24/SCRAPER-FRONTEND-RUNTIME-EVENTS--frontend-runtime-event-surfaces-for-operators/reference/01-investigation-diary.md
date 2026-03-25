@@ -18,7 +18,7 @@ RelatedFiles:
       Note: Backend route and SSE bootstrap used to validate the frontend assumptions
 ExternalSources: []
 Summary: Chronological research log for the frontend runtime event follow-up ticket.
-LastUpdated: 2026-03-24T23:19:54-04:00
+LastUpdated: 2026-03-24T23:26:18-04:00
 WhatFor: Preserve the reasoning, commands, evidence, and writing decisions used to produce the frontend runtime event implementation guide.
 WhenToUse: Use when continuing this ticket or reviewing why the guide recommends its current phased frontend plan.
 ---
@@ -270,6 +270,124 @@ Verification results:
 - `SubmitWorkflowPage` still needs post-submit live progress.
 - overview and queue pages still need event-derived widgets.
 - reconnect/stale-state UX still needs hardening beyond the initial `connecting/live/error/closed` state model.
+
+## Step 3: Add the op-scoped runtime tab and richer event payload rendering
+
+The next requested step was to keep going, committing at appropriate intervals and keeping the diary current. I treated that as authorization to continue with the next concrete slice in the ticket: use the shared runtime-event feed inside the op drawer, then make the list renderer more informative for actual runtime-event payloads emitted by the backend.
+
+### What I inspected before changing code
+
+I first verified what the drawer looked like today and what payload keys actually exist in emitted runtime events. That avoided building UI around guessed fields.
+
+Files inspected:
+
+- `web/src/components/workflows/OpDetailDrawer.tsx`
+- `web/src/components/workflows/RuntimeEventList.tsx`
+- `proto/scraper/runtime/v1/events.proto`
+- `pkg/runtimeevents/scheduler.go`
+- `pkg/runtimeevents/runner.go`
+- `pkg/services/submission/service.go`
+- `pkg/api/server/server.go`
+
+The key payload facts were:
+
+- scheduler events can emit:
+  - `attempt`
+  - `workflowStatus`
+  - `errorCode`
+  - `errorMessage`
+  - `retryable`
+- runner events can emit:
+  - `runnerKind`
+  - `durationMillis`
+  - `emittedCount`
+  - `artifactCount`
+  - `recordWriteCount`
+  - `artifactSummaries`
+  - `error`
+  - `errorCode`
+  - `retryable`
+- request events can emit:
+  - `method`
+  - `path`
+  - `statusCode`
+  - `durationMillis`
+- submission events can emit:
+  - `verb`
+  - `submittedCount`
+  - `commandPath`
+  - `siteDbPath`
+
+### What I changed
+
+- Added a `Runtime` tab to `web/src/components/workflows/OpDetailDrawer.tsx`
+- Hooked that tab up to `useRuntimeEventFeed(...)` with:
+  - `workflowId`
+  - `opId`
+  - `limit: 40`
+- Scoped live streaming so the drawer only opens the SSE stream while:
+  - the drawer is open, and
+  - the `Runtime` tab is active
+- Added simple stream-state and event-count chips inside the drawer tab
+- Expanded `web/src/components/workflows/RuntimeEventList.tsx` so each event can now surface:
+  - normalized event kind
+  - queue
+  - request ID
+  - artifact ID
+  - retry attempt
+  - error code
+  - retryability
+  - runner kind
+  - emitted/record counts
+  - HTTP method/path/status
+  - workflow status
+  - command path and site DB path
+- Reset drawer-local UI state when switching to another op:
+  - selected artifact
+  - active tab
+
+### Commands and verification
+
+Commands used during this slice:
+
+```bash
+nl -ba web/src/components/workflows/OpDetailDrawer.tsx | sed -n '1,360p'
+nl -ba web/src/components/workflows/RuntimeEventList.tsx | sed -n '1,260p'
+nl -ba proto/scraper/runtime/v1/events.proto | sed -n '1,260p'
+nl -ba pkg/runtimeevents/scheduler.go | sed -n '1,320p'
+nl -ba pkg/runtimeevents/runner.go | sed -n '1,260p'
+nl -ba pkg/services/submission/service.go | sed -n '1,180p'
+nl -ba pkg/api/server/server.go | sed -n '130,220p'
+npm run test:unit
+npm run build
+```
+
+Verification results:
+
+- `npm run test:unit` passed
+- `npm run build` passed
+
+### What failed or needed adjustment
+
+- The first compile pass failed because the drawer code used `spec` before TypeScript was satisfied that it was non-null.
+- That happened because I needed optional access for the hook setup before the early return, but later wanted a non-optional `spec`.
+- I fixed that by separating:
+  - `selectedSpec = op?.op` for hook inputs
+  - `const spec = selectedSpec` after the early return guard
+- I also missed the `Stack` import in the first patch, which TypeScript caught immediately.
+
+### What worked
+
+- The shared feed abstraction was reusable without any changes to the backend.
+- The op drawer became a natural second consumer because it already owns the rest of the "inspect this op" experience.
+- Richer payload rendering improved both the new drawer tab and the existing global event console at the same time, because both reuse `RuntimeEventList.tsx`.
+
+### What remains after this slice
+
+- The remaining unchecked item in Phase 3 is a product decision about whether `DEBUG` events should be shown by default in workflow-local and op-local contexts.
+- `SubmitWorkflowPage` still needs the post-submit live progress surface.
+- overview and queue pages still need event-derived widgets.
+- component-level tests and stream-hook tests are still missing.
 
 ### Code review instructions
 

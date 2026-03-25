@@ -19,6 +19,11 @@
   - `web/vitest.unit.config.ts`
   - `npm run test:unit`
   - `npm run build`
+- Implemented Phase 3 workflow and op-context runtime event views:
+  - added an op-scoped `Runtime` tab in `web/src/components/workflows/OpDetailDrawer.tsx`
+  - reused the shared feed hook with `workflowId` and `opId` filters for drawer-local history plus live streaming
+  - expanded `web/src/components/workflows/RuntimeEventList.tsx` to render event kind, queue, request, artifact, retry, error-code, runner, record-count, and HTTP request payload details
+  - reset drawer-local tab and artifact selection when switching to a different op
 - Investigated the current frontend runtime event path across:
   - `web/src/pages/WorkflowDetailPage.tsx`
   - `web/src/api/runtimeEventsApi.ts`
