@@ -18,6 +18,7 @@ import (
 	"github.com/go-go-golems/scraper/pkg/engine/scheduler"
 	storecontract "github.com/go-go-golems/scraper/pkg/engine/store"
 	sqlitestore "github.com/go-go-golems/scraper/pkg/engine/store/sqlite"
+	"github.com/go-go-golems/scraper/pkg/runtimeevents"
 	sitemigrate "github.com/go-go-golems/scraper/pkg/sites/migrate"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	_ "github.com/mattn/go-sqlite3"
@@ -27,6 +28,7 @@ type Host struct {
 	siteRegistry *siteregistry.Registry
 	def          siteregistry.Definition
 	registry     *jsverbs.Registry
+	events       *runtimeevents.Publisher
 }
 
 type SubmitOptions struct {
@@ -44,11 +46,17 @@ type SubmitResult struct {
 	CommandPath string
 }
 
-func NewHost(siteRegistry *siteregistry.Registry, def siteregistry.Definition, registry *jsverbs.Registry) *Host {
+func NewHost(
+	siteRegistry *siteregistry.Registry,
+	def siteregistry.Definition,
+	registry *jsverbs.Registry,
+	events *runtimeevents.Publisher,
+) *Host {
 	return &Host{
 		siteRegistry: siteRegistry,
 		def:          def,
 		registry:     registry,
+		events:       events,
 	}
 }
 
@@ -120,9 +128,10 @@ func (h *Host) Submit(
 		return nil, err
 	}
 
+	submitWorkerID := "submit-" + string(h.def.Name)
 	runners, err := newDefaultRunnerRegistry(h.siteRegistry, config.HTTP{
 		Timeout: 30 * time.Second,
-	})
+	}, h.events, "submission-runner", submitWorkerID)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +139,7 @@ func (h *Host) Submit(
 		MaxWorkers:           1,
 		PollInterval:         50 * time.Millisecond,
 		DefaultLeaseDuration: 30 * time.Second,
-	}, "submit-"+string(h.def.Name), nil)
+	}, submitWorkerID, runtimeevents.NewSchedulerObserver(h.events, "submission-scheduler", submitWorkerID))
 	if err != nil {
 		return nil, err
 	}
@@ -197,16 +206,22 @@ func openScraperDB(engineDB string) (*sql.DB, error) {
 	return db, nil
 }
 
-func newDefaultRunnerRegistry(siteRegistry *siteregistry.Registry, httpConfig config.HTTP) (*runner.Registry, error) {
+func newDefaultRunnerRegistry(
+	siteRegistry *siteregistry.Registry,
+	httpConfig config.HTTP,
+	eventPublisher *runtimeevents.Publisher,
+	component string,
+	workerID string,
+) (*runner.Registry, error) {
 	runners := runner.NewRegistry()
 	httpRunner, err := runner.NewHTTPRunner(httpConfig, nil)
 	if err != nil {
 		return nil, err
 	}
-	if err := runners.Register(httpRunner); err != nil {
+	if err := runners.Register(runtimeevents.WrapRunner(httpRunner, eventPublisher, component, workerID)); err != nil {
 		return nil, err
 	}
-	if err := runners.Register(runner.NewJSRunner(siteRegistry)); err != nil {
+	if err := runners.Register(runtimeevents.WrapRunner(runner.NewJSRunner(siteRegistry), eventPublisher, component, workerID)); err != nil {
 		return nil, err
 	}
 	return runners, nil

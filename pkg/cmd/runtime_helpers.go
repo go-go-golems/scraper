@@ -14,6 +14,7 @@ import (
 	"github.com/go-go-golems/scraper/pkg/engine/runner"
 	"github.com/go-go-golems/scraper/pkg/engine/scheduler"
 	sqlitestore "github.com/go-go-golems/scraper/pkg/engine/store/sqlite"
+	"github.com/go-go-golems/scraper/pkg/runtimeevents"
 	sitemigrate "github.com/go-go-golems/scraper/pkg/sites/migrate"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	_ "github.com/mattn/go-sqlite3"
@@ -48,16 +49,22 @@ func openScraperDB(engineDB string) (*sql.DB, error) {
 	return db, nil
 }
 
-func newDefaultRunnerRegistry(siteRegistry *siteregistry.Registry, httpConfig config.HTTP) (*runner.Registry, error) {
+func newDefaultRunnerRegistry(
+	siteRegistry *siteregistry.Registry,
+	httpConfig config.HTTP,
+	eventPublisher *runtimeevents.Publisher,
+	component string,
+	workerID string,
+) (*runner.Registry, error) {
 	runners := runner.NewRegistry()
 	httpRunner, err := runner.NewHTTPRunner(httpConfig, nil)
 	if err != nil {
 		return nil, err
 	}
-	if err := runners.Register(httpRunner); err != nil {
+	if err := runners.Register(runtimeevents.WrapRunner(httpRunner, eventPublisher, component, workerID)); err != nil {
 		return nil, err
 	}
-	if err := runners.Register(runner.NewJSRunner(siteRegistry)); err != nil {
+	if err := runners.Register(runtimeevents.WrapRunner(runner.NewJSRunner(siteRegistry), eventPublisher, component, workerID)); err != nil {
 		return nil, err
 	}
 	return runners, nil

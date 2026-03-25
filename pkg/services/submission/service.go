@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	runtimev1 "github.com/go-go-golems/scraper/gen/proto/scraper/runtime/v1"
 	"github.com/go-go-golems/scraper/pkg/engine/model"
+	"github.com/go-go-golems/scraper/pkg/runtimeevents"
 	"github.com/go-go-golems/scraper/pkg/services/catalog"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	submitverbs "github.com/go-go-golems/scraper/pkg/sites/submitverbs"
@@ -30,12 +32,14 @@ type Response struct {
 type Service struct {
 	siteRegistry *siteregistry.Registry
 	catalog      *catalog.Service
+	events       *runtimeevents.Publisher
 }
 
-func NewService(siteRegistry *siteregistry.Registry) *Service {
+func NewService(siteRegistry *siteregistry.Registry, events *runtimeevents.Publisher) *Service {
 	return &Service{
 		siteRegistry: siteRegistry,
 		catalog:      catalog.NewService(siteRegistry),
+		events:       events,
 	}
 }
 
@@ -56,7 +60,7 @@ func (s *Service) Submit(ctx context.Context, request Request) (*Response, error
 	if err != nil {
 		return nil, err
 	}
-	host := submitverbs.NewHost(s.siteRegistry, def, siteVerbs.Registry)
+	host := submitverbs.NewHost(s.siteRegistry, def, siteVerbs.Registry, s.events)
 	result, err := host.Submit(ctx, verb, parsedValues, submitverbs.SubmitOptions{
 		EngineDB:   request.EngineDB,
 		SitesDir:   request.SitesDir,
@@ -66,6 +70,23 @@ func (s *Service) Submit(ctx context.Context, request Request) (*Response, error
 		return nil, err
 	}
 	result.CommandPath = verbSummary.CommandPath
+	_ = runtimeevents.EmitSimpleEvent(s.events, &runtimev1.RuntimeEventV1{
+		Source:     runtimev1.RuntimeEventSource_RUNTIME_EVENT_SOURCE_SUBMISSION,
+		Component:  "submission-service",
+		Kind:       runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_SUBMISSION_ACCEPTED,
+		Severity:   runtimev1.RuntimeEventSeverity_RUNTIME_EVENT_SEVERITY_INFO,
+		Message:    "submission accepted",
+		WorkflowId: string(result.Workflow.ID),
+		OpId:       string(result.TargetOpID),
+		Site:       string(request.Site),
+		RequestId:  runtimeevents.RequestIDFromContext(ctx),
+		Payload: runtimeevents.BuildPayload(map[string]any{
+			"verb":           request.Verb,
+			"submittedCount": len(result.Submitted),
+			"commandPath":    verbSummary.CommandPath,
+			"siteDbPath":     result.SiteDBPath,
+		}),
+	})
 
 	return &Response{
 		Site:        request.Site,

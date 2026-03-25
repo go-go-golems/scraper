@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-go-golems/scraper/pkg/engine/config"
 	"github.com/go-go-golems/scraper/pkg/engine/scheduler"
+	"github.com/go-go-golems/scraper/pkg/runtimeevents"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	"github.com/spf13/cobra"
 )
@@ -20,6 +21,7 @@ type workerCommandOptions struct {
 	httpTimeout   time.Duration
 	httpProxy     string
 	maxCycles     int
+	runtimeEvents runtimeEventOptions
 }
 
 func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
@@ -68,7 +70,19 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 			}
 			defer func() { _ = scraperDB.Close() }()
 
-			runners, err := newDefaultRunnerRegistry(siteRegistry, cfg.HTTP)
+			eventConfig, err := options.runtimeEvents.publisherConfig()
+			if err != nil {
+				return err
+			}
+			eventResources, err := runtimeevents.OpenPublisher(eventConfig)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = eventResources.Close() }()
+
+			eventPublisher := eventResources.EventPublisher()
+
+			runners, err := newDefaultRunnerRegistry(siteRegistry, cfg.HTTP, eventPublisher, "worker-runner", options.workerID)
 			if err != nil {
 				return err
 			}
@@ -80,7 +94,7 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 				MaxWorkers:           options.maxWorkers,
 				PollInterval:         options.pollInterval,
 				DefaultLeaseDuration: options.leaseDuration,
-			}, options.workerID, nil)
+			}, options.workerID, runtimeevents.NewSchedulerObserver(eventPublisher, "worker-scheduler", options.workerID))
 			if err != nil {
 				return err
 			}
@@ -113,6 +127,7 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 	runCmd.Flags().DurationVar(&options.httpTimeout, "http-timeout", 15*time.Second, "HTTP timeout used by worker-side http/fetch ops")
 	runCmd.Flags().StringVar(&options.httpProxy, "http-proxy", "", "Explicit HTTP proxy URL used by worker-side http/fetch ops")
 	runCmd.Flags().IntVar(&options.maxCycles, "max-cycles", 0, "Maximum scheduler cycles to execute before exiting (0 means keep polling)")
+	addRuntimeEventFlags(runCmd, &options.runtimeEvents, false, false)
 
 	cmd.AddCommand(runCmd)
 	return cmd

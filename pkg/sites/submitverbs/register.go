@@ -61,7 +61,7 @@ func RegisterSite(root *cobra.Command, siteRegistry *siteregistry.Registry, def 
 		"Workflow ID to use for the submitted workflow",
 	)
 
-	host := NewHost(siteRegistry, def, registry)
+	host := NewHost(siteRegistry, def, registry, nil)
 	verbsBySource := map[string]*jsverbs.VerbSpec{}
 	for _, verb := range registry.Verbs() {
 		verbsBySource[verb.SourceRef()] = verb
