@@ -656,6 +656,221 @@ git commit -m "Map scheduler events to runtime events"
 - Idle severity mapping: `DEBUG`
 - Failure severity mapping: `ERROR`
 
+## Step 8: Wire runtime events through the worker, submission path, API server, and Redis backend
+
+This was the main implementation slice. Up to Step 7 the code could describe runtime events, but no long-running process actually emitted them. I used this step to land the transport/backend layer, then immediately wired each relevant process boundary to the same runtime event contract. That let the server become the read model for worker activity instead of treating the frontend as a second transport concern.
+
+I deliberately kept the backend contract scraper-owned. Even though Watermill now carries the events, the worker, submission host, request middleware, and server handler code only build or consume `RuntimeEventV1`.
+
+### Prompt Context
+
+**User prompt (verbatim):** "continue, do all the ticket, keep testing and keeping a diary and committing at appropriate intervals"
+
+**Assistant interpretation:** Finish the remaining runtime event implementation rather than stopping after the schema and mapping layers.
+
+**Inferred user intent:** The user wants the full event pipeline working from worker/server emission through API consumption, with validation at each checkpoint and commits in focused slices.
+
+**Commit (code):** `5e2808cf36c5cb302f6ecfa25d1d0c3278d4da8b` — "Wire runtime events through worker and API server"
+
+### What I did
+
+- added backend/config support in `pkg/runtimeevents/backend.go` for:
+  - `off`
+  - Watermill GoChannel
+  - Redis-backed Watermill transport via `watermill-redisstream`
+- added a bounded recent-event hub in `pkg/runtimeevents/hub.go`
+- added request ID propagation helpers in `pkg/runtimeevents/context.go`
+- added a scheduler observer publisher adapter in `pkg/runtimeevents/scheduler_observer.go`
+- added a runner wrapper in `pkg/runtimeevents/runner.go` so worker-side runner lifecycle/log-summary events are published as `LOG_LINE`
+- added shared runtime event CLI flags in `pkg/cmd/runtime_events.go`
+- wired `pkg/cmd/worker.go` to:
+  - open runtime event resources
+  - wrap runners with runtime event emission
+  - attach the scheduler observer publisher
+- wired `pkg/sites/submitverbs/host.go` so submission-time workflow creation no longer drops scheduler events on a `nil` observer
+- wired `pkg/services/submission/service.go` and `pkg/api/handlers/submission.go` to emit submission accepted/rejected events
+- changed `pkg/api/server/server.go` to:
+  - open runtime event publisher/subscriber resources
+  - start a Watermill router
+  - maintain a bounded recent-event hub
+  - expose `/api/v1/runtime-events`
+  - expose `/api/v1/runtime-events/stream`
+  - emit request received/served events from middleware
+- added `pkg/api/handlers/runtime_events.go`
+- added `docker-compose.yml` for local Redis
+- added backend and hub tests plus a server integration test covering submission -> worker -> API event flow
+
+Commands used:
+
+```bash
+go get github.com/ThreeDotsLabs/watermill-redisstream/pkg/redisstream@v1.4.5
+gofmt -w pkg/runtimeevents/*.go pkg/api/handlers/runtime_events.go pkg/api/handlers/submission.go pkg/api/server/server.go pkg/api/server/server_test.go pkg/cmd/*.go pkg/services/submission/service.go pkg/sites/submitverbs/*.go
+go test ./pkg/runtimeevents -count=1
+go test ./pkg/cmd ./pkg/api/server ./pkg/services/submission ./pkg/sites/submitverbs ./pkg/runtimeevents -count=1
+go test ./... -count=1
+git commit -m "Wire runtime events through worker and API server"
+```
+
+### Why
+
+- The ticket is not satisfied by schemas and adapters alone; the worker and server actually need to emit and consume events.
+- Redis support plus a local compose file were explicit requirements.
+- The API server needs both a replay path and a live path, so I landed history and SSE together.
+
+### What worked
+
+- The same protobuf/Watermill contract now works across worker, submission, request, and server codepaths.
+- The GoChannel backend was enough to prove end-to-end event flow in tests without needing Redis in CI.
+- `go test ./... -count=1` passed after the backend slice landed.
+
+### What didn't work
+
+- The first version of the request-logging middleware wrapped `http.ResponseWriter` but did not preserve `http.Flusher`.
+- That broke the new SSE handler in `pkg/api/server/server.go`, and the integration test failed with HTTP 500 for `/api/v1/runtime-events/stream`.
+
+Observed failure:
+
+```text
+--- FAIL: TestServerRuntimeEventsHistoryAndStream (0.01s)
+    server_test.go:273:
+         Error:       Not equal:
+                      expected: 200
+                      actual  : 500
+```
+
+I fixed that by teaching the response wrapper to forward `Flush()` when the underlying writer supports it, then reran `go test ./pkg/api/server -count=1` successfully.
+
+### What I learned
+
+- The middleware stack matters for SSE much more than for ordinary JSON handlers. A status-recording wrapper that ignores optional interfaces silently breaks streaming.
+- The worker/server split still feels correct after implementation. The event pipeline solved the real-time gap without forcing a merged process model.
+
+### What was tricky to build
+
+- The trickiest part was sequencing all the moving parts so the same event model worked in:
+  - long-running worker execution
+  - submission-time workflow creation
+  - request logging
+  - server-side consumption and buffering
+- The Redis-backed transport also forced `apiserver.New(...)` to return an error instead of assuming construction can never fail.
+
+### What warrants a second pair of eyes
+
+- Whether the current recent-event buffer size defaults are appropriate for long-running operators.
+- Whether the request lifecycle events should stay `DEBUG` severity or be bumped for some deployment modes.
+- Whether runner `LOG_LINE` events should eventually split into more specific event kinds once real streaming logs exist.
+
+### What should be done in the future
+
+- Finish the frontend consumption path so the new endpoints are visible in the UI.
+- Decide whether a dedicated global event console still warrants a separate page after the workflow timeline exists.
+- Decide later whether a single-process `server+worker` CLI mode is still worth carrying now that Redis-backed mode exists.
+
+### Code review instructions
+
+- Start with `pkg/runtimeevents/backend.go`, `pkg/runtimeevents/hub.go`, and `pkg/runtimeevents/runner.go`.
+- Then read `pkg/cmd/worker.go`, `pkg/sites/submitverbs/host.go`, and `pkg/api/server/server.go`.
+- Finish with `pkg/api/server/server_test.go`.
+- Validate with `go test ./... -count=1`.
+
+### Technical details
+
+- Runtime event backends: `off`, `gochannel`, `redis`
+- Watermill topic: `scraper.runtime.v1.events`
+- Replay model: bounded recent history via API server buffer
+- Live delivery model: SSE
+
+## Step 9: Add frontend protobuf decoding and the workflow runtime event timeline
+
+Once the backend was stable, the remaining user-facing gap was straightforward: the frontend still polled workflow state but had no place to display live runtime events. I added a generated-protobuf decode path and a workflow-detail timeline rather than building a new standalone console first. That keeps the first UI iteration tightly tied to the workflow operators are already inspecting.
+
+This step also absorbed a pre-existing frontend build problem. The repository already failed `npm run build` because `OpDetailDrawer` rendered `ScriptTab` without the newly required `site` and `scriptPath` props. I fixed that while wiring the event timeline so the runtime event slice could leave the web app in a buildable state.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 8)
+
+**Assistant interpretation:** Finish the frontend side of the ticket instead of leaving the new API endpoints unused.
+
+**Inferred user intent:** The user wants the runtime event system visible in the actual product, not just implemented on the backend.
+
+**Commit (code):** `47c2c55d6ed2aa16b0971f4c438490c24a903790` — "Add runtime event timeline to workflow detail UI"
+
+### What I did
+
+- added `web/src/api/runtimeEventsApi.ts`
+  - fetches `/api/v1/runtime-events`
+  - decodes generated protobuf JSON with `fromJson(RuntimeEventV1Schema, ...)`
+- added `web/src/components/workflows/RuntimeEventList.tsx`
+- wired `runtimeEventsApi` into `web/src/store/index.ts`
+- updated `web/src/pages/WorkflowDetailPage.tsx` to:
+  - load recent runtime events
+  - subscribe to `/api/v1/runtime-events/stream`
+  - merge history and live updates
+  - render a runtime event timeline card
+- fixed `web/src/components/workflows/OpDetailDrawer.tsx` so `ScriptTab` receives `site` and `scriptPath`
+
+Commands used:
+
+```bash
+npm run build
+git commit -m "Add runtime event timeline to workflow detail UI"
+```
+
+### Why
+
+- The ticket explicitly calls for showing runtime events in the frontend.
+- Using generated protobuf JSON decoding in the browser was one of the earlier design commitments and needed a concrete implementation.
+
+### What worked
+
+- The history endpoint plus SSE combination mapped cleanly into the existing workflow detail page.
+- The frontend can now decode generated runtime event messages instead of maintaining a hand-written mirror type.
+- `npm run build` now passes.
+
+### What didn't work
+
+- Before this step, `npm run build` failed with a TypeScript error in `OpDetailDrawer.tsx` because `ScriptTabProps` required `site` and `scriptPath`.
+
+Observed failure before the fix:
+
+```text
+TS2739: Type '{ source: string | null; loading: boolean; error: null; }' is missing the following properties from type 'ScriptTabProps': site, scriptPath
+```
+
+### What I learned
+
+- The smallest useful UI for runtime events is not a brand-new dashboard page; it is a workflow-local timeline adjacent to the existing op table.
+- The generated protobuf TS surface is ergonomic enough for direct `fromJson` decoding in RTK Query transforms.
+
+### What was tricky to build
+
+- The main care point was merging replayed history with live SSE messages without showing duplicates. I handled that by merging by event ID and sorting newest-first.
+
+### What warrants a second pair of eyes
+
+- Whether the workflow detail page should cap visible runtime events more aggressively.
+- Whether the next UI iteration should add filtering by source/severity.
+- Whether a dedicated global event monitor page is still desirable after seeing the workflow-local version.
+
+### What should be done in the future
+
+- Consider richer rendering for structured runner payloads such as artifact summaries or retry details.
+- Consider a dedicated global event monitor once operator feedback clarifies the need.
+
+### Code review instructions
+
+- Read `web/src/api/runtimeEventsApi.ts`.
+- Then read `web/src/pages/WorkflowDetailPage.tsx`.
+- Then read `web/src/components/workflows/RuntimeEventList.tsx`.
+- Validate with `npm run build`.
+
+### Technical details
+
+- Browser decode path: `fromJson(RuntimeEventV1Schema, json)`
+- Live endpoint: `/api/v1/runtime-events/stream`
+- Replay endpoint: `/api/v1/runtime-events`
+
 ## Quick Reference
 
 | Option | Best for | Main risk |

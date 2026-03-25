@@ -28,3 +28,15 @@
   - mapped scheduler event kinds and severity into `RuntimeEventV1`
   - added scheduler payload extraction for attempt, workflow status, and error details
   - added tests covering failure and idle event mapping
+- Implemented the end-to-end backend runtime event pipeline in commit `5e2808cf36c5cb302f6ecfa25d1d0c3278d4da8b`:
+  - added configurable runtime event backends with `off`, `gochannel`, and Redis-backed Watermill transports
+  - added a recent-event hub, scheduler observer publisher, and runner log emission wrapper
+  - wired worker, submission, and HTTP request paths to publish runtime events
+  - added API-side history and SSE delivery over a Watermill subscriber/router
+  - added a local Redis `docker-compose.yml`
+  - added a Go integration test that proves submission -> worker -> API event flow with a shared GoChannel backend
+- Implemented the frontend runtime event view in commit `47c2c55d6ed2aa16b0971f4c438490c24a903790`:
+  - added frontend protobuf JSON decoding with `fromJson`
+  - added runtime event history fetching and SSE stream consumption
+  - added a runtime event timeline card to the workflow detail page
+  - fixed the `OpDetailDrawer` script-tab prop mismatch so `npm run build` passes again

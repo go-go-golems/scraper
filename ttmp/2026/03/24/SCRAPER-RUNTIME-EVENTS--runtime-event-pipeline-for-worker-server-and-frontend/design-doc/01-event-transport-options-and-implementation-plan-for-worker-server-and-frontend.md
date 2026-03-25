@@ -42,7 +42,7 @@ RelatedFiles:
       Note: Frontend protobuf runtime dependency for generated event decoding
 ExternalSources: []
 Summary: Compares the available transport and topology choices for runtime events in scraper, then records the decision to standardize on Watermill plus a protobuf-generated Go and TypeScript event contract.
-LastUpdated: 2026-03-24T20:16:15-04:00
+LastUpdated: 2026-03-24T21:20:07-04:00
 WhatFor: Guide the decision and implementation of a runtime event pipeline that can carry scheduler events, logs, and other live operational data from workers and servers to the frontend using Watermill and protobuf-generated Go/TS types.
 WhenToUse: Use when implementing the Watermill-based runtime event pipeline, when wiring protobuf schema generation for Go and TS, or when extending dashboard-facing real-time event handling.
 ---
@@ -56,6 +56,16 @@ WhenToUse: Use when implementing the Watermill-based runtime event pipeline, whe
 ## Executive Summary
 
 The scraper codebase already has a useful event seam inside the scheduler, but it stops inside the worker process. The worker emits `scheduler.Event` values through an optional observer callback, while the HTTP server is a separate process that only reads persisted engine state from SQLite. That means the current architecture is good at durable workflow execution, but it has no built-in path for real-time logs, event streaming, or live frontend telemetry.
+
+This document started as an options memo. It is now also the implementation reference for the landed runtime event pipeline:
+
+- worker and submission schedulers publish runtime events through Watermill
+- Redis Streams are supported for cross-process delivery
+- Watermill GoChannel is used for tests and in-process setups
+- the API server subscribes through a Watermill router into a bounded in-memory recent-event buffer
+- `/api/v1/runtime-events` exposes recent history as `protojson`
+- `/api/v1/runtime-events/stream` exposes live SSE updates
+- the workflow detail frontend decodes generated protobuf JSON and renders a runtime event timeline
 
 There were four realistic choices:
 
@@ -232,6 +242,17 @@ This is an inference from the use case. Pure pub/sub is good for transient fan-o
 
 Raw pub/sub can still be added later for ultra-low-latency fan-out if needed.
 
+### Decision 5a: Replay is bounded and SSE is best-effort
+
+The implemented delivery contract is intentionally split:
+
+- Redis Streams plus the API server's bounded in-memory hub provide short-horizon replay of recent events
+- `/api/v1/runtime-events` is the replay/read model for operators and the frontend
+- `/api/v1/runtime-events/stream` is best-effort live delivery from the current server process forward
+- clients that care about continuity should load recent history first, then attach SSE
+
+This keeps the browser path simple without pretending SSE is a durable cursor protocol.
+
 ### Decision 6: Use GoChannel for tests and optional local single-process mode
 
 Watermill's in-process backend is a good fit for:
@@ -258,6 +279,75 @@ Watermill should not become the domain model. Scraper still needs its own stable
 - logging/artifact decisions stay local to scraper
 - backend changes do not force wide refactors
 - message metadata can be normalized in one place
+
+### Decision 9: Keep large logs durable outside the event envelope
+
+The implemented event stream carries:
+
+- scheduler lifecycle events
+- request/submission lifecycle events
+- runner lifecycle/log-summary events
+- artifact summary metadata in structured payloads
+
+The stream does not attempt to inline large log bodies. Durable bodies should remain in artifacts or filesystem-backed logs, and events should reference or summarize them. This keeps Watermill messages and SSE payloads small enough to stay responsive.
+
+## Implemented Architecture
+
+```text
+worker
+  -> scheduler observer -> RuntimeEventV1 -> Watermill publisher
+  -> runner wrapper -> LOG_LINE RuntimeEventV1 -> Watermill publisher
+
+submission path
+  -> submission accepted/rejected events
+  -> submission-time scheduler observer -> workflow events
+
+transport
+  -> backend = off | gochannel | redis
+  -> topic = scraper.runtime.v1.events
+
+api server
+  -> request middleware emits request lifecycle events
+  -> Watermill router consumes runtime events
+  -> recent-event hub stores bounded history
+  -> /api/v1/runtime-events
+  -> /api/v1/runtime-events/stream
+
+frontend
+  -> fetch recent protojson events
+  -> decode with generated protobuf schema via fromJson
+  -> subscribe to SSE for live updates
+  -> show workflow runtime event timeline
+```
+
+## Operator Workflows
+
+### Local Redis-backed development
+
+1. Start Redis with `docker compose up redis`.
+2. Run the API server with `scraper api serve --events-backend redis`.
+3. Run the worker with `scraper worker run --events-backend redis`.
+4. Open the workflow detail page and watch runtime events appear live.
+
+### Test/in-process development
+
+- Use Watermill GoChannel in tests or embedded setups when the server and worker share a process.
+- The integration test in `pkg/api/server/server_test.go` is the reference example.
+
+### Topics and endpoints
+
+- Watermill topic: `scraper.runtime.v1.events`
+- History endpoint: `GET /api/v1/runtime-events`
+- Live SSE endpoint: `GET /api/v1/runtime-events/stream`
+- Useful query params: `workflowId`, `opId`, `site`, `workerId`, `limit`
+
+## Failure Modes
+
+- If the runtime event backend is `off`, workflow execution still works but no live events are delivered.
+- If Redis is unavailable, worker/API startup now fails fast instead of silently dropping runtime events.
+- SSE clients are best-effort only; reconnecting clients should reload recent history.
+- The in-memory recent-event hub is bounded, so old events age out even if Redis retains more history.
+- The current frontend view only renders the workflow timeline; it does not yet expose a global live event console.
 - Buf and protobuf generation stay aligned across Go and TS
 
 ## Alternatives Considered
