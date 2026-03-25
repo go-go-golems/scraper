@@ -18,6 +18,7 @@ type workerCommandOptions struct {
 	pollInterval  time.Duration
 	leaseDuration time.Duration
 	httpTimeout   time.Duration
+	httpProxy     string
 	maxCycles     int
 }
 
@@ -47,6 +48,7 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 				HTTP: config.HTTP{
 					UserAgent: "scraper/worker",
 					Timeout:   options.httpTimeout,
+					ProxyURL:  options.httpProxy,
 				},
 			}
 			if err := cfg.Validate(); err != nil {
@@ -109,6 +111,7 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 	runCmd.Flags().DurationVar(&options.pollInterval, "poll-interval", 250*time.Millisecond, "Delay between scheduler cycles")
 	runCmd.Flags().DurationVar(&options.leaseDuration, "lease-duration", 30*time.Second, "Default lease duration for newly claimed ops")
 	runCmd.Flags().DurationVar(&options.httpTimeout, "http-timeout", 15*time.Second, "HTTP timeout used by worker-side http/fetch ops")
+	runCmd.Flags().StringVar(&options.httpProxy, "http-proxy", "", "Explicit HTTP proxy URL used by worker-side http/fetch ops")
 	runCmd.Flags().IntVar(&options.maxCycles, "max-cycles", 0, "Maximum scheduler cycles to execute before exiting (0 means keep polling)")
 
 	cmd.AddCommand(runCmd)

@@ -199,7 +199,11 @@ func openScraperDB(engineDB string) (*sql.DB, error) {
 
 func newDefaultRunnerRegistry(siteRegistry *siteregistry.Registry, httpConfig config.HTTP) (*runner.Registry, error) {
 	runners := runner.NewRegistry()
-	if err := runners.Register(runner.NewHTTPRunner(httpConfig, nil)); err != nil {
+	httpRunner, err := runner.NewHTTPRunner(httpConfig, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := runners.Register(httpRunner); err != nil {
 		return nil, err
 	}
 	if err := runners.Register(runner.NewJSRunner(siteRegistry)); err != nil {

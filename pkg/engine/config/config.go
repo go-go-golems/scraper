@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -20,6 +22,7 @@ type Worker struct {
 type HTTP struct {
 	UserAgent string
 	Timeout   time.Duration
+	ProxyURL  string
 }
 
 type Config struct {
@@ -49,6 +52,15 @@ func (c Config) Validate() error {
 	}
 	if c.HTTP.Timeout <= 0 {
 		return fmt.Errorf("http timeout must be > 0")
+	}
+	if strings.TrimSpace(c.HTTP.ProxyURL) != "" {
+		proxyURL, err := url.Parse(c.HTTP.ProxyURL)
+		if err != nil {
+			return fmt.Errorf("invalid http proxy url: %w", err)
+		}
+		if proxyURL.Scheme == "" || proxyURL.Host == "" {
+			return fmt.Errorf("invalid http proxy url: missing scheme or host")
+		}
 	}
 
 	return nil

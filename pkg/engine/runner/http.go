@@ -22,9 +22,13 @@ type HTTPRunner struct {
 	config config.HTTP
 }
 
-func NewHTTPRunner(cfg config.HTTP, client *http.Client) *HTTPRunner {
+func NewHTTPRunner(cfg config.HTTP, client *http.Client) (*HTTPRunner, error) {
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 15 * time.Second
+	}
+	explicitProxyURL, err := parseExplicitProxyURL(cfg.ProxyURL)
+	if err != nil {
+		return nil, err
 	}
 	if client == nil {
 		client = &http.Client{
@@ -33,11 +37,20 @@ func NewHTTPRunner(cfg config.HTTP, client *http.Client) *HTTPRunner {
 	} else if client.Timeout <= 0 {
 		client.Timeout = cfg.Timeout
 	}
+	if explicitProxyURL != nil {
+		transport, ok := http.DefaultTransport.(*http.Transport)
+		if !ok {
+			return nil, fmt.Errorf("unexpected default transport type %T", http.DefaultTransport)
+		}
+		cloned := transport.Clone()
+		cloned.Proxy = http.ProxyURL(explicitProxyURL)
+		client.Transport = cloned
+	}
 
 	return &HTTPRunner{
 		client: client,
 		config: cfg,
-	}
+	}, nil
 }
 
 func (r *HTTPRunner) Kind() string {
@@ -231,6 +244,21 @@ func decodeHTTPFetchInput(runCtx RunContext) (*httpFetchInput, map[string]any, e
 			"metadata": runCtx.Op.Metadata,
 		},
 	}, nil
+}
+
+func parseExplicitProxyURL(raw string) (*url.URL, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	proxyURL, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse explicit proxy url: %w", err)
+	}
+	if proxyURL.Scheme == "" || proxyURL.Host == "" {
+		return nil, fmt.Errorf("parse explicit proxy url: missing scheme or host")
+	}
+	return proxyURL, nil
 }
 
 func renderHTTPRequest(spec httpRequestSpec, templateData map[string]any) (httpRenderedRequest, []byte, string, error) {
