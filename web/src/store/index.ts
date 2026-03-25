@@ -4,6 +4,7 @@ import { workflowApi } from '../api/workflowApi';
 import { queueApi } from '../api/queueApi';
 import { catalogApi } from '../api/catalogApi';
 import { submissionApi } from '../api/submissionApi';
+import { runtimeEventsApi } from '../api/runtimeEventsApi';
 import { uiSlice } from './uiSlice';
 
 export const store = configureStore({
@@ -14,6 +15,7 @@ export const store = configureStore({
     [queueApi.reducerPath]: queueApi.reducer,
     [catalogApi.reducerPath]: catalogApi.reducer,
     [submissionApi.reducerPath]: submissionApi.reducer,
+    [runtimeEventsApi.reducerPath]: runtimeEventsApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()
@@ -21,7 +23,8 @@ export const store = configureStore({
       .concat(workflowApi.middleware)
       .concat(queueApi.middleware)
       .concat(catalogApi.middleware)
-      .concat(submissionApi.middleware),
+      .concat(submissionApi.middleware)
+      .concat(runtimeEventsApi.middleware),
 });
 
 export type RootState = ReturnType<typeof store.getState>;

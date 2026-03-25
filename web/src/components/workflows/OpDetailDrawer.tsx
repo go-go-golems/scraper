@@ -32,6 +32,8 @@ interface OpDetailDrawerProps {
   artifactBodies?: Record<string, string>;
   scriptSource?: string | null;
   scriptLoading?: boolean;
+  site?: string;
+  scriptPath?: string;
   open: boolean;
   onClose: () => void;
   onRetry?: () => void;
@@ -61,6 +63,8 @@ export function OpDetailDrawer({
   artifactBodies = {},
   scriptSource,
   scriptLoading,
+  site = '',
+  scriptPath = '',
   open,
   onClose,
   onRetry,
@@ -289,6 +293,8 @@ export function OpDetailDrawer({
 
         {activeTab === 'script' && spec.Metadata?.script && (
           <ScriptTab
+            site={site}
+            scriptPath={scriptPath || spec.Metadata.script}
             source={scriptSource ?? null}
             loading={scriptLoading ?? false}
             error={null}
