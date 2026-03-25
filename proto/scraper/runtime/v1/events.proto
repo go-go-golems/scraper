@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package scraper.runtime.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/go-go-golems/scraper/gen/proto/scraper/runtime/v1;scraperruntimev1";
+
+message RuntimeEventV1 {
+  uint32 schema_version = 1;
+  string id = 2;
+  RuntimeEventSource source = 3;
+  string component = 4;
+  RuntimeEventKind kind = 5;
+  RuntimeEventSeverity severity = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+  string message = 8;
+  string workflow_id = 9;
+  string op_id = 10;
+  string site = 11;
+  string queue = 12;
+  string worker_id = 13;
+  string request_id = 14;
+  string artifact_id = 15;
+  map<string, string> labels = 16;
+  google.protobuf.Struct payload = 17;
+}
+
+enum RuntimeEventSource {
+  RUNTIME_EVENT_SOURCE_UNSPECIFIED = 0;
+  RUNTIME_EVENT_SOURCE_SCHEDULER = 1;
+  RUNTIME_EVENT_SOURCE_WORKER = 2;
+  RUNTIME_EVENT_SOURCE_RUNNER = 3;
+  RUNTIME_EVENT_SOURCE_SERVER = 4;
+  RUNTIME_EVENT_SOURCE_SUBMISSION = 5;
+  RUNTIME_EVENT_SOURCE_REQUEST = 6;
+}
+
+enum RuntimeEventSeverity {
+  RUNTIME_EVENT_SEVERITY_UNSPECIFIED = 0;
+  RUNTIME_EVENT_SEVERITY_DEBUG = 1;
+  RUNTIME_EVENT_SEVERITY_INFO = 2;
+  RUNTIME_EVENT_SEVERITY_WARN = 3;
+  RUNTIME_EVENT_SEVERITY_ERROR = 4;
+}
+
+enum RuntimeEventKind {
+  RUNTIME_EVENT_KIND_UNSPECIFIED = 0;
+  RUNTIME_EVENT_KIND_WORKFLOW_CREATED = 1;
+  RUNTIME_EVENT_KIND_WORKFLOW_UPDATED = 2;
+  RUNTIME_EVENT_KIND_WORKFLOW_CANCELED = 3;
+  RUNTIME_EVENT_KIND_OP_LEASED = 4;
+  RUNTIME_EVENT_KIND_OP_SUCCEEDED = 5;
+  RUNTIME_EVENT_KIND_OP_RETRIED = 6;
+  RUNTIME_EVENT_KIND_OP_FAILED = 7;
+  RUNTIME_EVENT_KIND_QUEUE_RATE_LIMITED = 8;
+  RUNTIME_EVENT_KIND_WORKER_IDLE = 9;
+  RUNTIME_EVENT_KIND_SUBMISSION_ACCEPTED = 10;
+  RUNTIME_EVENT_KIND_SUBMISSION_REJECTED = 11;
+  RUNTIME_EVENT_KIND_REQUEST_RECEIVED = 12;
+  RUNTIME_EVENT_KIND_REQUEST_SERVED = 13;
+  RUNTIME_EVENT_KIND_LOG_LINE = 14;
+}
