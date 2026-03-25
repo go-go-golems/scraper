@@ -4,6 +4,21 @@
 
 - Initial workspace created
 - Re-ran `docmgr doctor` after the upstream fix, restored missing `react` and `events` topic vocabulary, and confirmed the ticket now passes validation cleanly
+- Implemented Phase 1 shared runtime event infrastructure in the frontend:
+  - extracted merge, filter, and SSE lifecycle logic into `web/src/features/runtime-events/runtimeEventFeed.ts`
+  - refactored `web/src/pages/WorkflowDetailPage.tsx` to consume the shared feed hook instead of owning raw `EventSource` logic
+  - expanded `web/src/components/workflows/RuntimeEventList.tsx` with workflow click-through support and richer shared metadata rendering
+- Implemented the Phase 2 global operator console:
+  - added `web/src/pages/RuntimeEventsPage.tsx`
+  - added `/events` routing in `web/src/App.tsx`
+  - added navigation in `web/src/components/layout/AppShell.tsx`
+  - added workflow, op, site, worker, severity, and source filters
+  - added connection-state and last-event summary indicators
+- Added frontend helper verification:
+  - `web/src/features/runtime-events/runtimeEventFeed.test.ts`
+  - `web/vitest.unit.config.ts`
+  - `npm run test:unit`
+  - `npm run build`
 - Investigated the current frontend runtime event path across:
   - `web/src/pages/WorkflowDetailPage.tsx`
   - `web/src/api/runtimeEventsApi.ts`

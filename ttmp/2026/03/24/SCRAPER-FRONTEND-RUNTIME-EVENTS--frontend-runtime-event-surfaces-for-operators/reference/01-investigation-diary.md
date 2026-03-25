@@ -18,7 +18,7 @@ RelatedFiles:
       Note: Backend route and SSE bootstrap used to validate the frontend assumptions
 ExternalSources: []
 Summary: Chronological research log for the frontend runtime event follow-up ticket.
-LastUpdated: 2026-03-24T23:12:15-04:00
+LastUpdated: 2026-03-24T23:19:54-04:00
 WhatFor: Preserve the reasoning, commands, evidence, and writing decisions used to produce the frontend runtime event implementation guide.
 WhenToUse: Use when continuing this ticket or reviewing why the guide recommends its current phased frontend plan.
 ---
@@ -182,6 +182,94 @@ docmgr doctor --ticket SCRAPER-FRONTEND-RUNTIME-EVENTS --stale-after 30
 - Turn the design phases into actual implementation work.
 - Start by extracting reusable runtime event stream logic out of `WorkflowDetailPage`.
 - Then add the global `/events` page before widening context-specific panels.
+
+## Step 2: Implement Phase 1 shared feed logic and the global `/events` page
+
+After the ticket and design work were in place, the next user request was simply to proceed. I treated that as authorization to start the first implementation slice from the ticket: extract the runtime-event streaming logic out of the workflow detail page, make it reusable, add a global operator page, test it, then update the ticket diary and checklist so the docs stayed synchronized with the code.
+
+### What I changed
+
+- Added a new shared frontend runtime-event module in:
+  - `web/src/features/runtime-events/runtimeEventFeed.ts`
+- Added pure helper tests in:
+  - `web/src/features/runtime-events/runtimeEventFeed.test.ts`
+- Added a lightweight unit-test config in:
+  - `web/vitest.unit.config.ts`
+- Refactored:
+  - `web/src/pages/WorkflowDetailPage.tsx`
+- Added the new global page:
+  - `web/src/pages/RuntimeEventsPage.tsx`
+- Wired navigation and routing in:
+  - `web/src/App.tsx`
+  - `web/src/components/layout/AppShell.tsx`
+- Expanded the shared renderer in:
+  - `web/src/components/workflows/RuntimeEventList.tsx`
+- Exported the runtime event query param type from:
+  - `web/src/api/runtimeEventsApi.ts`
+
+### Why this implementation order made sense
+
+The workflow detail page already had working history fetch plus SSE code, but it was trapped inside one page component. The global `/events` page needed exactly the same primitives:
+
+- build query parameters,
+- fetch recent history,
+- open an SSE stream,
+- decode protobuf JSON,
+- merge and dedupe by event ID,
+- sort by descending event time,
+- expose a connection state the page can render.
+
+That meant the right first move was not another page-specific hack. The right move was to extract those responsibilities into one shared hook and helper module, then point both pages at it.
+
+### Commands and verification
+
+Commands used during implementation:
+
+```bash
+nl -ba web/src/pages/WorkflowDetailPage.tsx | sed -n '1,260p'
+nl -ba web/src/api/runtimeEventsApi.ts | sed -n '1,260p'
+nl -ba web/src/App.tsx | sed -n '1,260p'
+nl -ba web/src/components/layout/AppShell.tsx | sed -n '1,260p'
+nl -ba web/src/components/workflows/RuntimeEventList.tsx | sed -n '1,320p'
+nl -ba pkg/api/handlers/runtime_events.go | sed -n '1,260p'
+cat web/package.json
+npm run test:unit
+npm run build
+```
+
+Verification results:
+
+- `npm run test:unit` passed with 4 helper tests
+- `npm run build` passed
+
+### What worked
+
+- The backend API surface was already sufficient for the first operator console. No server changes were needed.
+- Pulling the logic into `runtimeEventFeed.ts` simplified `WorkflowDetailPage.tsx` immediately and made the new page straightforward to build.
+- The global page could support:
+  - server-backed filters for `workflowId`, `opId`, `site`, and `workerId`
+  - client-side filters for `severity` and `source`
+  - connection state and last-event indicators
+  - workflow click-through navigation from the event list
+
+### What failed or needed adjustment
+
+- The first test implementation used plain objects for protobuf timestamps. The generated TypeScript types require actual protobuf message instances.
+- I fixed that by creating timestamps with `create(TimestampSchema, ...)` instead of raw object literals.
+- I also briefly called `docmgr validate frontmatter` with a path that accidentally duplicated the `ttmp/` segment, which failed with a path-not-found error. The corrected absolute-path invocation worked.
+
+### What I learned
+
+- The shared hook boundary was the correct abstraction level for this phase. It was large enough to remove duplication, but still small enough that the page components remain easy to read.
+- The global `/events` page is already useful even before op-scoped tabs or dashboard widgets exist, because it creates an operator entry point that does not depend on first navigating into a workflow.
+- The repo did not already have a simple unit-test entry point for pure frontend helpers, so adding `web/vitest.unit.config.ts` was worth doing early.
+
+### What remains after this slice
+
+- `OpDetailDrawer` still needs an op-scoped runtime-event tab.
+- `SubmitWorkflowPage` still needs post-submit live progress.
+- overview and queue pages still need event-derived widgets.
+- reconnect/stale-state UX still needs hardening beyond the initial `connecting/live/error/closed` state model.
 
 ### Code review instructions
 

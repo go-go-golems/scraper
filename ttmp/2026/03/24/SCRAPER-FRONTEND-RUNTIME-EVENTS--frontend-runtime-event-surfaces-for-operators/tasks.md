@@ -9,19 +9,19 @@
 
 ## Phase 1: Shared Frontend Runtime Event Infrastructure
 
-- [ ] Extract stream lifecycle and merge logic out of `WorkflowDetailPage`
-- [ ] Add a shared runtime event streaming hook
-- [ ] Add explicit connection-state handling for SSE consumers
-- [ ] Add shared client-side filtering and dedupe helpers
-- [ ] Expand runtime event rendering into reusable shared components
+- [x] Extract stream lifecycle and merge logic out of `WorkflowDetailPage`
+- [x] Add a shared runtime event streaming hook
+- [x] Add explicit connection-state handling for SSE consumers
+- [x] Add shared client-side filtering and dedupe helpers
+- [x] Expand runtime event rendering into reusable shared components
 
 ## Phase 2: Global Operator Event Console
 
-- [ ] Add a top-level `/events` page
-- [ ] Add navigation entry for the event console
-- [ ] Add source, severity, workflow, site, and worker filters
-- [ ] Add connection-state badge and last-event indicators
-- [ ] Add workflow click-through navigation
+- [x] Add a top-level `/events` page
+- [x] Add navigation entry for the event console
+- [x] Add source, severity, workflow, site, and worker filters
+- [x] Add connection-state badge and last-event indicators
+- [x] Add workflow click-through navigation
 
 ## Phase 3: Workflow and Op Context Views
 
@@ -46,7 +46,7 @@
 
 ## Phase 6: Testing and UX Hardening
 
-- [ ] Add pure tests for event merge, sort, and filter helpers
+- [x] Add pure tests for event merge, sort, and filter helpers
 - [ ] Add component tests for shared runtime event components
 - [ ] Add stream-hook tests with mocked `EventSource`
 - [ ] Add page-level tests for history-plus-stream merge behavior
