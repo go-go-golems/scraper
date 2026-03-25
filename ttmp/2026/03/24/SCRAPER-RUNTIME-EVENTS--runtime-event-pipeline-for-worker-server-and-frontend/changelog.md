@@ -18,3 +18,8 @@
   - generated Go and web protobuf artifacts
   - added `pkg/runtimeevents` codec helpers and round-trip tests
   - added the web protobuf runtime dependency
+- Implemented the first Watermill integration slice in commit `33a9073faa7856fabe93ba55489d171f22609b53`:
+  - chose protobuf binary as the internal Watermill payload format
+  - standardized topic and message metadata conventions
+  - added `pkg/runtimeevents/watermill.go`
+  - added a GoChannel-backed integration test for publish/subscribe round-trips

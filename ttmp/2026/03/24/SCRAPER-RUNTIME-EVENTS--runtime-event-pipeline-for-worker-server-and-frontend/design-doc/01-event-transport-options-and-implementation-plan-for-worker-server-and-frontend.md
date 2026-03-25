@@ -24,6 +24,10 @@ RelatedFiles:
       Note: Existing scheduler event seam and observer contract
     - Path: pkg/runtimeevents/codec.go
       Note: Binary and protojson helpers built on the generated event type
+    - Path: pkg/runtimeevents/watermill.go
+      Note: Topic
+    - Path: pkg/runtimeevents/watermill_test.go
+      Note: GoChannel-backed validation of the first Watermill integration slice
     - Path: pkg/services/submission/service.go
       Note: Server-side workflow submission seam that should emit events
     - Path: pkg/sites/submitverbs/host.go
@@ -38,6 +42,7 @@ LastUpdated: 2026-03-24T20:16:15-04:00
 WhatFor: Guide the decision and implementation of a runtime event pipeline that can carry scheduler events, logs, and other live operational data from workers and servers to the frontend using Watermill and protobuf-generated Go/TS types.
 WhenToUse: Use when implementing the Watermill-based runtime event pipeline, when wiring protobuf schema generation for Go and TS, or when extending dashboard-facing real-time event handling.
 ---
+
 
 
 
@@ -134,6 +139,7 @@ HTTP server
 3. Introduce a Watermill-based transport boundary.
    - scraper owns `RuntimeEventV1`
    - adapter layer maps `RuntimeEventV1 <-> message.Message`
+   - use protobuf binary inside Watermill messages
    - worker and server code talk to a thin local wrapper, not directly to backend-specific plumbing everywhere
    - implementations:
      - Watermill GoChannel for tests and optional single-process dev mode
@@ -201,7 +207,16 @@ The user explicitly chose Watermill as the easiest standardized way to handle ev
 
 Watermill gives one messaging model across those cases. Scraper should still keep a small wrapper around it so domain code deals in generated event types, not raw transport concerns.
 
-### Decision 4: Use Redis-backed Watermill transport for cross-process delivery
+### Decision 4: Use protobuf binary inside Watermill and `protojson` at the HTTP boundary
+
+The transport boundary and the web boundary have different needs:
+
+- inside Watermill, protobuf binary keeps the payload exact, compact, and strongly typed
+- at the HTTP/SSE boundary, `protojson` gives the frontend and operators readable payloads
+
+This avoids paying the JSON cost on every internal publish/subscribe hop while still keeping the browser-facing interface ergonomic.
+
+### Decision 5: Use Redis-backed Watermill transport for cross-process delivery
 
 This is an inference from the use case. Pure pub/sub is good for transient fan-out, but the request includes log collection and other real-time data that operators may want to inspect after the fact. Streams are a better fit for:
 
@@ -212,7 +227,7 @@ This is an inference from the use case. Pure pub/sub is good for transient fan-o
 
 Raw pub/sub can still be added later for ultra-low-latency fan-out if needed.
 
-### Decision 5: Use GoChannel for tests and optional local single-process mode
+### Decision 6: Use GoChannel for tests and optional local single-process mode
 
 Watermill's in-process backend is a good fit for:
 
@@ -222,7 +237,7 @@ Watermill's in-process backend is a good fit for:
 
 This is better than inventing a second non-Watermill local bus if Watermill is now the standard.
 
-### Decision 6: Use SSE before WebSocket
+### Decision 7: Use SSE before WebSocket
 
 The dashboard planning docs already leaned toward polling because there was no event bus. Once an event bus exists, the lowest-complexity real-time HTTP delivery is SSE:
 
@@ -230,7 +245,7 @@ The dashboard planning docs already leaned toward polling because there was no e
 - browser support is straightforward
 - backend implementation is smaller than WebSocket session management
 
-### Decision 7: Keep the scraper-owned protobuf envelope even though Watermill is chosen
+### Decision 8: Keep the scraper-owned protobuf envelope even though Watermill is chosen
 
 Watermill should not become the domain model. Scraper still needs its own stable event envelope so that:
 
@@ -397,10 +412,9 @@ Then add Redis-backed Watermill transport once the envelope and endpoint contrac
 1. Should log lines be first-class runtime events, or should events only reference external log blobs?
 2. Should recent history live only in Redis Streams, or should the API server also maintain its own bounded in-memory cache for fast reads?
 3. Do we want a combined `daemon` command or a flag on `api serve` for optional local `server+worker` mode?
-4. Should Watermill carry protobuf binary payloads internally, or should we standardize on protojson bytes end to end?
-5. Which submission-time events matter most: workflow accepted, workflow created, site migration opened, or command validation outcome?
-6. Do we want tenant-like stream partitioning by site, by environment, or by event class?
-7. Where should generated Go code live inside this repo so imports stay clean with `paths=source_relative`?
+4. Which submission-time events matter most: workflow accepted, workflow created, site migration opened, or command validation outcome?
+5. Do we want tenant-like stream partitioning by site, by environment, or by event class?
+6. Where should generated Go code live inside this repo so imports stay clean with `paths=source_relative`?
 
 ## References
 

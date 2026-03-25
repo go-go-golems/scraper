@@ -19,15 +19,15 @@
 - [x] Add TS runtime/codegen dependency for protobuf decoding in `web/`
 - [x] Add Go helpers for binary and `protojson` encode/decode of `RuntimeEventV1`
 - [x] Add a small Go validation test around the generated event envelope
-- [ ] Decide Watermill wire format: protobuf binary internally, protojson at the HTTP/SSE boundary, or protojson end to end
+- [x] Decide Watermill wire format: protobuf binary internally, protojson at the HTTP/SSE boundary
 - [ ] Add a small TS decode example or test using `fromJson`
 
 ## Phase 2: Watermill Contract and Topics
 
-- [ ] Define Watermill topic names and message metadata conventions
+- [x] Define Watermill topic names and message metadata conventions
 - [ ] Decide the delivery contract for replayable events vs best-effort transient events
-- [ ] Add a thin scraper-owned Watermill wrapper usable by both worker and server codepaths
-- [ ] Add a GoChannel backend for tests and optional local single-process mode
+- [x] Add a thin scraper-owned Watermill wrapper usable by both worker and server codepaths
+- [x] Add a GoChannel backend for tests and optional local single-process mode
 - [ ] Add Watermill Redis-backed transport for cross-process delivery
 - [ ] Add Docker Compose for local Redis development
 

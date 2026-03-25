@@ -24,6 +24,10 @@ RelatedFiles:
       Note: Primary evidence for current event types and observer behavior
     - Path: pkg/runtimeevents/codec_test.go
       Note: Round-trip validation for binary and protojson event encoding
+    - Path: pkg/runtimeevents/watermill.go
+      Note: Main implementation artifact for the Watermill wrapper slice
+    - Path: pkg/runtimeevents/watermill_test.go
+      Note: Round-trip validation for topic
     - Path: pkg/sites/submitverbs/host.go
       Note: Shows the submission-side workflow creation path relevant to event emission
     - Path: proto/scraper/runtime/v1/events.proto
@@ -31,11 +35,12 @@ RelatedFiles:
     - Path: web/package.json
       Note: Shows the added protobuf runtime dependency in the frontend
 ExternalSources: []
-Summary: Chronological diary of the research and documentation work for the runtime-events ticket, including the current architecture evidence, the Watermill decision, the protobuf schema decision, and the first implementation slice.
+Summary: Chronological diary of the research and documentation work for the runtime-events ticket, including the current architecture evidence, the Watermill decision, the protobuf schema decision, and the first two implementation slices.
 LastUpdated: 2026-03-24T20:51:19-04:00
-WhatFor: Record how the runtime-event architecture was inspected, which alternatives were compared, what failed during investigation, and why the ticket recommendation, Watermill decision, protobuf schema decision, and first implementation slice were chosen.
+WhatFor: Record how the runtime-event architecture was inspected, which alternatives were compared, what failed during investigation, and why the ticket recommendation, Watermill decision, protobuf schema decision, and first two implementation slices were chosen.
 WhenToUse: Use when reviewing the reasoning behind the runtime-events ticket, resuming the work later, or validating that the proposed direction still matches the codebase.
 ---
+
 
 
 
@@ -472,6 +477,98 @@ src/components/workflows/OpDetailDrawer.tsx(291,12): error TS2739: Type '{ sourc
 - Go package: `github.com/go-go-golems/scraper/gen/proto/scraper/runtime/v1`
 - Web generation target: `js+dts`
 - Repo-specific TS constraint: `erasableSyntaxOnly`
+
+## Step 6: Add the first Watermill wrapper and choose the internal wire format
+
+With the schema and codecs in place, the next task was to stop talking about Watermill in the abstract and add the thinnest useful wrapper around it. I used this slice to make a concrete transport decision too: Watermill messages should carry protobuf binary internally, while HTTP and SSE stay on `protojson` for readability.
+
+That split keeps the system honest. Internal Go-to-Go transport gets a strict compact payload. The browser and operator boundary still gets debuggable JSON. The code for this slice is intentionally small: topic constants, metadata helpers, message encode/decode, a publisher/subscriber wrapper, and a GoChannel-backed round-trip test.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 5)
+
+**Assistant interpretation:** Continue the runtime-events task list in implementation order, commit after meaningful slices, and keep the diary current while turning the design into code.
+
+**Inferred user intent:** The user wants steady forward motion through the ticket rather than another pause after the schema groundwork.
+
+**Commit (code):** `33a9073faa7856fabe93ba55489d171f22609b53` — "Add Watermill runtime event wrapper"
+
+### What I did
+
+- added Watermill to the Go module
+- added `pkg/runtimeevents/watermill.go`
+- standardized a first runtime-events topic name
+- standardized message metadata keys for schema version, source, kind, and common identifiers
+- chose protobuf binary as the Watermill payload format
+- added `NewGoChannelPubSub()` for local/test usage
+- added `pkg/runtimeevents/watermill_test.go` with metadata and publish/subscribe round-trip coverage
+- ran `go mod tidy`
+
+Commands used:
+
+```bash
+go list -m -versions github.com/ThreeDotsLabs/watermill
+go list github.com/ThreeDotsLabs/watermill/message github.com/ThreeDotsLabs/watermill/pubsub/gochannel
+go get github.com/ThreeDotsLabs/watermill@v1.5.1
+go doc github.com/ThreeDotsLabs/watermill
+go doc github.com/ThreeDotsLabs/watermill/message
+go doc github.com/ThreeDotsLabs/watermill/pubsub/gochannel
+gofmt -w pkg/runtimeevents/codec.go pkg/runtimeevents/codec_test.go pkg/runtimeevents/watermill.go pkg/runtimeevents/watermill_test.go
+go test ./pkg/runtimeevents -count=1
+go mod tidy
+go test ./... -count=1
+git commit -m "Add Watermill runtime event wrapper"
+```
+
+### Why
+
+- The design needed a concrete answer for internal wire format.
+- The worker and server will both need one place to create and decode Watermill messages consistently.
+- A GoChannel-backed test gives a real local transport story before Redis is introduced.
+
+### What worked
+
+- The Watermill core package and GoChannel backend fit the wrapper cleanly.
+- The runtimeevents package stayed small and focused instead of leaking transport details everywhere.
+- `go test ./pkg/runtimeevents -count=1` and `go test ./... -count=1` both passed after the wrapper landed.
+
+### What didn't work
+
+- N/A in this step. This slice did not hit a meaningful runtime or toolchain blocker.
+
+### What I learned
+
+- The combination of protobuf binary internally plus `protojson` externally is a clean boundary for this repo.
+- Topic and metadata conventions should live with the runtimeevents package, not be scattered across future worker/server call sites.
+
+### What was tricky to build
+
+- The main judgment call was where to stop. It would have been easy to overbuild a full event bus abstraction here. The better move was to add only what the next integration tasks need: encoding, topic naming, metadata, and a local transport test.
+
+### What warrants a second pair of eyes
+
+- Whether the chosen topic name should include a more explicit environment or version suffix.
+- Whether the current metadata set is enough for filtering and observability, or whether it should stay smaller until the server-side consumer exists.
+
+### What should be done in the future
+
+- Add the Redis-backed Watermill transport next.
+- Start mapping scheduler events into `RuntimeEventV1`.
+- Decide whether a router-level abstraction is needed once the server begins consuming runtime events.
+
+### Code review instructions
+
+- Read `pkg/runtimeevents/watermill.go` first.
+- Then read `pkg/runtimeevents/watermill_test.go`.
+- Confirm that `pkg/runtimeevents/codec.go` remains the only encode/decode layer.
+- Validate with `go test ./pkg/runtimeevents -count=1` and `go test ./... -count=1`.
+
+### Technical details
+
+- Internal Watermill payload format: protobuf binary
+- HTTP/SSE format: `protojson`
+- Local transport backend: Watermill GoChannel
 
 ## Quick Reference
 
