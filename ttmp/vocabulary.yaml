@@ -11,6 +11,36 @@ topics:
       description: Nereval scraper and related work
     - slug: scraping
       description: Web scraping systems and workflows
+    - slug: cli
+      description: Command-line interface related work and operator workflows
+    - slug: glazed
+      description: Glazed command, schema, and help system related work
+    - slug: async
+      description: Asynchronous runtime behavior and Promise-based integrations
+    - slug: modules
+      description: Native JavaScript module registration and runtime exposure
+    - slug: scraper
+      description: Scraper engine architecture, runtime, and CLI work
+    - slug: scheduler
+      description: Workflow scheduler behavior, leasing, retries, and queue control
+    - slug: rate-limiting
+      description: Queue pacing, limiter state, and throughput control
+    - slug: token-bucket
+      description: Token-bucket style rate-limiter design and implementation
+    - slug: jsverbs
+      description: JavaScript verb discovery and command metadata scanning
+    - slug: worker
+      description: Long-running worker process that polls the engine database and executes ready ops
+    - slug: http-api
+      description: HTTP server interfaces for scraper submission and inspection
+    - slug: api
+      description: Application programming interfaces and JSON contracts
+    - slug: server
+      description: Long-running server processes and request handlers
+    - slug: http
+      description: HTTP transport, requests, and related runtime behavior
+    - slug: proxy
+      description: HTTP proxy configuration, routing, and operational policy
 docTypes:
     - slug: index
       description: Ticket index documents
