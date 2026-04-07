@@ -53,6 +53,8 @@ topics:
       description: React application architecture and component implementation
     - slug: events
       description: Runtime events, event streams, and event-driven operator workflows
+    - slug: onboarding
+      description: Onboarding flows, learning paths, and orientation material for new users or engineers
 docTypes:
     - slug: index
       description: Ticket index documents
