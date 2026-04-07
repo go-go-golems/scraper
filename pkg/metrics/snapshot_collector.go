@@ -13,6 +13,7 @@ type SnapshotCollector struct {
 	timeout time.Duration
 
 	workflowsTotal *prometheus.Desc
+	workflowStatus *prometheus.Desc
 	opStatusTotal  *prometheus.Desc
 	leasesTotal    *prometheus.Desc
 	resultsTotal   *prometheus.Desc
@@ -32,6 +33,12 @@ func NewSnapshotCollector(service *engineview.Service, timeout time.Duration) *S
 			prometheus.BuildFQName(namespace, "", "engine_workflows_total"),
 			"Current total workflows known to the engine.",
 			nil,
+			nil,
+		),
+		workflowStatus: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "engine_workflow_status_total"),
+			"Current total workflows in the engine grouped by workflow status.",
+			[]string{"status"},
 			nil,
 		),
 		opStatusTotal: prometheus.NewDesc(
@@ -78,6 +85,7 @@ func (c *SnapshotCollector) Describe(ch chan<- *prometheus.Desc) {
 		return
 	}
 	ch <- c.workflowsTotal
+	ch <- c.workflowStatus
 	ch <- c.opStatusTotal
 	ch <- c.leasesTotal
 	ch <- c.resultsTotal
@@ -97,6 +105,9 @@ func (c *SnapshotCollector) Collect(ch chan<- prometheus.Metric) {
 	status, err := c.service.EngineStatus(ctx)
 	if err == nil && status != nil {
 		ch <- prometheus.MustNewConstMetric(c.workflowsTotal, prometheus.GaugeValue, float64(status.WorkflowCount))
+		for workflowStatus, count := range status.WorkflowCounts {
+			ch <- prometheus.MustNewConstMetric(c.workflowStatus, prometheus.GaugeValue, float64(count), string(workflowStatus))
+		}
 		ch <- prometheus.MustNewConstMetric(c.resultsTotal, prometheus.GaugeValue, float64(status.ResultCount))
 		ch <- prometheus.MustNewConstMetric(c.artifactsTotal, prometheus.GaugeValue, float64(status.ArtifactCount))
 		ch <- prometheus.MustNewConstMetric(c.leasesTotal, prometheus.GaugeValue, float64(status.ActiveLeases), "active")

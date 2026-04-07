@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: Chronological investigation notes for the Prometheus and operator metrics review, including the current observability inventory, architectural conclusions, mistakes, and proposed next tickets.
-LastUpdated: 2026-04-07T12:45:00-04:00
+LastUpdated: 2026-04-07T13:03:00-04:00
 WhatFor: Preserve the evidence and reasoning behind the Prometheus recommendation so a future engineer can understand what scraper already exposes, what it does not, and why metrics should not replace durable state.
 WhenToUse: Use when revisiting observability architecture, implementing metrics instrumentation, or checking how this ticket’s recommendations were derived.
 ---
@@ -376,3 +376,70 @@ Results:
 - alert documentation and operator response playbooks,
 - alerts for retry spikes and excessive queue wait time,
 - additional scrape-time snapshot collector tests.
+
+## 2026-04-07 Implementation Slice 4
+
+### Goal
+
+Close the biggest remaining API-side metrics gaps before queue-wait design work: export workflow counts by workflow status, prove snapshot metrics at scrape time with a real DB fixture, and add direct tests for submission counters on accepted and rejected paths.
+
+### What I changed
+
+I extended SQLite engine inspection in:
+
+- `pkg/engine/store/sqlite/status.go`
+
+so `EngineStatus` now includes a `WorkflowCounts` map keyed by workflow status. That data is still derived from the engine DB at inspection time, not cached separately.
+
+I then exported those counts through the snapshot collector in:
+
+- `pkg/metrics/snapshot_collector.go`
+
+as a new gauge family:
+
+- `scraper_engine_workflow_status_total{status}`
+
+I added tests in:
+
+- `pkg/engine/store/sqlite/status_test.go`
+- `pkg/metrics/snapshot_collector_test.go`
+- `pkg/services/submission/service_test.go`
+
+The new coverage verifies:
+
+- SQLite inspection returns workflow counts grouped by status,
+- the snapshot collector emits workflow-status and queue-state metrics from a real engine DB,
+- submission metrics increment for:
+  - accepted submissions,
+  - not-found failures,
+  - validation failures.
+
+### Why this slice mattered
+
+Without workflow-status gauges, the snapshot side of the metrics model was still skewed toward ops and queues. Operators often want a fast answer to “how many workflows are pending/running/succeeded/failed right now?” and that belongs on the API-side snapshot path.
+
+The tests also matter because this part of the metrics system is scrape-time logic. It is easy to believe it works because `/metrics` returns something, but that does not prove the right state is being exported. The new tests exercise the real persistence and collection path instead of only checking handler presence.
+
+### Validation performed
+
+Commands run:
+
+```bash
+cd /home/manuel/workspaces/2026-03-23/js-scraper/scraper
+gofmt -w pkg/engine/store/sqlite/status.go pkg/engine/store/sqlite/status_test.go pkg/metrics/snapshot_collector.go pkg/metrics/snapshot_collector_test.go pkg/services/submission/service_test.go
+go test ./pkg/engine/store/sqlite ./pkg/metrics ./pkg/services/submission -count=1
+go test ./... -count=1
+```
+
+Results:
+
+- the focused status/snapshot/submission packages passed,
+- the full repository test suite passed,
+- no frontend work was needed for this slice.
+
+### What remains intentionally deferred
+
+- queue wait histograms,
+- submission duration histograms,
+- alert documentation and operator response playbooks,
+- retry-spike and excessive-queue-wait alerts.

@@ -94,10 +94,39 @@ func TestInspectPopulatedDatabase(t *testing.T) {
 	require.True(t, status.Initialized)
 	require.True(t, status.MigrationsUpToDate)
 	require.Equal(t, 1, status.WorkflowCount)
+	require.Equal(t, 1, status.WorkflowCounts[model.WorkflowStatusRunning])
 	require.Equal(t, 1, status.OpCounts[model.OpStatusSucceeded])
 	require.Equal(t, 0, status.ActiveLeases)
 	require.Equal(t, 1, status.ResultCount)
 	require.Equal(t, 1, status.ArtifactCount)
 	require.Len(t, status.Migrations, 2)
 	require.True(t, status.Migrations[0].Applied)
+}
+
+func TestInspectWorkflowCountsByStatus(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "engine.db")
+	store, err := Open(ctx, path)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, store.Close()) }()
+
+	now := time.Now().UTC()
+	workflows := []model.WorkflowRun{
+		{ID: "wf-pending", Site: "js-demo", Name: "Pending", Status: model.WorkflowStatusPending, CreatedAt: now, UpdatedAt: now},
+		{ID: "wf-running", Site: "js-demo", Name: "Running", Status: model.WorkflowStatusRunning, CreatedAt: now, UpdatedAt: now},
+		{ID: "wf-succeeded", Site: "js-demo", Name: "Succeeded", Status: model.WorkflowStatusSucceeded, CreatedAt: now, UpdatedAt: now},
+	}
+
+	for _, workflow := range workflows {
+		require.NoError(t, store.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
+			Workflow: workflow,
+		}))
+	}
+
+	status, err := Inspect(ctx, path)
+	require.NoError(t, err)
+	require.Equal(t, 3, status.WorkflowCount)
+	require.Equal(t, 1, status.WorkflowCounts[model.WorkflowStatusPending])
+	require.Equal(t, 1, status.WorkflowCounts[model.WorkflowStatusRunning])
+	require.Equal(t, 1, status.WorkflowCounts[model.WorkflowStatusSucceeded])
 }

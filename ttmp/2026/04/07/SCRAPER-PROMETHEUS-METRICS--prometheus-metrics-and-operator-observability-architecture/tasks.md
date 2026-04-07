@@ -45,7 +45,7 @@
 ### Phase 3: Snapshot Collectors
 
 - [x] Implement a collector that exports engine snapshot gauges from `engineview.Service` and/or SQLite inspection helpers.
-- [ ] Export workflow counts by status.
+- [x] Export workflow counts by status.
 - [ ] Export queue gauges:
   - [x] pending
   - [x] ready
@@ -54,7 +54,7 @@
   - [x] tokens
 - [x] Export artifact/result/lease gauges where useful.
 - [x] Decide whether snapshot gauges live only on the API server or also on workers.
-- [ ] Add tests for scrape-time collection behavior.
+- [x] Add tests for scrape-time collection behavior.
 
 ### Phase 4: Worker Metrics Listener
 
@@ -71,7 +71,7 @@
 - [x] Instrument successful workflow submissions in `pkg/services/submission/service.go`.
 - [x] Instrument submission failures by stable error code/category.
 - [ ] Add optional submission duration histograms if the path is expensive enough to justify them.
-- [ ] Add tests proving submission counters move after accepted and rejected submissions.
+- [x] Add tests proving submission counters move after accepted and rejected submissions.
 
 ### Phase 6: Scheduler Metrics
 

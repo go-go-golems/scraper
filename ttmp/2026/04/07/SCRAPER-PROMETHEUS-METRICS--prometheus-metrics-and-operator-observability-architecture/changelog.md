@@ -30,3 +30,8 @@
   - added Prometheus recording rules and a first alert set for worker down, API down, sustained throttling, and elevated failure rate,
   - mounted Prometheus rule files through `docker-compose.yml`.
 - Verified the new rule bundle by starting Prometheus locally and confirming it loads the config and starts the rule manager without errors.
+- Implemented the next backend metrics slice:
+  - added workflow-status counts to engine inspection and exported them as `scraper_engine_workflow_status_total`,
+  - added scrape-time snapshot collector coverage with a real SQLite-backed engine fixture,
+  - added direct submission metrics tests for accepted, not-found, and validation-error paths.
+- Ran `go test ./... -count=1` successfully after the snapshot and submission test additions.

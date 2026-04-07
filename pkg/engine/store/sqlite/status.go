@@ -27,6 +27,7 @@ type EngineStatus struct {
 	LatestKnownMigration int
 	MigrationsUpToDate   bool
 	WorkflowCount        int
+	WorkflowCounts       map[model.WorkflowStatus]int
 	OpCounts             map[model.OpStatus]int
 	ActiveLeases         int
 	ExpiredLeases        int
@@ -55,6 +56,7 @@ func Inspect(ctx context.Context, dsn string) (*EngineStatus, error) {
 	status := &EngineStatus{
 		Path:                 dsn,
 		LatestKnownMigration: latest,
+		WorkflowCounts:       map[model.WorkflowStatus]int{},
 		OpCounts:             map[model.OpStatus]int{},
 	}
 
@@ -104,6 +106,9 @@ func Inspect(ctx context.Context, dsn string) (*EngineStatus, error) {
 	}
 
 	if status.WorkflowCount, err = countTable(ctx, db, "workflows"); err != nil {
+		return nil, err
+	}
+	if status.WorkflowCounts, err = countWorkflowsByStatus(ctx, db); err != nil {
 		return nil, err
 	}
 	if status.ResultCount, err = countTable(ctx, db, "results"); err != nil {
@@ -178,6 +183,26 @@ func countOpsByStatus(ctx context.Context, db *sql.DB) (map[model.OpStatus]int, 
 		var count int
 		if err := rows.Scan(&status, &count); err != nil {
 			return nil, fmt.Errorf("scan op status count: %w", err)
+		}
+		ret[status] = count
+	}
+
+	return ret, rows.Err()
+}
+
+func countWorkflowsByStatus(ctx context.Context, db *sql.DB) (map[model.WorkflowStatus]int, error) {
+	rows, err := db.QueryContext(ctx, `SELECT status, COUNT(1) FROM workflows GROUP BY status ORDER BY status`)
+	if err != nil {
+		return nil, fmt.Errorf("count workflows by status: %w", err)
+	}
+	defer rows.Close()
+
+	ret := map[model.WorkflowStatus]int{}
+	for rows.Next() {
+		var status model.WorkflowStatus
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, fmt.Errorf("scan workflow status count: %w", err)
 		}
 		ret[status] = count
 	}
