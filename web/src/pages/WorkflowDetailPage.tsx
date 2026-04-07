@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Box, Card, CardContent, Divider, IconButton, Typography } from '@mui/material';
+import { Box, Card, CardContent, IconButton, Tab, Tabs, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { WorkflowHeader } from '../components/workflows/WorkflowHeader';
 import { WorkflowProgressBar } from '../components/workflows/WorkflowProgressBar';
@@ -27,6 +27,10 @@ export function WorkflowDetailPage() {
   const [selectedOpId, setSelectedOpId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [artifactBodies, setArtifactBodies] = useState<Record<string, string>>({});
+  // Bridge: activeTab controls whether Ops table or Artifacts panel is shown.
+  const [activeTab, setActiveTab] = useState<'ops' | 'artifacts'>('ops');
+  // Bridge: when navigating from OpResultTab → artifact browser, pre-fill the opId filter.
+  const [artifactFilterOpId, setArtifactFilterOpId] = useState<string | null>(null);
 
   const { data: workflow, isLoading: workflowLoading } = useGetWorkflowQuery(workflowId!, {
     skip: !workflowId,
@@ -127,6 +131,11 @@ export function WorkflowDetailPage() {
     }
   }, [workflowId, cancelWorkflow, showToast]);
 
+  const handleBrowseArtifacts = useCallback((opId: string) => {
+    setArtifactFilterOpId(opId);
+    setActiveTab('artifacts');
+  }, []);
+
   if (!workflowId) {
     return <Typography color="text.disabled">No workflow ID</Typography>;
   }
@@ -182,43 +191,60 @@ export function WorkflowDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Ops / Artifacts tab — Step 6 bridge */}
       <Card>
-        <CardContent>
-          <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
-            Artifacts
-          </Typography>
-          <Divider sx={{ mb: 2 }} />
-          {/* TODO Step 3: Add filter bar */}
-          {/* TODO Step 4: Add artifact table + pagination */}
-          {/* TODO Step 5: Add preview panel */}
-          <ArtifactsPanel workflowId={workflowId} />
-        </CardContent>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 1 }}>
+          <Tabs
+            value={activeTab}
+            onChange={(_e, v) => {
+              setActiveTab(v);
+              if (v === 'ops') setArtifactFilterOpId(null);
+            }}
+            sx={{ minHeight: 40 }}
+          >
+            <Tab value="ops" label="Ops" sx={{ minHeight: 40 }} />
+            <Tab value="artifacts" label="Artifacts" sx={{ minHeight: 40 }} />
+          </Tabs>
+        </Box>
+
+        {activeTab === 'ops' && (
+          <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+            <OpTable
+              ops={ops ?? []}
+              selectedOpId={selectedOpId}
+              onSelectOp={handleSelectOp}
+            />
+          </CardContent>
+        )}
+
+        {activeTab === 'artifacts' && (
+          <CardContent>
+            <ArtifactsPanel
+              workflowId={workflowId}
+              initialOpIdFilter={artifactFilterOpId ?? undefined}
+            />
+          </CardContent>
+        )}
       </Card>
 
-      <Card>
-        <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-          <OpTable
-            ops={ops ?? []}
-            selectedOpId={selectedOpId}
-            onSelectOp={handleSelectOp}
-          />
-        </CardContent>
-      </Card>
-
-      <OpDetailDrawer
-        op={selectedOp}
-        result={opResult ?? null}
-        artifacts={artifacts}
-        artifactBodies={artifactBodies}
-        scriptSource={scriptData?.source}
-        scriptLoading={scriptLoading}
-        site={siteName ?? ''}
-        scriptPath={scriptPath ?? ''}
-        open={drawerOpen}
-        onClose={handleCloseDrawer}
-        onRetry={handleRetryOp}
-        retryLoading={retryLoading}
-      />
+      {/* OpDetailDrawer — shown when an op is selected, regardless of activeTab */}
+      {selectedOpId && (
+        <OpDetailDrawer
+          op={selectedOp}
+          result={opResult ?? null}
+          artifacts={artifacts}
+          artifactBodies={artifactBodies}
+          scriptSource={scriptData?.source}
+          scriptLoading={scriptLoading}
+          site={siteName ?? ''}
+          scriptPath={scriptPath ?? ''}
+          open={drawerOpen}
+          onClose={handleCloseDrawer}
+          onRetry={handleRetryOp}
+          retryLoading={retryLoading}
+          onBrowseArtifacts={handleBrowseArtifacts}
+        />
+      )}
     </Box>
   );
 }

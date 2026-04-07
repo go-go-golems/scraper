@@ -37,6 +37,7 @@ interface OpDetailDrawerProps {
   onClose: () => void;
   onRetry?: () => void;
   retryLoading?: boolean;
+  onBrowseArtifacts?: (opId: string) => void;
 }
 
 type TabId = 'input' | 'deps' | 'result' | 'artifacts' | 'runtime' | 'script' | 'logs';
@@ -54,6 +55,7 @@ export function OpDetailDrawer({
   onClose,
   onRetry,
   retryLoading,
+  onBrowseArtifacts,
 }: OpDetailDrawerProps) {
   const [activeTab, setActiveTab] = useState<TabId>('input');
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
@@ -213,7 +215,7 @@ export function OpDetailDrawer({
         )}
 
         {activeTab === 'result' && (
-          <OpResultTab result={result} op={op} />
+          <OpResultTab result={result} op={op} onBrowseArtifacts={onBrowseArtifacts} />
         )}
 
         {activeTab === 'artifacts' && (

@@ -1,4 +1,4 @@
-import { Box, Chip, Typography } from '@mui/material';
+import { Box, Chip, Link, Typography } from '@mui/material';
 import type { OpResult, WorkflowOp } from '../../../api/types';
 import { JsonViewer } from '../../common/JsonViewer';
 
@@ -17,9 +17,12 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 interface OpResultTabProps {
   result: OpResult | null;
   op: WorkflowOp;
+  /** Called when user clicks "See all artifacts from this op" —
+   *  parent sets the Artifacts tab filter to this op. */
+  onBrowseArtifacts?: (opId: string) => void;
 }
 
-export function OpResultTab({ result, op }: OpResultTabProps) {
+export function OpResultTab({ result, op, onBrowseArtifacts }: OpResultTabProps) {
   const spec = op.op;
 
   if (!result) {
@@ -55,13 +58,23 @@ export function OpResultTab({ result, op }: OpResultTabProps) {
           <Typography variant="body2">{result.Error.Message}</Typography>
         </Box>
       )}
-      <Box sx={{ display: 'flex', gap: 2 }}>
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
         <Typography variant="caption" color="text.secondary">
           Artifacts: {result.Artifacts?.length ?? 0}
         </Typography>
         <Typography variant="caption" color="text.secondary">
           Emitted: {result.EmittedIDs?.length ?? 0}
         </Typography>
+        {result.Artifacts && result.Artifacts.length > 0 && onBrowseArtifacts && (
+          <Link
+            component="button"
+            variant="caption"
+            onClick={() => onBrowseArtifacts(op.op.ID)}
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}
+          >
+            See all {result.Artifacts.length} artifact{result.Artifacts.length > 1 ? 's' : ''} from this op
+          </Link>
+        )}
       </Box>
       <SectionTitle>Retry</SectionTitle>
       <Typography variant="caption">

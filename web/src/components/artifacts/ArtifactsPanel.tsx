@@ -12,6 +12,9 @@ import { ArtifactPreviewPanel } from './ArtifactPreviewPanel';
 
 interface ArtifactsPanelProps {
   workflowId: string;
+  /** When set (from OpResultTab bridge), pre-fill the Op filter and show only
+   *  artifacts from this op. Cleared when the user switches back to the Ops tab. */
+  initialOpIdFilter?: string;
 }
 
 // NOTE: Step 4 complete. ArtifactTable + pagination wired.
@@ -34,11 +37,14 @@ function buildOpNameMap(ops: WorkflowOp[]): Record<string, string> {
   return result;
 }
 
-export function ArtifactsPanel({ workflowId }: ArtifactsPanelProps) {
+export function ArtifactsPanel({ workflowId, initialOpIdFilter }: ArtifactsPanelProps) {
   const [page, setPage] = useState(0);
   const [previewVisible, setPreviewVisible] = useState(true); // Step 5: preview panel visible
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
-  const [filters, setFilters] = useState<ArtifactFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<ArtifactFilters>({
+    ...DEFAULT_FILTERS,
+    opId: initialOpIdFilter ?? '',
+  });
   const [searchInputValue, setSearchInputValue] = useState(''); // live, pre-debounce
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
