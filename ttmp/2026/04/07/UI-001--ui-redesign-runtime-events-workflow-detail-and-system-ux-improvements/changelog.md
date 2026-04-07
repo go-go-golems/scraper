@@ -27,3 +27,14 @@ Phase 2 partial: RuntimeEventTable built + wired (edc8d94, de5aed4, 2945cab). Bu
 
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/features/runtime-events/runtimeEventFeed.ts — Root cause of infinite loop — 4 useState + 4 useEffect chain. Needs Redux rewrite.
 
+
+## 2026-04-07
+
+Phase 2B: Rewrote SSE from useRuntimeEventFeed hook to RTK Query onCacheEntryAdded (e647cc3, 47ff46d). All 157 tests pass. Storybook cache-seeded.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/api/runtimeEventsApi.ts — Added onCacheEntryAdded SSE lifecycle (commit e647cc3)
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/features/runtime-events/runtimeEventFeed.ts — DELETED — replaced by RTK Query onCacheEntryAdded (commit e647cc3)
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/test-utils/mockRuntimeEvents.ts — Shared mock factory + generateMockEvents (commit 47ff46d)
+
