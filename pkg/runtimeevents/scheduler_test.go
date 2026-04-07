@@ -43,14 +43,11 @@ func TestFromSchedulerEventMapsFailureDetails(t *testing.T) {
 	require.Equal(t, now, event.OccurredAt.AsTime())
 }
 
-func TestFromSchedulerEventMapsIdleEvent(t *testing.T) {
+func TestFromSchedulerEventDropsIdleEvent(t *testing.T) {
 	event, err := FromSchedulerEvent(scheduler.Event{
 		Kind:    scheduler.EventIdle,
 		Message: "no leaseable queues",
 	}, "scheduler", "worker-1")
 	require.NoError(t, err)
-
-	require.Equal(t, runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_WORKER_IDLE, event.Kind)
-	require.Equal(t, runtimev1.RuntimeEventSeverity_RUNTIME_EVENT_SEVERITY_DEBUG, event.Severity)
-	require.Nil(t, event.Payload)
+	require.Nil(t, event)
 }

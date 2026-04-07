@@ -10,6 +10,10 @@ import (
 )
 
 func FromSchedulerEvent(event scheduler.Event, component string, workerID string) (*runtimev1.RuntimeEventV1, error) {
+	if event.Kind == scheduler.EventIdle {
+		return nil, nil
+	}
+
 	payload, err := schedulerPayload(event)
 	if err != nil {
 		return nil, err
@@ -52,8 +56,6 @@ func schedulerEventKind(kind scheduler.EventKind) runtimev1.RuntimeEventKind {
 		return runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_OP_FAILED
 	case scheduler.EventQueueRateLimited:
 		return runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_QUEUE_RATE_LIMITED
-	case scheduler.EventIdle:
-		return runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_WORKER_IDLE
 	default:
 		return runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_UNSPECIFIED
 	}
@@ -65,8 +67,6 @@ func schedulerEventSeverity(kind scheduler.EventKind) runtimev1.RuntimeEventSeve
 		return runtimev1.RuntimeEventSeverity_RUNTIME_EVENT_SEVERITY_ERROR
 	case scheduler.EventOpRetried, scheduler.EventQueueRateLimited:
 		return runtimev1.RuntimeEventSeverity_RUNTIME_EVENT_SEVERITY_WARN
-	case scheduler.EventIdle:
-		return runtimev1.RuntimeEventSeverity_RUNTIME_EVENT_SEVERITY_DEBUG
 	default:
 		return runtimev1.RuntimeEventSeverity_RUNTIME_EVENT_SEVERITY_INFO
 	}

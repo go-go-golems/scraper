@@ -18,6 +18,9 @@ func NewSchedulerObserver(publisher *Publisher, component string, workerID strin
 			log.Warn().Err(err).Str("component", component).Str("worker_id", workerID).Msg("failed to map scheduler event")
 			return
 		}
+		if runtimeEvent == nil {
+			return
+		}
 		if err := publisher.Publish(runtimeEvent); err != nil {
 			log.Warn().Err(err).Str("component", component).Str("worker_id", workerID).Msg("failed to publish scheduler event")
 		}
