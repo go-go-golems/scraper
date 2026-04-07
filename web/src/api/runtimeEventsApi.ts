@@ -117,6 +117,11 @@ export const runtimeEventsApi = createApi({
 
         eventSource.addEventListener('runtime-event', onMessage as EventListener);
 
+        // Close SSE on error to prevent browser auto-reconnect
+        eventSource.addEventListener('error', () => {
+          eventSource.close();
+        });
+
         // Auto-cleanup when no subscribers remain
         await cacheEntryRemoved;
         eventSource.close();
