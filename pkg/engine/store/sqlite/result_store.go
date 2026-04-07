@@ -226,6 +226,16 @@ func (s *Store) GetResult(
 		result.Error = &opErr
 	}
 	result.CompletedAt, _ = time.Parse(time.RFC3339Nano, completedAt)
+	// Ensure slice fields are never nil so they serialize as [] not null.
+	if result.Records == nil {
+		result.Records = []model.RecordWrite{}
+	}
+	if result.Emitted == nil {
+		result.Emitted = []model.OpSpec{}
+	}
+	if result.EmittedIDs == nil {
+		result.EmittedIDs = []model.OpID{}
+	}
 	artifacts, err := s.loadArtifacts(ctx, workflowID, opID)
 	if err != nil {
 		return nil, err

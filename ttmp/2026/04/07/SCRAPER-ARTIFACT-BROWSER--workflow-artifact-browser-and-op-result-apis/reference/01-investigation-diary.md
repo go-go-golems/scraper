@@ -213,3 +213,58 @@ I extended both service and server tests to verify:
 - `total` reflects filtered and unfiltered result sets
 - preview hints are populated for HTML and JSON artifacts
 - query filtering by `opId` and `search` works as expected
+
+## Bug: nil slice crash in OpResultTab
+
+### What happened
+
+While testing the workflow detail page (`/workflows/:id`), opening an op drawer and clicking the "Result" tab crashed the app with:
+
+```
+TypeError: can't access property "length", result.EmittedIDs is null
+    OpResultTab OpResultTab.tsx:63
+```
+
+The affected op was `hackernews-extract-frontpage-1775586649974859668:frontpage-extract:page-2-fetch`.
+
+### Root cause
+
+Go's `encoding/json` serializes **nil slices as `null`**, not `[]`. In `model.OpResult`, fields `Records`, `Artifacts`, `Emitted`, and `EmittedIDs` were left nil when:
+
+1. The scheduler creates a minimal fallback `OpResult` (only `OpID` + `CompletedAt`).
+2. The DB columns are NULL and `unmarshalJSON` leaves Go slices as nil.
+
+The TypeScript type declared them as non-nullable `string[]`, so `.length` threw.
+
+### Fix
+
+**`pkg/engine/store/sqlite/result_store.go`**: after loading from DB, normalize nil slices to empty slices:
+
+```go
+if result.Records == nil { result.Records = []model.RecordWrite{} }
+if result.Emitted == nil { result.Emitted = []model.OpSpec{} }
+if result.EmittedIDs == nil { result.EmittedIDs = []model.OpID{} }
+```
+
+**`web/src/components/workflows/op-detail/OpResultTab.tsx`**: defensive optional chaining:
+
+```ts
+result.EmittedIDs?.length ?? 0
+result.Artifacts?.length ?? 0
+```
+
+### Files changed
+
+- `pkg/engine/store/sqlite/result_store.go` — nil-guard for Records, Emitted, EmittedIDs after DB load
+- `web/src/components/workflows/op-detail/OpResultTab.tsx` — `?.length ?? 0` safety net
+
+### Validation
+
+```bash
+go test ./... -count=1   # all pass
+npx tsc --noEmit         # no type errors
+```
+
+### Also created
+
+- `reference/02-bug-report-nil-slice-crash.md` — full bug report for long-term reference.

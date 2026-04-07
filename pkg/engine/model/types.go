@@ -188,10 +188,10 @@ type OpError struct {
 type OpResult struct {
 	OpID        OpID
 	Data        json.RawMessage
-	Records     []RecordWrite
-	Artifacts   []ArtifactWrite
-	Emitted     []OpSpec
-	EmittedIDs  []OpID
+	Records     []RecordWrite   `json:"Records"`
+	Artifacts   []ArtifactWrite `json:"Artifacts"`
+	Emitted     []OpSpec        `json:"Emitted"`
+	EmittedIDs  []OpID          `json:"EmittedIDs"`
 	Error       *OpError
 	CompletedAt time.Time
 }

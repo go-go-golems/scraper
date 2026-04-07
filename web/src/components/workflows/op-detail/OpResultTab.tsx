@@ -57,10 +57,10 @@ export function OpResultTab({ result, op }: OpResultTabProps) {
       )}
       <Box sx={{ display: 'flex', gap: 2 }}>
         <Typography variant="caption" color="text.secondary">
-          Artifacts: {result.Artifacts.length}
+          Artifacts: {result.Artifacts?.length ?? 0}
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          Emitted: {result.EmittedIDs.length}
+          Emitted: {result.EmittedIDs?.length ?? 0}
         </Typography>
       </Box>
       <SectionTitle>Retry</SectionTitle>
