@@ -116,127 +116,142 @@ export function ArtifactsPanel({ workflowId, initialOpIdFilter }: ArtifactsPanel
   const hasActiveFilters = [filters.opId, filters.kind, filters.contentType, filters.search].some(Boolean);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-      <FilterBar
-        filters={filters}
-        onFiltersChange={(next) => { setFilters(next); setPage(0); }}
-        onSearchChange={handleSearchChange}
-        searchInputValue={searchInputValue}
-        ops={ops}
-      />
-
-      {hasActiveFilters && (
-        <ActiveFilterChips
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'row',
+        minHeight: 500,
+        gap: 1,
+      }}
+    >
+      {/* ── Left panel: filter bar + table ──────────────────────────────── */}
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0.5,
+          overflow: 'hidden',
+        }}
+      >
+        <FilterBar
           filters={filters}
-          opNames={opNameMap}
-          onRemove={handleRemoveFilter}
-          onClearAll={handleClearAll}
+          onFiltersChange={(next) => { setFilters(next); setPage(0); }}
+          onSearchChange={handleSearchChange}
+          searchInputValue={searchInputValue}
+          ops={ops}
         />
-      )}
 
-      <Divider sx={{ my: 0.5 }} />
+        {hasActiveFilters && (
+          <ActiveFilterChips
+            filters={filters}
+            opNames={opNameMap}
+            onRemove={handleRemoveFilter}
+            onClearAll={handleClearAll}
+          />
+        )}
 
-      {/* Summary + pagination */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-        <Typography variant="body2" color="text.secondary">
-          {total === 0
-            ? 'No artifacts'
-            : `Showing ${startItem}–${endItem} of ${total} artifact${total === 1 ? '' : 's'}`}
-        </Typography>
+        <Divider sx={{ my: 0.5 }} />
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Tooltip title={previewVisible ? 'Hide preview panel' : 'Show preview panel'}>
+        {/* Summary + pagination */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+          <Typography variant="body2" color="text.secondary">
+            {total === 0
+              ? 'No artifacts'
+              : `Showing ${startItem}–${endItem} of ${total} artifact${total === 1 ? '' : 's'}`}
+          </Typography>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Tooltip title={previewVisible ? 'Hide preview panel' : 'Show preview panel'}>
+              <IconButton
+                size="small"
+                onClick={() => setPreviewVisible((v) => !v)}
+                color={previewVisible ? 'primary' : 'default'}
+              >
+                <PanelIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
             <IconButton
               size="small"
-              onClick={() => setPreviewVisible((v) => !v)}
-              color={previewVisible ? 'primary' : 'default'}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
             >
-              <PanelIcon fontSize="small" />
+              <ChevronLeftIcon fontSize="small" />
             </IconButton>
-          </Tooltip>
-          <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-          <IconButton
-            size="small"
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            disabled={page === 0}
-          >
-            <ChevronLeftIcon fontSize="small" />
-          </IconButton>
-          <Typography variant="caption" color="text.secondary">
-            Page {page + 1} of {totalPages}
-          </Typography>
-          <IconButton
-            size="small"
-            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-            disabled={page >= totalPages - 1}
-          >
-            <ChevronRightIcon fontSize="small" />
-          </IconButton>
+            <Typography variant="caption" color="text.secondary">
+              Page {page + 1} of {totalPages}
+            </Typography>
+            <IconButton
+              size="small"
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+            >
+              <ChevronRightIcon fontSize="small" />
+            </IconButton>
+          </Box>
         </Box>
+
+        {/* Artifact table */}
+        {artifacts.length > 0 ? (
+          <ArtifactTable
+            artifacts={artifacts}
+            selectedId={selectedArtifactId}
+            onSelectArtifact={(id) => {
+              setSelectedArtifactId(id);
+              if (!previewVisible) setPreviewVisible(true);
+            }}
+            opNameMap={opNameMap}
+          />
+        ) : !hasActiveFilters ? (
+          <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography variant="h6" color="text.secondary">No artifacts yet</Typography>
+            <Typography variant="body2" color="text.disabled">
+              Artifacts will appear here once the workflow produces them.
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              No artifacts match the current filters.
+            </Typography>
+          </Box>
+        )}
       </Box>
 
-      {/* Artifact table */}
-      {artifacts.length > 0 ? (
-        <ArtifactTable
-          artifacts={artifacts}
-          selectedId={selectedArtifactId}
-          onSelectArtifact={(id) => {
-            setSelectedArtifactId(id);
-            if (!previewVisible) setPreviewVisible(true);
-          }}
-          opNameMap={opNameMap}
-        />
-      ) : !hasActiveFilters ? (
-        <Box sx={{ p: 4, textAlign: 'center' }}>
-          <Typography variant="h6" color="text.secondary">No artifacts yet</Typography>
-          <Typography variant="body2" color="text.disabled">
-            Artifacts will appear here once the workflow produces them.
-          </Typography>
-        </Box>
-      ) : (
-        <Box sx={{ p: 4, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
-            No artifacts match the current filters.
-          </Typography>
-        </Box>
-      )}
-
-      {/* Preview panel — right half of split pane */}
-      {previewVisible && selectedArtifactId && (
+      {/* ── Right panel: preview ─────────────────────────────────────── */}
+      {previewVisible && (
         <Box
           sx={{
+            flex: '0 0 45%',
             border: 1,
             borderColor: 'divider',
             borderRadius: 1,
-            height: 500,
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
           }}
         >
-          <ArtifactPreviewPanel
-            artifact={
-              data?.artifacts.find((a) => a.id === selectedArtifactId) ?? null
-            }
-            onClose={() => setSelectedArtifactId(null)}
-          />
-        </Box>
-      )}
-      {previewVisible && !selectedArtifactId && (
-        <Box
-          sx={{
-            border: 1,
-            borderColor: 'divider',
-            borderRadius: 1,
-            height: 120,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Typography variant="caption" color="text.disabled">
-            Click an artifact row to preview
-          </Typography>
+          {selectedArtifactId ? (
+            <ArtifactPreviewPanel
+              artifact={data?.artifacts.find((a) => a.id === selectedArtifactId) ?? null}
+              onClose={() => setSelectedArtifactId(null)}
+            />
+          ) : (
+            <Box
+              sx={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Typography variant="caption" color="text.disabled">
+                Click an artifact row to preview
+              </Typography>
+            </Box>
+          )}
         </Box>
       )}
     </Box>
