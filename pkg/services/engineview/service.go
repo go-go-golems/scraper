@@ -37,8 +37,8 @@ type ListWorkflowsOptions struct {
 
 type WorkflowListItem struct {
 	Workflow model.WorkflowRun `json:"workflow"`
-	OpTotal int               `json:"opTotal"`
-	OpDone  int               `json:"opDone"`
+	OpTotal  int               `json:"opTotal"`
+	OpDone   int               `json:"opDone"`
 }
 
 type WorkflowListResult struct {
@@ -76,6 +76,11 @@ type ArtifactSummary struct {
 type ArtifactDetail struct {
 	ArtifactSummary
 	Body []byte `json:"-"`
+}
+
+type WorkflowArtifactsResult struct {
+	WorkflowID model.WorkflowID  `json:"workflowID"`
+	Artifacts  []ArtifactSummary `json:"artifacts"`
 }
 
 type Service struct {
@@ -403,6 +408,91 @@ func (s *Service) ListArtifacts(ctx context.Context, workflowID model.WorkflowID
 	return ret, rows.Err()
 }
 
+func (s *Service) ListWorkflowArtifacts(ctx context.Context, workflowID model.WorkflowID) (*WorkflowArtifactsResult, error) {
+	db, err := s.openReadDB()
+	if err != nil {
+		return nil, err
+	}
+	if db == nil {
+		return nil, nil
+	}
+	defer func() { _ = db.Close() }()
+
+	exists, err := workflowExists(ctx, db, workflowID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, nil
+	}
+
+	rows, err := db.QueryContext(ctx,
+		`SELECT id, workflow_id, op_id, name, kind, content_type, metadata_json, length(body), created_at
+		 FROM artifacts
+		 WHERE workflow_id = ?
+		 ORDER BY created_at, op_id, id`,
+		workflowID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list workflow artifacts: %w", err)
+	}
+	defer rows.Close()
+
+	ret := &WorkflowArtifactsResult{
+		WorkflowID: workflowID,
+		Artifacts:  []ArtifactSummary{},
+	}
+	for rows.Next() {
+		var a ArtifactSummary
+		var metadataText string
+		var createdAt string
+		if err := rows.Scan(&a.ID, &a.WorkflowID, &a.OpID, &a.Name, &a.Kind, &a.ContentType, &metadataText, &a.Size, &createdAt); err != nil {
+			return nil, fmt.Errorf("scan workflow artifact: %w", err)
+		}
+		_ = json.Unmarshal([]byte(metadataText), &a.Metadata)
+		a.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+		ret.Artifacts = append(ret.Artifacts, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+func (s *Service) GetOpResult(ctx context.Context, workflowID model.WorkflowID, opID model.OpID) (*model.OpResult, bool, error) {
+	db, err := s.openReadDB()
+	if err != nil {
+		return nil, false, err
+	}
+	if db == nil {
+		return nil, false, nil
+	}
+	defer func() { _ = db.Close() }()
+
+	exists, err := workflowOpExists(ctx, db, workflowID, opID)
+	if err != nil {
+		return nil, false, err
+	}
+	if !exists {
+		return nil, false, nil
+	}
+
+	store, err := s.openStore(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	if store == nil {
+		return nil, false, nil
+	}
+	defer func() { _ = store.Close() }()
+
+	result, err := store.GetResult(ctx, workflowID, opID)
+	if err != nil {
+		return nil, false, err
+	}
+	return result, true, nil
+}
+
 func (s *Service) GetArtifact(ctx context.Context, artifactID model.ArtifactID) (*ArtifactDetail, error) {
 	db, err := s.openReadDB()
 	if err != nil {
@@ -528,6 +618,30 @@ func (s *Service) openReadDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("open engine db: %w", err)
 	}
 	return db, nil
+}
+
+func workflowExists(ctx context.Context, db *sql.DB, workflowID model.WorkflowID) (bool, error) {
+	row := db.QueryRowContext(ctx, `SELECT 1 FROM workflows WHERE id = ?`, workflowID)
+	var found int
+	if err := row.Scan(&found); err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("query workflow existence: %w", err)
+	}
+	return true, nil
+}
+
+func workflowOpExists(ctx context.Context, db *sql.DB, workflowID model.WorkflowID, opID model.OpID) (bool, error) {
+	row := db.QueryRowContext(ctx, `SELECT 1 FROM ops WHERE workflow_id = ? AND id = ?`, workflowID, opID)
+	var found int
+	if err := row.Scan(&found); err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("query op existence: %w", err)
+	}
+	return true, nil
 }
 
 func loadDependencies(ctx context.Context, db *sql.DB, opID model.OpID) ([]model.Dependency, error) {

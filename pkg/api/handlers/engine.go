@@ -133,6 +133,38 @@ func (h *EngineHandler) OpArtifacts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apitypes.ArtifactListResponse{Artifacts: artifacts})
 }
 
+func (h *EngineHandler) WorkflowArtifacts(w http.ResponseWriter, r *http.Request) {
+	workflowID := model.WorkflowID(r.PathValue("workflowID"))
+	result, err := h.service.ListWorkflowArtifacts(r.Context(), workflowID)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	if result == nil {
+		writeError(w, http.StatusNotFound, "not_found", "workflow not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, apitypes.WorkflowArtifactListResponse{
+		WorkflowID: result.WorkflowID,
+		Artifacts:  result.Artifacts,
+	})
+}
+
+func (h *EngineHandler) OpResult(w http.ResponseWriter, r *http.Request) {
+	workflowID := model.WorkflowID(r.PathValue("workflowID"))
+	opID := model.OpID(r.PathValue("opID"))
+	result, exists, err := h.service.GetOpResult(r.Context(), workflowID, opID)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	if !exists {
+		writeError(w, http.StatusNotFound, "not_found", "op not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, apitypes.OpResultResponse{Result: result})
+}
+
 func (h *EngineHandler) ArtifactDownload(w http.ResponseWriter, r *http.Request) {
 	artifactID := model.ArtifactID(r.PathValue("artifactID"))
 	artifact, err := h.service.GetArtifact(r.Context(), artifactID)

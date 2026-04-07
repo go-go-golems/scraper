@@ -59,6 +59,10 @@ topics:
       description: Prometheus metrics and query integration
     - slug: grafana
       description: Grafana dashboards and graph integration
+    - slug: artifacts
+      description: Artifact browsing and downloads
+    - slug: workflows
+      description: Workflow-level status and navigation
 docTypes:
     - slug: index
       description: Ticket index documents

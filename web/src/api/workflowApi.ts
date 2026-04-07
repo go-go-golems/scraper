@@ -47,6 +47,7 @@ export const workflowApi = createApi({
     }),
     getOpResult: builder.query<OpResult | null, { workflowId: string; opId: string }>({
       query: ({ workflowId, opId }) => `/workflows/${workflowId}/ops/${opId}/result`,
+      transformResponse: (response: { result: OpResult | null }) => response.result,
       providesTags: (_result, _error, { workflowId, opId }) => [{ type: 'OpResult', id: `${workflowId}:${opId}` }],
     }),
     getOpArtifacts: builder.query<ArtifactSummary[], { wfId: string; opId: string }>({

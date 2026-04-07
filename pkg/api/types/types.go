@@ -63,6 +63,15 @@ type ArtifactListResponse struct {
 	Artifacts []engineview.ArtifactSummary `json:"artifacts"`
 }
 
+type WorkflowArtifactListResponse struct {
+	WorkflowID model.WorkflowID             `json:"workflowID"`
+	Artifacts  []engineview.ArtifactSummary `json:"artifacts"`
+}
+
+type OpResultResponse struct {
+	Result *model.OpResult `json:"result"`
+}
+
 type ScriptListResponse struct {
 	Scripts []string `json:"scripts"`
 }

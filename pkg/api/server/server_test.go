@@ -24,6 +24,7 @@ import (
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	"github.com/go-go-golems/scraper/pkg/engine/runner"
 	"github.com/go-go-golems/scraper/pkg/engine/scheduler"
+	storecontract "github.com/go-go-golems/scraper/pkg/engine/store"
 	sqlitestore "github.com/go-go-golems/scraper/pkg/engine/store/sqlite"
 	"github.com/go-go-golems/scraper/pkg/runtimeevents"
 	"github.com/go-go-golems/scraper/pkg/sites/defaults"
@@ -228,6 +229,88 @@ func TestServerSubmitThenWorkerAndInspectWorkflow(t *testing.T) {
 	require.Equal(t, "succeeded", opsPayload.Ops[0].Status)
 }
 
+func TestServerArtifactAndOpResultEndpoints(t *testing.T) {
+	registry, err := defaults.NewRegistry()
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	engineDB := filepath.Join(t.TempDir(), "engine.db")
+	store, err := sqlitestore.Open(ctx, engineDB)
+	require.NoError(t, err)
+
+	now := time.Date(2026, 4, 7, 20, 0, 0, 0, time.UTC)
+	require.NoError(t, store.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
+		Workflow: model.WorkflowRun{
+			ID:        "api-artifacts",
+			Site:      "js-demo",
+			Name:      "api artifacts",
+			Status:    model.WorkflowStatusRunning,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		Initial: []model.OpSpec{
+			{ID: "api-artifacts:fetch", WorkflowID: "api-artifacts", Site: "js-demo", Kind: "http/fetch", Queue: "site:js-demo:http", DedupKey: "fetch"},
+			{ID: "api-artifacts:extract", WorkflowID: "api-artifacts", Site: "js-demo", Kind: "js", Queue: "site:js-demo:js", DedupKey: "extract"},
+		},
+	}))
+	require.NoError(t, completeServerTestOp(ctx, store, "js-demo", "site:js-demo:http", now, "frontpage.html", "http-response-body", "<html>frontpage</html>", []byte(`{"url":"https://example.com"}`)))
+	require.NoError(t, completeServerTestOp(ctx, store, "js-demo", "site:js-demo:js", now.Add(time.Second), "summary.json", "json-output", `{"stories":30}`, []byte(`{"stories":30}`)))
+	require.NoError(t, store.Close())
+
+	server, err := apiserver.New(apiserver.Config{
+		Address:      "127.0.0.1:0",
+		EngineDB:     engineDB,
+		SitesDir:     t.TempDir(),
+		ReadTimeout:  5,
+		WriteTimeout: 5,
+		Version:      "test-version",
+	}, registry)
+	require.NoError(t, err)
+
+	ts := httptest.NewServer(server.Handler)
+	defer ts.Close()
+
+	artifactsResp, err := http.Get(ts.URL + "/api/v1/workflows/api-artifacts/artifacts")
+	require.NoError(t, err)
+	defer artifactsResp.Body.Close()
+	require.Equal(t, http.StatusOK, artifactsResp.StatusCode)
+
+	artifactPayload := struct {
+		WorkflowID string `json:"workflowID"`
+		Artifacts  []struct {
+			ID   string `json:"id"`
+			OpID string `json:"opID"`
+			Name string `json:"name"`
+		} `json:"artifacts"`
+	}{}
+	require.NoError(t, json.NewDecoder(artifactsResp.Body).Decode(&artifactPayload))
+	require.Equal(t, "api-artifacts", artifactPayload.WorkflowID)
+	require.Len(t, artifactPayload.Artifacts, 2)
+	require.Equal(t, "api-artifacts:fetch", artifactPayload.Artifacts[0].OpID)
+	require.Equal(t, "frontpage.html", artifactPayload.Artifacts[0].Name)
+
+	resultResp, err := http.Get(ts.URL + "/api/v1/workflows/api-artifacts/ops/api-artifacts:extract/result")
+	require.NoError(t, err)
+	defer resultResp.Body.Close()
+	require.Equal(t, http.StatusOK, resultResp.StatusCode)
+
+	resultPayload := struct {
+		Result *struct {
+			OpID string          `json:"OpID"`
+			Data json.RawMessage `json:"Data"`
+		} `json:"result"`
+	}{}
+	require.NoError(t, json.NewDecoder(resultResp.Body).Decode(&resultPayload))
+	require.NotNil(t, resultPayload.Result)
+	require.Equal(t, "api-artifacts:extract", resultPayload.Result.OpID)
+	require.JSONEq(t, `{"stories":30}`, string(resultPayload.Result.Data))
+
+	notFoundResp, err := http.Get(ts.URL + "/api/v1/workflows/api-artifacts/ops/api-artifacts:missing/result")
+	require.NoError(t, err)
+	defer notFoundResp.Body.Close()
+	require.Equal(t, http.StatusNotFound, notFoundResp.StatusCode)
+}
+
 func TestServerRuntimeEventsHistoryAndStream(t *testing.T) {
 	registry, err := defaults.NewRegistry()
 	require.NoError(t, err)
@@ -331,6 +414,47 @@ func TestServerRuntimeEventsHistoryAndStream(t *testing.T) {
 	require.True(t, kinds["RUNTIME_EVENT_KIND_WORKFLOW_CREATED"])
 	require.True(t, kinds["RUNTIME_EVENT_KIND_OP_SUCCEEDED"])
 	require.True(t, kinds["RUNTIME_EVENT_KIND_LOG_LINE"])
+}
+
+func completeServerTestOp(
+	ctx context.Context,
+	store *sqlitestore.Store,
+	site model.SiteName,
+	queue model.QueueKey,
+	now time.Time,
+	artifactName string,
+	artifactKind string,
+	artifactBody string,
+	resultData []byte,
+) error {
+	op, lease, err := store.LeaseReadyOp(ctx, storecontract.LeaseRequest{
+		WorkerID:      "worker-test",
+		Queue:         queue,
+		Site:          site,
+		LeaseDuration: 30 * time.Second,
+		Now:           now,
+	})
+	if err != nil {
+		return err
+	}
+	return store.CompleteOp(ctx, op.ID, storecontract.Completion{
+		Lease: *lease,
+		Result: model.OpResult{
+			OpID: op.ID,
+			Data: resultData,
+			Artifacts: []model.ArtifactWrite{
+				{
+					ID:          model.ArtifactID(string(op.ID) + ":artifact"),
+					Name:        artifactName,
+					Kind:        artifactKind,
+					ContentType: "text/plain",
+					Metadata:    map[string]string{"source": "test"},
+					Body:        []byte(artifactBody),
+				},
+			},
+			CompletedAt: now,
+		},
+	})
 }
 
 type runtimeeventsEventEnvelope struct {
