@@ -9,3 +9,5 @@
 - Added `prometheus` and `grafana` topic vocabulary entries so the ticket validates cleanly.
 - Validated the ticket with `docmgr doctor`.
 - Uploaded the ticket bundle to reMarkable under `/ai/2026/04/07/SCRAPER-PROMETHEUS-API`.
+- Added a second design doc describing which Prometheus-backed graphs the current UI can already support and the recommended rollout order.
+- Added page-level rollout tasks for queue monitor and overview graph integration.

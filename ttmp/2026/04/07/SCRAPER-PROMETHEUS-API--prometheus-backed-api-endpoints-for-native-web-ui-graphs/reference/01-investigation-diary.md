@@ -41,6 +41,8 @@ This ticket answers the next question: how should scraper expose historical grap
 - `pkg/api/server/server.go` already exposes `GET /metrics`, but there are no scraper-owned historical metrics endpoints.
 - `web/src/pages/EngineOverviewPage.tsx` consumes only snapshot APIs: engine status and queue list.
 - `web/src/pages/QueueMonitorPage.tsx` still renders static placeholder throughput series.
+- `web/src/components/queues/ThroughputChart.tsx` is already a generic-enough multi-line Recharts widget even though its naming is throughput-specific.
+- `web/src/components/overview/StatCardRow.tsx` is already a viable home for metrics-backed latest-value cards.
 - `ops/monitoring/prometheus/prometheus.yml` already scrapes `scraper-api` and `scraper-worker`.
 - `ops/monitoring/grafana/dashboards/scraper-overview.json` already contains time-series panels proving the raw data is available.
 
@@ -59,6 +61,17 @@ This ticket answers the next question: how should scraper expose historical grap
 - `GET /api/v1/metrics/sites/{site}/history`
 - `GET /api/v1/metrics/workers/history`
 - `GET /api/v1/metrics/metadata`
+
+### Current UI-compatible first graphs
+
+- queue completion rate
+- queue ready depth
+- queue wait p95
+- retry/failure rate
+- workers up
+- active workflows
+- worst queue wait p95
+- workflow submit rate
 
 ## Usage Examples
 
@@ -117,6 +130,10 @@ func QueueHistory(site, queue, range, step):
 sed -n '1,260p' scraper/pkg/api/server/server.go
 sed -n '1,260p' scraper/web/src/pages/QueueMonitorPage.tsx
 sed -n '1,260p' scraper/web/src/pages/EngineOverviewPage.tsx
+sed -n '1,260p' scraper/web/src/components/queues/ThroughputChart.tsx
+sed -n '1,260p' scraper/web/src/components/overview/StatCardRow.tsx
+sed -n '1,260p' scraper/web/src/components/overview/QueueHealthPreview.tsx
+sed -n '1,260p' scraper/web/src/components/overview/OpStatusBreakdown.tsx
 sed -n '1,260p' scraper/pkg/services/engineview/service.go
 sed -n '1,260p' scraper/ops/monitoring/prometheus/prometheus.yml
 sed -n '1,260p' scraper/ops/monitoring/grafana/dashboards/scraper-overview.json
@@ -136,8 +153,11 @@ remarquee cloud ls '/ai/2026/04/07/SCRAPER-PROMETHEUS-API/' --long --non-interac
 ## Related
 
 - [../design-doc/01-prometheus-backed-api-endpoints-and-web-ui-graph-integration-guide.md](../design-doc/01-prometheus-backed-api-endpoints-and-web-ui-graph-integration-guide.md)
+- [../design-doc/02-current-ui-graph-plan-and-integration-sequencing.md](../design-doc/02-current-ui-graph-plan-and-integration-sequencing.md)
 - [../../SCRAPER-PROMETHEUS-METRICS--prometheus-metrics-and-operator-observability-architecture/index.md](../../SCRAPER-PROMETHEUS-METRICS--prometheus-metrics-and-operator-observability-architecture/index.md)
 - `pkg/api/server/server.go`
 - `web/src/pages/EngineOverviewPage.tsx`
 - `web/src/pages/QueueMonitorPage.tsx`
+- `web/src/components/queues/ThroughputChart.tsx`
+- `web/src/components/overview/StatCardRow.tsx`
 - `ops/monitoring/prometheus/prometheus.yml`

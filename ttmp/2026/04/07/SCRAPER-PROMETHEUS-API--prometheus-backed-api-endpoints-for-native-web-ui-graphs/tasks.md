@@ -5,6 +5,7 @@
 - [x] Create the `SCRAPER-PROMETHEUS-API` ticket workspace.
 - [x] Review the current Prometheus, Grafana, API-server, and frontend seams relevant to historical graph data.
 - [x] Write a detailed design and implementation guide for scraper-owned Prometheus-backed graph endpoints.
+- [x] Add a follow-on design doc mapping current UI components to the first graphs we can ship.
 - [x] Record the investigation process and findings in the diary.
 - [x] Publish and validate the completed ticket bundle.
 
@@ -75,6 +76,32 @@
 - [ ] Separate implementation ticket for backend Prometheus graph APIs.
 - [ ] Separate frontend ticket for consuming the new graph endpoints in overview and queue pages.
 - [ ] Separate dashboard alignment ticket so scraper cards and Grafana panels use the same underlying aggregations.
+
+## Current UI Graph Rollout Tasks
+
+### Phase A: Queue Monitor First
+
+- [ ] Replace `placeholderThroughput` in `web/src/pages/QueueMonitorPage.tsx` with real backend data.
+- [ ] Feed real queue completion-rate series into `web/src/components/queues/ThroughputChart.tsx`.
+- [ ] Add ready-depth history to the queue page.
+- [ ] Add queue wait p95 history to the queue page.
+- [ ] Decide whether the first queue page uses one chart with multiple lines or separate cards per graph family.
+
+### Phase B: Overview Cards And Trends
+
+- [ ] Extend `web/src/components/overview/StatCardRow.tsx` to show metrics-backed cards for:
+  - [ ] workers up
+  - [ ] active workflows
+  - [ ] worst queue wait p95
+- [ ] Add one compact overview trend card for workflow submit rate.
+- [ ] Add one compact overview trend card for aggregate op completion rate.
+
+### Phase C: Deeper Queue Diagnostics
+
+- [ ] Add retry-rate trend graph to queue detail surfaces.
+- [ ] Add failure-rate trend graph to queue detail surfaces.
+- [ ] Add throttle-rate trend graph to queue detail surfaces.
+- [ ] Add running vs in-flight depth trends if operators still need more capacity diagnostics after Phase A.
 
 ## Validation And Publishing
 

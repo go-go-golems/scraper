@@ -43,6 +43,7 @@ This is an intern-facing design ticket. It explains the current state, the archi
 - **Related Files**: See frontmatter RelatedFiles field
 - **External Sources**: See frontmatter ExternalSources field
 - **Main design doc**: [design-doc/01-prometheus-backed-api-endpoints-and-web-ui-graph-integration-guide.md](./design-doc/01-prometheus-backed-api-endpoints-and-web-ui-graph-integration-guide.md)
+- **Current UI graph plan**: [design-doc/02-current-ui-graph-plan-and-integration-sequencing.md](./design-doc/02-current-ui-graph-plan-and-integration-sequencing.md)
 - **Investigation diary**: [reference/01-investigation-diary.md](./reference/01-investigation-diary.md)
 
 ## Status
@@ -68,6 +69,7 @@ High-level workstreams:
 
 - document the current metrics and frontend gaps
 - define the backend-only API design for Prometheus-backed graphs
+- define which graphs the current UI can render immediately and in what order
 - spell out route, service, DTO, query-registry, and validation details
 - prepare the implementation backlog for a follow-on coding pass
 
