@@ -153,6 +153,9 @@ export function useRuntimeEventFeed({
 
     const onError = () => {
       setConnectionState('error');
+      // Prevent EventSource auto-reconnect by closing on error.
+      // The useEffect will re-run if deps change, creating a fresh connection.
+      eventSource.close();
     };
 
     eventSource.addEventListener('open', onOpen as EventListener);
