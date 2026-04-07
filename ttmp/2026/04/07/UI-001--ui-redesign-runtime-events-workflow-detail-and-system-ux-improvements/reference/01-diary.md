@@ -1,3 +1,31 @@
+---
+Title: Diary
+Ticket: UI-001
+Status: active
+Topics:
+    - frontend
+    - ux-design
+    - ui-rework
+DocType: reference
+Intent: long-term
+Owners: []
+RelatedFiles:
+    - Path: web/.storybook/preview.tsx
+      Note: Storybook global store + MSW wiring debug trail and final fix (commit 92cb0a9)
+    - Path: web/src/api/runtimeEventsApi.ts
+      Note: Storybook-specific SSE skip added after debugging stream 404s (commit 92cb0a9)
+    - Path: web/src/mocks/runtimeEventsHandlers.ts
+      Note: Investigated manual JSON vs Buf message serialization; fixed with create()+toJson() (commit 92cb0a9)
+    - Path: web/src/pages/RuntimeEventsPage.stories.tsx
+      Note: Story store serializableCheck disabled for protobuf bigint timestamps (commit 92cb0a9)
+ExternalSources: []
+Summary: Implementation and debugging diary for UI-001, capturing phased UI work, SSE/Storybook debugging, and validation steps.
+LastUpdated: 2026-04-07T00:00:00Z
+WhatFor: Chronological engineering diary for continuing, reviewing, and handing off UI-001 work.
+WhenToUse: Read this when you need the exact sequence of implementation decisions, experiments, failures, and validation steps.
+---
+
+
 # Diary
 
 ## Goal
@@ -353,3 +381,234 @@ The `useRuntimeEventFeed` hook had 4 useState + 4 useEffect causing cascading re
 - `cacheEntryRemoved` resolves when all subscribers unsubscribe (component unmount or `skip: true`)
 - `updateCachedData` uses Immer — mutations to the draft are applied immutably
 - The `buildSSEUrl` function only includes scoping params (workflowId, opId, site, workerId) — not pagination/time params
+
+---
+
+## Step 7: MSW Storybook Root-Cause Debugging and Bug-Report Update
+
+I came back to the MSW Storybook bug report because the earlier analysis had stalled at the symptom level: Storybook showed `[MSW] Mocking enabled`, yet `/api/v1/runtime-events?limit=100` still returned 404. This step focused on turning that vague state into a precise dependency-level diagnosis with reproducible evidence and a concrete mitigation path.
+
+The key outcome is that the 404 itself was not the real root cause. The primary failure is an incompatibility between `msw-storybook-addon@2.0.6` and `msw@2.13.0`: the addon writes to `worker.context.activationPromise`, but `msw@2.13.0` no longer exposes `context` on the object returned by `setupWorker()`. After temporarily pinning MSW to `2.12.0`, the handler started intercepting correctly and the 404 disappeared, which immediately exposed a smaller second bug in our mock protobuf JSON shape.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Work on docmgr ticket UI-001 on @ttmp/2026/04/07/UI-001--ui-redesign-runtime-events-workflow-detail-and-system-ux-improvements/analysis/02-bug-report-msw-handlers-not-intercepting-rtk-query-requests-in-storybook.md 
+
+We got stuck previously"
+
+**Assistant interpretation:** Resume the stalled MSW / Storybook investigation on the existing UI-001 bug-report document, gather stronger evidence, and improve the ticket handoff so another expert can pick it up cleanly.
+
+**Inferred user intent:** Convert the previous “we are stuck” state into a concrete, well-documented debugging result with a clear next step.
+
+**Commit (code):** none yet during investigation — temporary working-tree edits only; final docs commit recorded after write-up
+
+### What I did
+- Re-read the existing UI-001 bug report and the current Storybook / RTK Query files.
+- Re-enabled the standard MSW Storybook setup temporarily in `web/.storybook/preview.tsx`:
+  - `import { initialize, mswLoader } from 'msw-storybook-addon'`
+  - `initialize({ onUnhandledRequest: 'bypass' })`
+  - `loaders: [mswLoader]`
+- Added a temporary console log inside `web/src/mocks/runtimeEventsHandlers.ts` to prove whether the runtime-events handler ever matched.
+- Opened Storybook in the browser (`http://localhost:6006/?path=/story/pages-runtimeeventspage--default`) and captured console + network behavior with Playwright MCP.
+- Inspected the shipped addon code in `node_modules/.../msw-storybook-addon/dist/index.browser.js` and confirmed `initialize()` does `worker.context.activationPromise = worker.start(...)`.
+- Inspected the shipped MSW browser bundle in `node_modules/.pnpm/msw@2.13.0.../lib/browser/index.mjs` and confirmed the returned `setupWorker()` object in 2.13.0 no longer exposes `context`.
+- Downloaded and inspected multiple MSW tarballs (`2.0.9`, `2.6.8`, `2.8.0`, `2.10.0`, `2.11.0`, `2.12.0`, `2.13.0`) to locate the compatibility boundary.
+- Temporarily pinned the repo to `msw@2.12.0`, restarted Storybook, and re-ran the same Storybook page.
+- Once interception worked, I tested a follow-up fix attempt for the mock serializer and documented the next error.
+- Updated `analysis/02-bug-report-msw-handlers-not-intercepting-rtk-query-requests-in-storybook.md` with the confirmed root cause, compatibility matrix, reproduction evidence, and recommended remediation path.
+
+### Why
+- The ticket handoff needed evidence, not hypotheses. The earlier report had multiple plausible causes (URL matching, timing, RTK Query behavior), but no decisive proof.
+- By checking the addon bundle, the MSW bundle, and then validating behavior with a downgrade experiment, I could distinguish the real root cause from the surface-level 404 symptom.
+
+### What worked
+- The temporary handler log made it obvious whether requests were truly intercepted.
+- Inspecting the actual shipped bundles in `node_modules` was much more effective than guessing from API docs.
+- Downgrading to `msw@2.12.0` and restarting Storybook was the decisive experiment:
+  - the `activationPromise` error disappeared,
+  - the handler matched,
+  - the runtime-events request returned `200 OK` instead of `404`.
+- The compatibility sweep across extracted npm tarballs narrowed the regression window to the jump from `msw@2.12.0` to `msw@2.13.0`.
+
+### What didn't work
+- With `msw@2.13.0`, the standard Storybook setup still failed with:
+  ```text
+  TypeError: Cannot set properties of undefined (setting 'activationPromise')
+      at initialize (.../msw-storybook-addon.js:3495:35)
+      at .storybook/preview.tsx:11:1
+  ```
+- A first attempt to serialize mock events via a hand-written protobuf JSON object returned the wrong shape for `google.protobuf.Timestamp`, causing:
+  ```text
+  Error: cannot decode message google.protobuf.Timestamp from JSON: object
+  ```
+- A second attempt to use Buf serialization directly via `toJson(RuntimeEventV1Schema, event)` also failed because the mock factory returns plain objects typed as `RuntimeEventV1`, not actual Buf message instances:
+  ```text
+  ForeignFieldError: cannot use field scraper.runtime.v1.RuntimeEventV1.schema_version with message undefined
+  ```
+
+### What I learned
+- The original 404 was mostly a **symptom** of Storybook preview initialization failing, not a handler URL mismatch.
+- `msw-storybook-addon@2.0.6` depends on an internal-ish `worker.context` field that disappeared in `msw@2.13.0`.
+- `google.protobuf.Timestamp` in protobuf JSON is not `{ seconds, nanos }`; Buf expects an RFC3339 string.
+- `toJson()` from `@bufbuild/protobuf` expects an actual Buf message value, not just a plain object with a matching TypeScript shape.
+
+### What was tricky to build
+- The misleading part was that MSW still printed its normal startup banner even when `initialize()` crashed immediately afterward. That made it look like the worker was healthy and that the problem had to be URL matching or RTK Query timing.
+- Another sharp edge was Storybook caching: after changing the MSW dependency version, I had to restart the Storybook dev server to flush the cached `sb-vite` dependency bundle; otherwise the page kept using the previously bundled addon/MSW code and reproduced the same old error.
+- The protobuf mock follow-up bug is subtle because the TypeScript type `RuntimeEventV1` makes a plain object look “message-shaped”, but Buf JSON serialization/deserialization cares about actual message semantics, not just TypeScript structure.
+
+### What warrants a second pair of eyes
+- The exact long-term fix strategy:
+  - pin `msw` to `2.12.0`,
+  - or find an addon release compatible with `msw@2.13.x+`,
+  - or abandon the addon in favor of RTK Query story-specific mocking.
+- The correct protobuf JSON serialization path for story mocks:
+  - manual encoder with RFC3339 timestamps,
+  - or create real Buf message instances before calling `toJson()`.
+- Whether the Vitest / Storybook integration needs a separate setup even after the MSW version pin.
+
+### What should be done in the future
+- Pin `msw` to `2.12.0` in a focused code change and verify interactive Storybook end-to-end.
+- Fix `runtimeEventsHandlers.ts` so it emits valid protobuf JSON for `RuntimeEventV1`.
+- Once interactive Storybook is green, revisit the test-runner side (`@storybook/addon-vitest`) separately.
+- Check whether a newer `msw-storybook-addon` release has removed the `worker.context` assumption.
+
+### Code review instructions
+- Start with the updated bug report: `ttmp/2026/04/07/UI-001--ui-redesign-runtime-events-workflow-detail-and-system-ux-improvements/analysis/02-bug-report-msw-handlers-not-intercepting-rtk-query-requests-in-storybook.md`
+- Then inspect these files for the evidence path:
+  - `web/.storybook/preview.tsx`
+  - `web/src/mocks/runtimeEventsHandlers.ts`
+  - `web/node_modules/.../msw-storybook-addon/dist/index.browser.js` (`initialize`)
+  - `web/node_modules/.pnpm/msw@2.13.0.../node_modules/msw/lib/browser/index.mjs` (`setupWorker` return object)
+- Reproduce with Storybook at `/story/pages-runtimeeventspage--default`
+- Validate the downgrade experiment by pinning `msw@2.12.0` and restarting Storybook
+
+### Technical details
+- Exact command used to pin MSW temporarily:
+  ```bash
+  cd /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web && pnpm add -D msw@2.12.0
+  ```
+- Exact command used to restart Storybook after dependency changes:
+  ```bash
+  kill <storybook-pids>
+  cd /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web
+  nohup pnpm storybook > /tmp/ui001-storybook.log 2>&1 &
+  ```
+- Confirmed good / bad version boundary from tarball inspection:
+  - good: `2.0.9`, `2.6.8`, `2.8.0`, `2.10.0`, `2.11.0`, `2.12.0`
+  - bad: `2.13.0`
+- Successful interception evidence after downgrade:
+  ```text
+  [msw] runtime-events handler matched http://localhost:6006/api/v1/runtime-events?limit=100
+  GET http://localhost:6006/api/v1/runtime-events?limit=100 => 200 OK
+  ```
+
+---
+
+## Step 8: Implemented the Storybook MSW Fix
+
+Once the dependency mismatch and mock-shape issues were proven, I switched from analysis back to implementation. This step takes the investigation from “we know why it is broken” to “the RuntimeEventsPage story works again in Storybook with stable mocks and no runtime console errors.”
+
+The final fix is intentionally pragmatic. I pinned `msw` to the last verified-compatible version (`2.12.0`), restored standard `msw-storybook-addon` initialization, emitted valid protobuf JSON from the runtime-event mock handler by constructing real Buf messages, disabled Storybook-only serializability warnings for protobuf `bigint` timestamps, and skipped SSE in Storybook so the unmocked stream endpoint stops generating 404 noise.
+
+### Prompt Context
+
+**User prompt (verbatim):** "did you fix it though? you are the expert now."
+
+**Assistant interpretation:** Stop handoff-only work, finish the actual implementation, and verify the bug is truly resolved.
+
+**Inferred user intent:** Get the Storybook runtime-events mocking bug fixed, not just analyzed.
+
+**Commit (code):** 92cb0a9 — "fix(UI-001): restore Storybook runtime event mocking"
+
+### What I did
+- Pinned `msw` from `2.13.0` to `2.12.0` in `web/package.json` and `web/pnpm-lock.yaml`
+- Restored standard MSW Storybook setup in `web/.storybook/preview.tsx`:
+  - `initialize({ onUnhandledRequest: 'bypass' })`
+  - `loaders: [mswLoader]`
+- Updated Storybook stores in:
+  - `web/.storybook/preview.tsx`
+  - `web/src/pages/RuntimeEventsPage.stories.tsx`
+  to use `getDefault({ serializableCheck: false })` so protobuf timestamps with `bigint` do not trigger Redux Toolkit warnings in Storybook
+- Fixed `web/src/mocks/runtimeEventsHandlers.ts` to serialize through real Buf messages:
+  - `create(RuntimeEventV1Schema, event)`
+  - `toJson(RuntimeEventV1Schema, message)`
+- Updated `web/src/api/runtimeEventsApi.ts` to skip `EventSource` setup when running inside Storybook (`__STORYBOOK_PREVIEW__` present)
+- Verified the story in a real browser via Playwright MCP and confirmed the table body renders 20 mocked rows
+- Re-ran validation:
+  - `npx tsc --noEmit`
+  - `npx vitest run`
+
+### Why
+- Analysis alone had already identified the root cause and the shortest stable fix path. Continuing to leave the repo in a “known broken but documented” state would waste time.
+- Pinning `msw` is the smallest reliable fix while keeping the existing Storybook addon integration intact.
+- Skipping Storybook SSE is a quality-of-life fix: Storybook only needs deterministic mock REST data for these stories, not an unmocked live stream.
+
+### What worked
+- After pinning to `msw@2.12.0`, `msw-storybook-addon` stopped throwing `activationPromise` errors
+- The runtime-events handler intercepted correctly and returned `200 OK`
+- Constructing actual Buf messages before `toJson()` solved the protobuf JSON shape problem cleanly
+- Disabling `serializableCheck` in Storybook stores removed the protobuf `bigint` warnings
+- Skipping SSE in Storybook removed the last `/api/v1/runtime-events/stream` 404 console error
+- The RuntimeEventsPage story now renders the full table and interactive controls without runtime errors
+- `npx tsc --noEmit` and `npx vitest run` both pass; vitest result: **42 files / 156 tests**
+
+### What didn't work
+- Leaving the hand-written protobuf JSON in place caused:
+  ```text
+  Error: cannot decode message google.protobuf.Timestamp from JSON: object
+  ```
+- Calling `toJson(RuntimeEventV1Schema, event)` on a plain object failed with:
+  ```text
+  ForeignFieldError: cannot use field scraper.runtime.v1.RuntimeEventV1.schema_version with message undefined
+  ```
+  That only worked after wrapping the plain object with `create(RuntimeEventV1Schema, event)`.
+
+### What I learned
+- For Buf-generated message types, “plain object with the right shape” is not the same thing as a real message instance when you serialize.
+- Storybook is a different enough environment from the real app that it is often worth explicitly skipping live subsystems like SSE instead of trying to mock every moving part.
+- A narrow dependency pin is sometimes the most maintainable fix when the alternative is working around a third-party compatibility regression.
+
+### What was tricky to build
+- The last 20% was about reducing noise, not restoring functionality. Once the story loaded data, the remaining work was removing environment-specific errors (serializable checks, SSE 404s) without changing production behavior.
+- The Storybook-specific SSE skip needed to be narrow: only disable the stream when `__STORYBOOK_PREVIEW__` is present, and keep the normal app behavior untouched.
+- Because Storybook caches optimized dependencies, some changes only reflected after a full server restart; relying on HMR alone was not always enough for dependency-level fixes.
+
+### What warrants a second pair of eyes
+- The Storybook environment detection in `runtimeEventsApi.ts` (`__STORYBOOK_PREVIEW__` check) — it is intentionally narrow, but it is still an app-level reference to a Storybook global.
+- The decision to pin `msw` to `2.12.0` — reasonable now, but should be revisited once addon compatibility with newer MSW is confirmed.
+- The stream status label in Storybook still reads as “Live” because the page derives status from query success, not real SSE status. That is cosmetic but worth noting.
+
+### What should be done in the future
+- Revisit the `msw` pin when `msw-storybook-addon` supports `msw@2.13.x+`
+- Consider a small Storybook-specific badge or prop to indicate mocked/static mode instead of “Live”
+- Add MSW handlers for other pages (e.g. sites detail / verbs) if those stories are expected to run backend-free as well
+
+### Code review instructions
+- Start with `web/src/mocks/runtimeEventsHandlers.ts` — this is where the mock payload became valid protobuf JSON
+- Then review `web/.storybook/preview.tsx` and `web/src/pages/RuntimeEventsPage.stories.tsx` for the MSW wiring and Storybook-only middleware change
+- Review `web/src/api/runtimeEventsApi.ts` for the `isStorybookEnvironment()` gate in `onCacheEntryAdded`
+- Validate manually:
+  - run `pnpm storybook`
+  - open `Pages / RuntimeEventsPage / Default`
+  - confirm mocked rows render and console has no runtime/MSW errors
+- Validate automatically:
+  - `cd web && npx tsc --noEmit`
+  - `cd web && npx vitest run`
+
+### Technical details
+- Working Storybook page URL:
+  ```text
+  http://localhost:6006/?path=/story/pages-runtimeeventspage--default
+  ```
+- Key files changed in the fix commit:
+  - `web/package.json`
+  - `web/pnpm-lock.yaml`
+  - `web/.storybook/preview.tsx`
+  - `web/src/pages/RuntimeEventsPage.stories.tsx`
+  - `web/src/mocks/runtimeEventsHandlers.ts`
+  - `web/src/api/runtimeEventsApi.ts`
+- Browser verification after the fix showed the iframe body contained:
+  - `Runtime Events`
+  - `20 events`
+  - 20 rendered rows with timestamps, severities, sources, and messages
