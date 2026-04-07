@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -63,60 +62,9 @@ func New(cfg Config, siteRegistry *siteregistry.Registry) (*http.Server, error) 
 	runtimeEventsHandler := handlers.NewRuntimeEventsHandler(eventHub)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", catalogHandler.Healthz)
-	mux.Handle("GET /metrics", metricsRegistry.Handler())
-	mux.HandleFunc("GET /api/v1/info", catalogHandler.Info)
-	mux.HandleFunc("GET /api/v1/sites", catalogHandler.Sites)
-	mux.HandleFunc("GET /api/v1/sites/{site}", catalogHandler.Site)
-	mux.HandleFunc("GET /api/v1/sites/{site}/detail", catalogHandler.SiteDetail)
-	mux.HandleFunc("GET /api/v1/sites/{site}/verbs", catalogHandler.Verbs)
-	mux.HandleFunc("GET /api/v1/sites/{site}/verbs/{verb}", catalogHandler.Verb)
-	mux.HandleFunc("GET /api/v1/engine/status", engineHandler.Status)
-	mux.HandleFunc("GET /api/v1/engine/migrations", engineHandler.Migrations)
-	mux.HandleFunc("GET /api/v1/workflows", engineHandler.Workflows)
-	mux.HandleFunc("GET /api/v1/workflows/{workflowID}", engineHandler.Workflow)
-	mux.HandleFunc("GET /api/v1/workflows/{workflowID}/ops", engineHandler.WorkflowOps)
-	mux.HandleFunc("GET /api/v1/workflows/{workflowID}/artifacts", engineHandler.WorkflowArtifacts)
-	mux.HandleFunc("GET /api/v1/workflows/{workflowID}/ops/{opID}/result", engineHandler.OpResult)
-	mux.HandleFunc("GET /api/v1/workflows/{workflowID}/ops/{opID}/artifacts", engineHandler.OpArtifacts)
-	mux.HandleFunc("GET /api/v1/artifacts/{artifactID}", engineHandler.ArtifactDownload)
-	mux.HandleFunc("GET /api/v1/runtime-events", runtimeEventsHandler.List)
-	mux.HandleFunc("GET /api/v1/runtime-events/stream", runtimeEventsHandler.Stream)
-	mux.HandleFunc("POST /api/v1/workflows/", func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/api/v1/workflows/")
-		if strings.HasSuffix(path, ":cancel") {
-			wfID := strings.TrimSuffix(path, ":cancel")
-			r.SetPathValue("workflowID", wfID)
-			engineHandler.CancelWorkflow(w, r)
-			return
-		}
-		parts := strings.Split(path, "/")
-		if len(parts) == 3 && parts[1] == "ops" && strings.HasSuffix(parts[2], ":retry") {
-			r.SetPathValue("workflowID", parts[0])
-			r.SetPathValue("opID", strings.TrimSuffix(parts[2], ":retry"))
-			engineHandler.RetryOp(w, r)
-			return
-		}
-		http.NotFound(w, r)
-	})
-	mux.HandleFunc("GET /api/v1/queues", engineHandler.Queues)
-	mux.HandleFunc("GET /api/v1/sites/{site}/scripts", catalogHandler.Scripts)
-	mux.HandleFunc("GET /api/v1/sites/{site}/scripts/{path...}", catalogHandler.Script)
-	mux.HandleFunc("POST /api/v1/sites/", func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasSuffix(r.URL.Path, ":submit") {
-			http.NotFound(w, r)
-			return
-		}
-		trimmed := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/sites/"), ":submit")
-		parts := strings.Split(trimmed, "/")
-		if len(parts) != 3 || parts[1] != "verbs" {
-			http.NotFound(w, r)
-			return
-		}
-		r.SetPathValue("site", parts[0])
-		r.SetPathValue("verb", parts[2])
-		submissionHandler.Submit(w, r)
-	})
+	registerCatalogRoutes(mux, catalogHandler, submissionHandler)
+	registerEngineRoutes(mux, engineHandler, metricsRegistry)
+	registerRuntimeEventRoutes(mux, runtimeEventsHandler)
 
 	server := &http.Server{
 		Addr:         cfg.Address,
