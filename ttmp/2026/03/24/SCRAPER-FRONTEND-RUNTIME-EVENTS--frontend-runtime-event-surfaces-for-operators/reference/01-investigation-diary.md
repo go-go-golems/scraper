@@ -18,7 +18,7 @@ RelatedFiles:
       Note: Backend route and SSE bootstrap used to validate the frontend assumptions
 ExternalSources: []
 Summary: Chronological research log for the frontend runtime event follow-up ticket.
-LastUpdated: 2026-03-24T23:26:18-04:00
+LastUpdated: 2026-04-07T11:17:41-04:00
 WhatFor: Preserve the reasoning, commands, evidence, and writing decisions used to produce the frontend runtime event implementation guide.
 WhenToUse: Use when continuing this ticket or reviewing why the guide recommends its current phased frontend plan.
 ---
@@ -388,6 +388,212 @@ Verification results:
 - `SubmitWorkflowPage` still needs the post-submit live progress surface.
 - overview and queue pages still need event-derived widgets.
 - component-level tests and stream-hook tests are still missing.
+
+## Step 4: Fix runtime-event UI warnings and reduce idle worker log noise
+
+This step came from direct manual testing rather than from the original phase checklist. The user reported three concrete problems while exercising the new runtime-event screens: invalid nested MUI typography markup on `/events`, Redux serializability warnings caused by protobuf `bigint` timestamp fields, and worker idle logs flooding the terminal when there was no leaseable work. The goal of this step was not to change architecture again. It was to remove those rough edges without regressing the shared runtime-event design.
+
+The key design correction was on the frontend data boundary. RTK Query had been caching decoded protobuf `RuntimeEventV1` messages. That looked convenient, but the generated timestamp shape contains `bigint` seconds, which Redux Toolkit correctly warns about as non-serializable. The right fix was to keep raw JSON in the RTK cache and decode protobuf messages only in local hook state inside `useRuntimeEventFeed`. That preserves the shared hook design while keeping Redux state serializable.
+
+### Prompt Context
+
+**User prompt (verbatim):** "When going to /events:  content.js:1:838260
+In HTML, <p> cannot be a descendant of <p>.
+This will cause a hydration error.
+
+  ...
+    <ul className=\"MuiList-ro...\">
+      <Box>
+        <Styled(div) as=\"div\" ref={null} className=\"MuiBox-root\" theme={{...}} sx={{}}>
+          <Insertion>
+          <div className=\"MuiBox-roo...\">
+            <ListItem alignItems=\"flex-start\" sx={{px:0,py:1.25}}>
+              <MuiListItem-root as=\"li\" ref={function} ownerState={{...}} className=\"MuiListIte...\" sx={{px:0,py:1.25}}>
+                <Insertion>
+                <li className=\"MuiListIte...\" ref={function}>
+                  <ListItemText primary={<ForwardRef(Grid)>} secondary={<ForwardRef(Grid)>}>
+                    <MuiListItemText-root className=\"MuiListIte...\" ref={null} ownerState={{primary:true, ...}}>
+                      <Insertion>
+                      <div className=\"MuiListIte...\">
+                        <Typography>
+                        <Typography variant=\"body2\" color=\"textSecondary\" className=\"MuiListIte...\" ref={null} ...>
+                          <MuiTypography-root as=\"p\" ref={null} className=\"MuiTypogra...\" ...>
+                            <Insertion>
+>                           <p
+>                             className=\"MuiTypography-root MuiTypography-body2 MuiListItemText-secondary css-1hxk12u-...\"
+>                             style={{}}
+>                           >
+                              ...
+                                <div className=\"MuiStack-r...\">
+                                  <Typography variant=\"body2\" color=\"text.primary\">
+                                    <MuiTypography-root as=\"p\" ref={null} className=\"MuiTypogra...\" sx={{color:\"tex...\"}} ...>
+                                      <Insertion>
+>                                     <p
+>                                       className=\"MuiTypography-root MuiTypography-body2 css-20tgvo-MuiTypography-root\"
+>                                       style={{}}
+>                                     >
+                                  ...
+            ...
+      ...
+ Stack: 
+    p unknown:0
+<anonymous code>:1:145535
+<p> cannot contain a nested <p>.
+See this log for the ancestor stack trace. Stack: 
+    p unknown:0
+<anonymous code>:1:145535
+In HTML, <div> cannot be a descendant of <p>.
+This will cause a hydration error.
+
+  ...
+    <ul className=\"MuiList-ro...\">
+      <Box>
+        <Styled(div) as=\"div\" ref={null} className=\"MuiBox-root\" theme={{...}} sx={{}}>
+          <Insertion>
+          <div className=\"MuiBox-roo...\">
+            <ListItem alignItems=\"flex-start\" sx={{px:0,py:1.25}}>
+              <MuiListItem-root as=\"li\" ref={function} ownerState={{...}} className=\"MuiListIte...\" sx={{px:0,py:1.25}}>
+                <Insertion>
+                <li className=\"MuiListIte...\" ref={function}>
+                  <ListItemText primary={<ForwardRef(Grid)>} secondary={<ForwardRef(Grid)>}>
+                    <MuiListItemText-root className=\"MuiListIte...\" ref={null} ownerState={{primary:true, ...}}>
+                      <Insertion>
+                      <div className=\"MuiListIte...\">
+                        <Typography>
+                        <Typography variant=\"body2\" color=\"textSecondary\" className=\"MuiListIte...\" ref={null} ...>
+                          <MuiTypography-root as=\"p\" ref={null} className=\"MuiTypogra...\" ...>
+                            <Insertion>
+>                           <p
+>                             className=\"MuiTypography-root MuiTypography-body2 MuiListItemText-secondary css-1hxk12u-...\"
+>                             style={{}}
+>                           >
+                              ...
+                                <div className=\"MuiStack-r...\">
+                                  <Typography>
+                                  <Grid direction=\"row\" spacing={1} flexWrap=\"wrap\" useFlexGap={true}>
+                                    <MuiStack-root as=\"div\" ownerState={{...}} ref={null} className=\"MuiStack-root\" ...>
+                                      <Insertion>
+>                                     <div className=\"MuiStack-root css-pex525-MuiStack-root\">
+            ...
+      ...
+ Stack: 
+    div unknown:0
+<anonymous code>:1:145535
+<p> cannot contain a nested <div>.
+See this log for the ancestor stack trace. Stack: 
+    p unknown:0
+<anonymous code>:1:145535
+A non-serializable value was detected in an action, in the path: `payload.0.occurredAt.seconds`. Value: 1775574401n 
+Take a look at the logic that dispatched this action:  
+Object { type: \"runtimeEventsApi/executeQuery/fulfilled\", payload: (100) […], meta: {…} }
+ 
+
+(See https://redux.js.org/faq/actions#why-should-type-be-a-string-or-at-least-serializable-why-should-my-action-types-be-constants) 
+(To allow non-serializable values see: https://redux-toolkit.js.org/usage/usage-guide#working-with-non-serializable-data) <anonymous code>:1:145535
+A non-serializable value was detected in the state, in the path: `runtimeEventsApi.queries.getRecentRuntimeEvents({\"limit\":100}).data.0.occurredAt.seconds`. Value: 1775574401n 
+Take a look at the reducer(s) handling this action type: runtimeEventsApi/executeQuery/fulfilled.
+(See https://redux.js.org/faq/organizing-state#can-i-put-functions-promises-or-other-non-serializable-items-in-my-store-state)
+
+not sure the SSE works.
+
+It's on http://localhost:5174/events 
+
+
+Make this logging.Trace 2026-04-07T11:08:51.243324908-04:00 INF no leaseable queues attempt=0 event=idle op_id= queue= site= workflow_id= workflow_status= 
+
+So we don't flood the terminal.
+
+Also get this on /workflows: A non-serializable value was detected in the state, in the path: `runtimeEventsApi.queries.getRecentRuntimeEvents({\"limit\":100}).data.0.occurredAt.seconds`. Value: 1775574401n 
+Take a look at the reducer(s) handling this action type: workflowApi/executeQuery/fulfilled.
+(See https://redux.js.org/faq/organizing-state#can-i-put-functions-promises-or-other-non-serializable-items-in-my-store-state) <anonymous code>:1:145535
+A non-serializable value was detected in the state, in the path: `runtimeEventsApi.queries.getRecentRuntimeEvents({\"limit\":100}).data.0.occurredAt.seconds`. Value: 1775574401n 
+Take a look at the reducer(s) handling this action type: workflowApi/executeQuery/pending.
+(See https://redux.js.org/faq/organizing-state#can-i-put-functions-promises-or-other-non-serializable-items-in-my-store-state) <anonymous code>:1:145535
+A non-serializable value was detected in the state, in the path: `runtimeEventsApi.queries.getRecentRuntimeEvents({\"limit\":100}).data.0.occurredAt.seconds`. Value: 1775574401n 
+Take a look at the reducer(s) handling this action type: workflowApi/executeQuery/fulfilled.
+(See https://redux.js.org/faq/organizing-state#can-i-put-functions-promises-or-other-non-serializable-items-in-my-store-state) (maybe that's the SSE ?)"
+
+**Assistant interpretation:** Fix the concrete frontend runtime-event regressions the user found during manual testing, verify whether SSE is actually live, and reduce terminal noise from idle worker polling.
+
+**Inferred user intent:** Make the runtime-event screens stable enough for real interactive use instead of leaving them in a technically-working-but-annoying state.
+
+### What I changed
+
+- In `web/src/api/runtimeEventsApi.ts`:
+  - stopped transforming API responses directly into decoded protobuf messages inside RTK Query
+  - kept raw JSON values in the cache instead
+- In `web/src/features/runtime-events/runtimeEventFeed.ts`:
+  - moved history decode into the hook layer with a local `decodeRuntimeEvents(...)` helper
+  - kept SSE decode local there as well, so protobuf messages stay out of Redux state
+- In `web/src/components/workflows/RuntimeEventList.tsx`:
+  - enabled `disableTypography` on `ListItemText`
+  - wrapped the secondary area in a plain `Box` so MUI no longer renders nested `<p>` or `<div>` inside a paragraph
+- In `pkg/engine/scheduler/scheduler.go`:
+  - changed `EventIdle` logging from `Info` to `Trace`
+
+### Why
+
+- The Redux warnings were real and stemmed from a design mistake: protobuf messages with `bigint` timestamp fields do not belong in a serializable RTK Query cache.
+- The MUI warnings were also real and came from putting stacks and typography blocks into `ListItemText` secondary content without disabling the default typography wrapper.
+- The idle worker log spam made normal manual testing noisy and harder to read even though the worker behavior itself was correct.
+
+### What worked
+
+- The browser verification after the patch showed that the running app was clean:
+  - `http://localhost:5174/events` loaded with no warnings or errors in the console
+  - `http://localhost:5174/workflows` loaded with no warnings or errors in the console
+  - `/events` showed `Stream: live` and an updating event count, which confirmed the SSE path was active
+- `go test ./... -count=1` passed after the scheduler logging change
+
+### What didn't work
+
+- The first attempt to use the tool shell for repeated `npm run test:unit` and `npm run build` validation behaved strangely and did not stream output back reliably even though the local app and Go test suite were fine.
+- Because of that tool-output quirk, I verified the frontend fix primarily through direct browser loading plus console inspection against the running local Vite server at `http://localhost:5174`.
+- I also tripped a shell quirk when trying to capture exit codes with a variable named `status` under `zsh`, because `status` is readonly there.
+
+### What I learned
+
+- The cleanest place to draw the frontend protobuf boundary is inside the shared runtime-event hook, not inside RTK Query cache transforms.
+- The `/events` screen was not actually failing because SSE was broken. The noisy console warnings were obscuring the real state of the page.
+- For MUI `ListItemText`, `disableTypography` is the safer default once the content becomes layout-like rather than plain text.
+
+### What was tricky to build
+
+- The subtle part was distinguishing a transport problem from a state-shape problem. The user reasonably suspected SSE might be broken because the console was full of warnings and the runtime-event state was participating in warnings on unrelated pages such as `/workflows`.
+- The actual cause was that Redux Toolkit checks the entire store for serializability on every action. Once the runtime-event cache contained a protobuf `bigint`, unrelated actions started surfacing the same warning.
+- The other subtlety was that MUI’s `ListItemText` secondary prop looks like an arbitrary React node slot, but by default it still wraps that content in typography markup. Once that secondary content contains `Stack` or nested `Typography`, invalid HTML follows unless you disable the wrapper.
+
+### What warrants a second pair of eyes
+
+- Whether the frontend should eventually normalize runtime events into an explicit app-level UI model instead of repeatedly decoding protobuf messages in local hooks.
+- Whether the global `/events` page should default to hiding `DEBUG` events now that idle logs are trace-level on the backend.
+- Whether the runtime-event list has grown enough that virtualization or pagination should be considered soon.
+
+### What should be done in the future
+
+- Add component-level tests around `RuntimeEventList` markup so this typography-wrapper regression does not reappear.
+- Add stream-hook tests that verify history replay plus SSE merge behavior with mocked `EventSource`.
+- Continue with the next planned UX slice: post-submit live progress on `SubmitWorkflowPage`.
+
+### Code review instructions
+
+- Start with:
+  - `web/src/api/runtimeEventsApi.ts`
+  - `web/src/features/runtime-events/runtimeEventFeed.ts`
+  - `web/src/components/workflows/RuntimeEventList.tsx`
+  - `pkg/engine/scheduler/scheduler.go`
+- Validate by:
+  - running `go test ./... -count=1`
+  - loading `http://localhost:5174/events`
+  - loading `http://localhost:5174/workflows`
+  - confirming the browser console is free of the earlier nested markup and non-serializable warnings
+  - confirming `/events` shows `Stream: live`
+
+### Technical details
+
+- The root Redux warning came from storing decoded `RuntimeEventV1` messages in `runtimeEventsApi.queries...data`, where `occurredAt.seconds` is a `bigint`.
+- The fix keeps `JsonValue[]` in RTK Query cache and only calls `decodeRuntimeEvent(...)` inside `useRuntimeEventFeed`.
+- The root DOM warning came from `ListItemText` secondary rendering an implicit typography wrapper around layout content that already contained `Typography` and `Stack`.
 
 ### Code review instructions
 

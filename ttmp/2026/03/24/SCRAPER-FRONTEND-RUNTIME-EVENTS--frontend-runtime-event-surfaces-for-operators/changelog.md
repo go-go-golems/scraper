@@ -46,3 +46,15 @@
   - phased file-by-file implementation plan,
   - testing strategy,
   - risks and alternatives
+
+## 2026-04-07
+
+- Fixed frontend runtime event rendering and state-management issues discovered during local manual testing:
+  - stopped storing decoded protobuf runtime events with `bigint` timestamp fields inside RTK Query cache
+  - kept raw JSON in `runtimeEventsApi` and moved protobuf decode back into `useRuntimeEventFeed`
+  - fixed invalid nested MUI typography markup in `RuntimeEventList.tsx`
+  - lowered scheduler idle logging from info to trace in `pkg/engine/scheduler/scheduler.go`
+- Revalidated the app manually in the browser:
+  - `/events` loads cleanly
+  - `/workflows` loads cleanly
+  - `/events` shows `Stream: live` with an updating event count and no console warnings
