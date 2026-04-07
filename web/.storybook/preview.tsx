@@ -18,10 +18,6 @@ function createMockStore() {
   });
 }
 
-// MSW is lazy-loaded so it doesn't break vitest (which runs in Node/Playwright)
-// where the service worker doesn't exist.
-let mswLoader: (() => Promise<void>) | undefined;
-
 const preview: Preview = {
   decorators: [
     (Story) => (
@@ -44,23 +40,6 @@ const preview: Preview = {
       test: 'todo',
     },
   },
-  loaders: [
-    // Defer MSW loader to runtime so it's only loaded in interactive Storybook
-    async () => {
-      if (!mswLoader) {
-        try {
-          const mswAddon = await import('msw-storybook-addon');
-          mswAddon.initialize({ onUnhandledRequest: 'bypass' });
-          mswLoader = mswAddon.mswLoader;
-        } catch {
-          // MSW not available (e.g., in vitest)
-        }
-      }
-      if (mswLoader) {
-        return mswLoader();
-      }
-    },
-  ],
 };
 
 export default preview;
