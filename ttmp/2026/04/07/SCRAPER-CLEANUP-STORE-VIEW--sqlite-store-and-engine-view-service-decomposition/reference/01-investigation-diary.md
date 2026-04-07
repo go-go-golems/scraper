@@ -294,3 +294,55 @@ go test ./pkg/engine/store/sqlite -count=1
 ```
 
 The SQLite package passed again after the move, which left the final lease-only slice as the remaining store decomposition step.
+
+### Seventh cleanup slice: SQLite lease methods and final validation pass
+
+The final store-specific extraction was the lease lifecycle.
+
+File added:
+
+- `pkg/engine/store/sqlite/lease_store.go`
+
+What moved into `lease_store.go`:
+
+- `LeaseReadyOp(...)`
+- `HeartbeatLease(...)`
+
+What `store.go` became after this move:
+
+- `Store` type definition
+- `Open(...)`
+- `Close(...)`
+- `CurrentVersion(...)`
+
+This was the target outcome for the move-only pass: keep the public `Store` type stable while moving domain-specific methods into dedicated files.
+
+One small cleanup issue appeared immediately after the move:
+
+- `store.go` still had imports left over from the old lease implementation
+- `go test ./pkg/engine/store/sqlite -count=1` failed with unused imports for `encoding/json`, `time`, `model`, and `storecontract`
+
+Fix:
+
+- removed the stale imports from `store.go`
+
+Validation for the final slice:
+
+```bash
+gofmt -w pkg/engine/store/sqlite/store.go pkg/engine/store/sqlite/lease_store.go
+go test ./pkg/engine/store/sqlite -count=1
+go test ./pkg/services/engineview ./pkg/api/server -count=1
+go test ./... -count=1
+```
+
+Results:
+
+- SQLite store package passed
+- engineview and API server packages passed
+- full repository test pass stayed green
+
+At this point the planned store/view decomposition work for this ticket is structurally complete:
+
+- `service.go` is a thin engineview facade
+- `store.go` is a thin SQLite store shell
+- workflow, op, lease, result/artifact, limiter, and helper responsibilities now live in dedicated files

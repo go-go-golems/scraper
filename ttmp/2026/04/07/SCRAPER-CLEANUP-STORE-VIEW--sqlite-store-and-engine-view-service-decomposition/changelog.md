@@ -10,3 +10,4 @@
 - Extracted SQLite result completion, failure handling, result loading, and artifact loading into `result_store.go`.
 - Extracted workflow creation, reads, status updates, and workflow stats into `workflow_store.go`.
 - Extracted op enqueueing, op reads, dependency loading, runnable refresh, and queue candidate listing into `op_store.go`.
+- Extracted lease acquisition and heartbeat handling into `lease_store.go`, leaving `store.go` as the thin store shell.
