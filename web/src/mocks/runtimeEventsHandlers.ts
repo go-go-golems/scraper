@@ -8,7 +8,7 @@ import { generateMockEvents } from '../test-utils/mockRuntimeEvents';
 let cachedEvents = generateMockEvents(20);
 
 export const runtimeEventsHandlers = [
-  http.get('/api/v1/runtime-events', ({ request }) => {
+  http.get('*/api/v1/runtime-events', ({ request }) => {
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get('limit') ?? 100);
     const workflowId = url.searchParams.get('workflowId');

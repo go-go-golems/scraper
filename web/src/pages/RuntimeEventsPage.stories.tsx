@@ -6,6 +6,7 @@ import { RuntimeEventsPage } from './RuntimeEventsPage';
 import { runtimeEventsApi } from '../api/runtimeEventsApi';
 import { uiSlice } from '../store/uiSlice';
 import { runtimeEventsHandlers } from '../mocks/runtimeEventsHandlers';
+import { http, HttpResponse } from 'msw';
 
 function createStoryStore() {
   return configureStore({
@@ -43,3 +44,15 @@ export default meta;
 type Story = StoryObj<typeof RuntimeEventsPage>;
 
 export const Default: Story = {};
+
+export const Empty: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        http.get('*/api/v1/runtime-events', () => {
+          return HttpResponse.json({ events: [] });
+        }),
+      ],
+    },
+  },
+};
