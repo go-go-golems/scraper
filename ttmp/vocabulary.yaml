@@ -55,6 +55,10 @@ topics:
       description: Runtime events, event streams, and event-driven operator workflows
     - slug: onboarding
       description: Onboarding flows, learning paths, and orientation material for new users or engineers
+    - slug: prometheus
+      description: Prometheus metrics and query integration
+    - slug: grafana
+      description: Grafana dashboards and graph integration
 docTypes:
     - slug: index
       description: Ticket index documents
