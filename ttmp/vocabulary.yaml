@@ -63,6 +63,18 @@ topics:
       description: Artifact browsing and downloads
     - slug: workflows
       description: Workflow-level status and navigation
+    - slug: debugger
+      description: Debugger and debugging tooling
+    - slug: developer-experience
+      description: Developer experience and DX improvements
+    - slug: developer-tools
+      description: Developer tools and utilities
+    - slug: ui-design
+      description: UI design and layout decisions
+    - slug: cleanup
+      description: Refactoring, decomposition, and codebase simplification
+    - slug: sqlite
+      description: SQLite storage, schema, and query organization
 docTypes:
     - slug: index
       description: Ticket index documents
