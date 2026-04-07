@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Box, Chip } from '@mui/material';
-import { LocalizationProvider, DateRangePicker } from '@mui/x-date-pickers';
+import { LocalizationProvider, DateTimePicker } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { type Dayjs } from 'dayjs';
 
@@ -41,17 +41,14 @@ export function TimeRangeSelector({
   onChange,
   options = DEFAULT_OPTIONS,
 }: TimeRangeSelectorProps) {
-  const [customRange, setCustomRange] = useState<[Dayjs | null, Dayjs | null]>([
-    dayjs().startOf('day'),
-    dayjs(),
-  ]);
+  const [customFrom, setCustomFrom] = useState<Dayjs | null>(dayjs().startOf('day'));
+  const [customTo, setCustomTo] = useState<Dayjs | null>(dayjs());
 
   const handleSelect = useCallback(
     (opt: string) => {
       if (opt === 'live') {
         onChange({ mode: 'live' });
       } else if (opt === 'custom') {
-        // Don't immediately fire — wait for picker confirmation
         onChange({ mode: 'absolute' });
       } else {
         onChange({ mode: 'relative', range: opt });
@@ -60,19 +57,24 @@ export function TimeRangeSelector({
     [onChange],
   );
 
-  const handleCustomChange = useCallback(
-    (newValue: [Dayjs | null, Dayjs | null]) => {
-      setCustomRange(newValue);
-      const [from, to] = newValue;
-      if (from && to) {
-        onChange({
-          mode: 'absolute',
-          from: from.toISOString(),
-          to: to.toISOString(),
-        });
+  const handleFromChange = useCallback(
+    (newValue: Dayjs | null) => {
+      setCustomFrom(newValue);
+      if (newValue && customTo) {
+        onChange({ mode: 'absolute', from: newValue.toISOString(), to: customTo.toISOString() });
       }
     },
-    [onChange],
+    [customTo, onChange],
+  );
+
+  const handleToChange = useCallback(
+    (newValue: Dayjs | null) => {
+      setCustomTo(newValue);
+      if (customFrom && newValue) {
+        onChange({ mode: 'absolute', from: customFrom.toISOString(), to: newValue.toISOString() });
+      }
+    },
+    [customFrom, onChange],
   );
 
   return (
@@ -96,13 +98,20 @@ export function TimeRangeSelector({
 
       {value.mode === 'absolute' && (
         <LocalizationProvider dateAdapter={AdapterDayjs}>
-          <DateRangePicker
-            value={customRange}
-            onChange={handleCustomChange}
-            slotProps={{
-              textField: { size: 'small' },
-            }}
-          />
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <DateTimePicker
+              label="From"
+              value={customFrom}
+              onChange={handleFromChange}
+              slotProps={{ textField: { size: 'small' } }}
+            />
+            <DateTimePicker
+              label="To"
+              value={customTo}
+              onChange={handleToChange}
+              slotProps={{ textField: { size: 'small' } }}
+            />
+          </Box>
         </LocalizationProvider>
       )}
     </Box>
