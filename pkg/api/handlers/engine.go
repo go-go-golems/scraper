@@ -176,6 +176,34 @@ func (h *EngineHandler) OpResult(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apitypes.OpResultResponse{Result: result})
 }
 
+func (h *EngineHandler) WorkflowResults(w http.ResponseWriter, r *http.Request) {
+	workflowID := model.WorkflowID(r.PathValue("workflowID"))
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	result, err := h.service.ListWorkflowResults(r.Context(), workflowID, engineview.ListWorkflowResultsOptions{
+		OpID:   model.OpID(q.Get("opId")),
+		Kind:   q.Get("kind"),
+		Status: q.Get("status"),
+		Search: q.Get("search"),
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	if result == nil {
+		writeError(w, http.StatusNotFound, "not_found", "workflow not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, apitypes.WorkflowResultsResponse{
+		WorkflowID: result.WorkflowID,
+		Total:      result.Total,
+		Results:    result.Results,
+	})
+}
+
 func (h *EngineHandler) ArtifactDownload(w http.ResponseWriter, r *http.Request) {
 	artifactID := model.ArtifactID(r.PathValue("artifactID"))
 	artifact, err := h.service.GetArtifact(r.Context(), artifactID)

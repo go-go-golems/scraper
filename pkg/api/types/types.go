@@ -73,6 +73,12 @@ type OpResultResponse struct {
 	Result *model.OpResult `json:"result"`
 }
 
+type WorkflowResultsResponse struct {
+	WorkflowID model.WorkflowID       `json:"workflowID"`
+	Total     int                    `json:"total"`
+	Results   []engineview.ResultSummary `json:"results"`
+}
+
 type ScriptListResponse struct {
 	Scripts []string `json:"scripts"`
 }

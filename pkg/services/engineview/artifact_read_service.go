@@ -45,6 +45,34 @@ type ListWorkflowArtifactsOptions struct {
 	Offset      int
 }
 
+type ResultSummary struct {
+	OpID         model.OpID `json:"opID"`
+	Kind         string     `json:"kind"`
+	Status       string     `json:"status"`
+	RecordCount  int        `json:"recordCount"`
+	ArtifactCount int       `json:"artifactCount"`
+	DataSize     int        `json:"dataSize"`
+	Error        *model.OpError `json:"error,omitempty"`
+	CompletedAt  time.Time  `json:"completedAt"`
+}
+
+
+type WorkflowResultsResult struct {
+	WorkflowID model.WorkflowID `json:"workflowID"`
+	Total      int             `json:"total"`
+	Results    []ResultSummary `json:"results"`
+}
+
+
+type ListWorkflowResultsOptions struct {
+	OpID    model.OpID
+	Kind    string
+	Status  string
+	Search  string
+	Limit   int
+	Offset  int
+}
+
 func (s *Service) ListArtifacts(ctx context.Context, workflowID model.WorkflowID, opID model.OpID) ([]ArtifactSummary, error) {
 	db, err := s.openReadDB()
 	if err != nil {
@@ -208,6 +236,123 @@ func (s *Service) GetOpResult(ctx context.Context, workflowID model.WorkflowID, 
 		return nil, false, err
 	}
 	return result, true, nil
+}
+
+func (s *Service) ListWorkflowResults(ctx context.Context, workflowID model.WorkflowID, opts ListWorkflowResultsOptions) (*WorkflowResultsResult, error) {
+	db, err := s.openReadDB()
+	if err != nil {
+		return nil, err
+	}
+	if db == nil {
+		return nil, nil
+	}
+	defer func() { _ = db.Close() }()
+
+	exists, err := workflowExists(ctx, db, workflowID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, nil
+	}
+
+	// Build the WHERE clause from the read DB (ops table) — results live in the
+	// durable store (openStore), but we need op metadata (kind, status) from ops.
+	where := []string{"results.workflow_id = ?"}
+	args := []any{workflowID}
+	if opts.OpID != "" {
+		where = append(where, "results.op_id = ?")
+		args = append(args, opts.OpID)
+	}
+	if opts.Kind != "" {
+		where = append(where, "ops.kind = ?")
+		args = append(args, opts.Kind)
+	}
+	if opts.Status != "" {
+		where = append(where, "ops.status = ?")
+		args = append(args, opts.Status)
+	}
+	if strings.TrimSpace(opts.Search) != "" {
+		where = append(where, "results.op_id LIKE ?")
+		args = append(args, "%"+strings.TrimSpace(opts.Search)+"%")
+	}
+	whereClause := strings.Join(where, " AND ")
+
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	offset := opts.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	var total int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(1) FROM results JOIN ops ON results.op_id = ops.id AND results.workflow_id = ops.workflow_id WHERE `+whereClause,
+		args...,
+	).Scan(&total); err != nil {
+		return nil, fmt.Errorf("count workflow results: %w", err)
+	}
+
+	queryArgs := append(append([]any{}, args...), limit, offset)
+	rows, err := db.QueryContext(ctx,
+		`SELECT results.op_id, ops.kind, ops.status,
+		        length(results.data_json),
+		        results.records_json,
+		        results.error_json,
+		        results.completed_at,
+		        (
+		          SELECT COUNT(1) FROM artifacts
+		          WHERE artifacts.op_id = results.op_id
+		            AND artifacts.workflow_id = results.workflow_id
+		        ) AS artifact_count
+		 FROM results
+		 JOIN ops ON results.op_id = ops.id AND results.workflow_id = ops.workflow_id
+		 WHERE `+whereClause+`
+		 ORDER BY results.completed_at DESC, results.op_id
+		 LIMIT ? OFFSET ?`,
+		queryArgs...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list workflow results: %w", err)
+	}
+	defer rows.Close()
+
+	ret := &WorkflowResultsResult{WorkflowID: workflowID, Total: total, Results: []ResultSummary{}}
+	for rows.Next() {
+		var rs ResultSummary
+		var recordsJSON string
+		var errorJSON sql.NullString
+		var completedAt string
+		if err := rows.Scan(&rs.OpID, &rs.Kind, &rs.Status, &rs.DataSize, &recordsJSON, &errorJSON, &completedAt, &rs.ArtifactCount); err != nil {
+			return nil, fmt.Errorf("scan result summary: %w", err)
+		}
+		rs.CompletedAt, _ = time.Parse(time.RFC3339Nano, completedAt)
+
+		var records []model.RecordWrite
+		if err := json.Unmarshal([]byte(recordsJSON), &records); err != nil {
+			records = nil
+		}
+		rs.RecordCount = len(records)
+
+
+		if errorJSON.Valid {
+			var err2 model.OpError
+			if err := json.Unmarshal([]byte(errorJSON.String), &err2); err == nil {
+				rs.Error = &err2
+			}
+		}
+
+		ret.Results = append(ret.Results, rs)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
 func (s *Service) GetArtifact(ctx context.Context, artifactID model.ArtifactID) (*ArtifactDetail, error) {

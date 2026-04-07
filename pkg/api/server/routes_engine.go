@@ -16,6 +16,7 @@ func registerEngineRoutes(mux *http.ServeMux, engineHandler *handlers.EngineHand
 	mux.HandleFunc("GET /api/v1/workflows/{workflowID}", engineHandler.Workflow)
 	mux.HandleFunc("GET /api/v1/workflows/{workflowID}/ops", engineHandler.WorkflowOps)
 	mux.HandleFunc("GET /api/v1/workflows/{workflowID}/artifacts", engineHandler.WorkflowArtifacts)
+	mux.HandleFunc("GET /api/v1/workflows/{workflowID}/results", engineHandler.WorkflowResults)
 	mux.HandleFunc("GET /api/v1/workflows/{workflowID}/ops/{opID}/result", engineHandler.OpResult)
 	mux.HandleFunc("GET /api/v1/workflows/{workflowID}/ops/{opID}/artifacts", engineHandler.OpArtifacts)
 	mux.HandleFunc("GET /api/v1/artifacts/{artifactID}", engineHandler.ArtifactDownload)
