@@ -14,8 +14,8 @@
 - [ ] Extract op enqueue/read helpers into `op_store.go`.
 - [ ] Extract leasing and heartbeat logic into `lease_store.go`.
 - [ ] Extract result/artifact logic into `result_store.go`.
-- [ ] Extract queue limiter logic into `queue_limiter.go`.
-- [ ] Extract JSON/sql helper functions into `sql_helpers.go`.
+- [x] Extract queue limiter logic into `queue_limiter.go`.
+- [x] Extract JSON/sql helper functions into `sql_helpers.go`.
 - [ ] Keep the public `Store` type stable during the move-only pass.
 
 ## Engine View Decomposition

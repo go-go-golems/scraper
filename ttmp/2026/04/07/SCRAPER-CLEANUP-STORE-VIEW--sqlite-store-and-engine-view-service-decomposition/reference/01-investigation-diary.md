@@ -15,7 +15,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: "Records why store.go and engineview/service.go are ready for decomposition."
-LastUpdated: 2026-04-07T16:20:00-04:00
+LastUpdated: 2026-04-07T16:28:00-04:00
 WhatFor: "Resume the cleanup plan with the original reasoning intact."
 WhenToUse: "Use when implementing or reviewing the store/view split."
 ---
@@ -137,3 +137,51 @@ go test ./pkg/services/engineview ./pkg/api/server -count=1
 ```
 
 Both packages passed again after the move.
+
+### Third cleanup slice: SQLite queue limiter and shared helper extraction
+
+After the `engineview` split, I moved the helper-heavy tail of `pkg/engine/store/sqlite/store.go` into two dedicated files:
+
+Files added:
+
+- `pkg/engine/store/sqlite/queue_limiter.go`
+- `pkg/engine/store/sqlite/sql_helpers.go`
+
+What moved into `queue_limiter.go`:
+
+- `queueLimiterState`
+- `countActiveLeasesForQueue(...)`
+- `loadQueueLimiterState(...)`
+- `refillQueueLimiterState(...)`
+- `upsertQueueLimiterState(...)`
+
+What moved into `sql_helpers.go`:
+
+- `queryer`
+- `loadDependenciesTx(...)`
+- `execer`
+- `execRowsAffected(...)`
+- `insertOps(...)`
+- `lookupOpContext(...)`
+- `normalizeEmittedOps(...)`
+- `initialStatus(...)`
+- `nullableParentID(...)`
+- `nullableTime(...)`
+- `boolToInt(...)`
+- `jsonText(...)`
+- `mustJSON(...)`
+- `nullableJSON(...)`
+- `unmarshalJSON(...)`
+
+What intentionally stayed in `store.go` for the next slice:
+
+- `loadArtifacts(...)`
+- core workflow/op/lease/result methods
+
+Validation for this slice:
+
+```bash
+go test ./pkg/engine/store/sqlite -count=1
+```
+
+The SQLite package stayed green after the move.
