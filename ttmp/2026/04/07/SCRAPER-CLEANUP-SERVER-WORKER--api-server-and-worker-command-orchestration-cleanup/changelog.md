@@ -8,3 +8,4 @@
 - Split request logging, request metrics, and the HTTP status recorder into `middleware_request.go`.
 - Split runtime-event router startup into `runtime_event_router.go`, leaving `server.New(...)` as the clear API composition root.
 - Split worker observer composition into `worker_observers.go`.
+- Split worker metrics listener boot into `worker_metrics.go`.

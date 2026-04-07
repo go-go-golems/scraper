@@ -169,3 +169,30 @@ go test ./pkg/api/server ./pkg/cmd -count=1
 ```
 
 The focused packages stayed green after the move.
+
+## Fifth cleanup slice: worker metrics listener boot
+
+The next worker-specific concern was the Prometheus listener helper.
+
+File added:
+
+- `pkg/cmd/worker_metrics.go`
+
+What moved:
+
+- `maybeStartWorkerMetricsServer(...)`
+
+Why this split mattered:
+
+- the helper is operational infrastructure, not worker command definition
+- it includes listener boot, graceful shutdown on context cancellation, and warning logs on unexpected server exit
+- moving it out leaves `worker.go` closer to “flags plus runtime flow”
+
+Validation for this slice:
+
+```bash
+gofmt -w pkg/cmd/worker.go pkg/cmd/worker_metrics.go
+go test ./pkg/api/server ./pkg/cmd -count=1
+```
+
+The focused packages passed again after the move.
