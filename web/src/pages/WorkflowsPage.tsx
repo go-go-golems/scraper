@@ -35,7 +35,7 @@ export function WorkflowsPage() {
   );
 
   const handleWorkflowClick = useCallback(
-    (id: string) => navigate(`/workflows/${encodeURIComponent(id)}`),
+    (id: string, name: string) => navigate(`/workflows/${encodeURIComponent(id)}`, { state: { workflowName: name } }),
     [navigate],
   );
 

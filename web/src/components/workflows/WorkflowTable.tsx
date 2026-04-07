@@ -18,7 +18,7 @@ import { StatusChip } from '../common/StatusChip';
 interface WorkflowTableProps {
   workflows: WorkflowListItem[];
   loading: boolean;
-  onWorkflowClick: (id: string) => void;
+  onWorkflowClick: (id: string, name: string) => void;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -87,7 +87,7 @@ export function WorkflowTable({ workflows, loading, onWorkflowClick }: WorkflowT
                   key={workflow.ID}
                   hover
                   sx={{ cursor: 'pointer' }}
-                  onClick={() => onWorkflowClick(workflow.ID)}
+                  onClick={() => onWorkflowClick(workflow.ID, workflow.Name)}
                 >
                   <TableCell>
                     <Link
@@ -96,7 +96,7 @@ export function WorkflowTable({ workflows, loading, onWorkflowClick }: WorkflowT
                       underline="hover"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onWorkflowClick(workflow.ID);
+                        onWorkflowClick(workflow.ID, workflow.Name);
                       }}
                       sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}
                     >

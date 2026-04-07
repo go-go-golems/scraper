@@ -1,6 +1,7 @@
 import { AppBar, Box, Tab, Tabs, Toolbar, Typography } from '@mui/material';
 import StorageIcon from '@mui/icons-material/Storage';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { BreadcrumbNav } from './BreadcrumbNav';
 
 const tabRoutes = [
   { label: 'Overview', path: '/' },
@@ -49,6 +50,7 @@ export function AppShell({ children }: AppShellProps) {
           </Tabs>
         </Toolbar>
       </AppBar>
+      <BreadcrumbNav />
       <Box sx={{ flexGrow: 1, p: 3, bgcolor: 'grey.50' }}>
         {children}
       </Box>
