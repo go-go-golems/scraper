@@ -209,3 +209,20 @@ export interface WorkflowArtifactListResponse {
   total: number;
   artifacts: ArtifactSummary[];
 }
+
+export interface WorkflowResultSummary {
+  opID: string;
+  kind: string;
+  status: string;
+  recordCount: number;
+  artifactCount: number;
+  dataSize: number;
+  error?: { Code: string; Message: string; Retryable: boolean };
+  completedAt: string;
+}
+
+export interface WorkflowResultsResponse {
+  workflowID: string;
+  total: number;
+  results: WorkflowResultSummary[];
+}
