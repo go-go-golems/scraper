@@ -30,3 +30,5 @@ Updated all 5 existing doc pages: converted absolute paths to repo-relative, fix
 
 Updated review document: marked issues #1 (two patterns), #5 (cliutil), #15 as RESOLVED after hackernews/slashdot conversion. Simplified recommendations to focus on remaining gaps.
 
+
+- Ticket administratively closed on 2026-04-07 and retained as historical context; follow-on work should use newer focused tickets where they exist.

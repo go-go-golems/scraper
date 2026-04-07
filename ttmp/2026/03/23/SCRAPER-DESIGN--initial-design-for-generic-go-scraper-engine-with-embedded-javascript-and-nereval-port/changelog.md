@@ -256,3 +256,5 @@ Added preconfigured JS database exposure so runtimes can inject `scraper-db` and
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/js/runtime/databases_test.go — Added runtime tests covering `scraper-db` and `site-db`
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/migrate/manager.go — Wired the site migration runtime to expose `site-db`
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/migrate/manager_test.go — Updated migration tests to use the injected `site-db` module
+
+- Ticket administratively closed on 2026-04-07 and retained as historical context; follow-on work should use newer focused tickets where they exist.

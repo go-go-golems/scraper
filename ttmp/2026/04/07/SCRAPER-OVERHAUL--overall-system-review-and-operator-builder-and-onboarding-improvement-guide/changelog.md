@@ -14,3 +14,5 @@
 - Related the main design doc to the most relevant backend/frontend files.
 - Ran `docmgr doctor --ticket SCRAPER-OVERHAUL --stale-after 30` successfully.
 - Uploaded the ticket bundle to reMarkable at `/ai/2026/04/07/SCRAPER-OVERHAUL`.
+
+- Ticket closed as an umbrella review on 2026-04-07 after the analysis was split into focused follow-on implementation tickets.

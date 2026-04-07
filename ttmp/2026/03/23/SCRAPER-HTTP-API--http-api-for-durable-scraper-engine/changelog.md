@@ -13,3 +13,5 @@
 - Added `scraper api serve`, the HTTP server bootstrap, and the first catalog, submission, and inspection endpoints
 - Added end-to-end API tests that submit `js-demo` workflows, run a separate worker, and read the finished workflow back through HTTP
 - Added an embedded Glazed help page for the HTTP API surface
+
+- Ticket administratively closed on 2026-04-07 and retained as historical context; follow-on work should use newer focused tickets where they exist.

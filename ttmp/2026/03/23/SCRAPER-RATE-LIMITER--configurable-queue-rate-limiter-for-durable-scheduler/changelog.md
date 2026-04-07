@@ -35,3 +35,5 @@ Implemented the durable queue rate limiter in commit `263b2dc`, including queue 
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go — Added end-to-end command tests for rate-limited `js-demo` and Hacker News runs
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-RATE-LIMITER--configurable-queue-rate-limiter-for-durable-scheduler/design-doc/01-queue-rate-limiter-analysis-and-implementation-guide.md — Updated the design guide to describe the implemented shape and remaining gaps
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-RATE-LIMITER--configurable-queue-rate-limiter-for-durable-scheduler/reference/01-investigation-diary.md — Recorded the implementation, validation, and review notes
+
+- Ticket administratively closed on 2026-04-07 and retained as historical context; follow-on work should use newer focused tickets where they exist.

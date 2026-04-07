@@ -15,3 +15,5 @@ Created a new design ticket for a site-aware JavaScript CLI runner in `scraper`,
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/scripts/extract_frontpage.js — Concrete example of why current op scripts should not be scanned directly as jsverbs
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-SITE-JSVERBS--site-javascript-runner-cli-based-on-jsverbs/design-doc/01-site-javascript-cli-runner-with-jsverbs-design-and-implementation-guide.md — Primary design deliverable
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/03/23/SCRAPER-SITE-JSVERBS--site-javascript-runner-cli-based-on-jsverbs/reference/01-investigation-diary.md — Chronological research diary
+
+- Ticket administratively closed on 2026-04-07 and retained as historical context; follow-on work should use newer focused tickets where they exist.

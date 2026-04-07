@@ -1,7 +1,7 @@
 ---
 Title: Site JavaScript runner CLI based on jsverbs
 Ticket: SCRAPER-SITE-JSVERBS
-Status: active
+Status: closed
 Topics:
     - scraping
     - go
@@ -42,7 +42,7 @@ The primary conclusion is that `scraper` should keep two JavaScript entrypoint t
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
 The design and diary are written. Validation and reMarkable delivery are the next ticket steps.
 

@@ -1,7 +1,7 @@
 ---
 Title: Frontend runtime event surfaces for operators
 Ticket: SCRAPER-FRONTEND-RUNTIME-EVENTS
-Status: active
+Status: closed
 Topics:
     - scraper
     - frontend
@@ -60,15 +60,17 @@ The ticket is intentionally documentation-first. It exists to give a new enginee
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
-This ticket currently contains:
+This ticket is administratively closed as part of the pre-2026-03-25 archive sweep. It remains useful historical context because it contains:
 
 - architecture analysis,
 - an intern-oriented implementation guide,
 - an RTK Query invalidation matrix and cache-consistency guide,
 - a phased task breakdown,
 - a research diary.
+
+Any remaining frontend runtime-event work should continue in a fresh follow-on ticket rather than by reopening this one.
 
 ## Scope
 

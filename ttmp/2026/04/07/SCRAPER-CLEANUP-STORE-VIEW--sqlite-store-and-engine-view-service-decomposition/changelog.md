@@ -11,3 +11,5 @@
 - Extracted workflow creation, reads, status updates, and workflow stats into `workflow_store.go`.
 - Extracted op enqueueing, op reads, dependency loading, runnable refresh, and queue candidate listing into `op_store.go`.
 - Extracted lease acquisition and heartbeat handling into `lease_store.go`, leaving `store.go` as the thin store shell.
+
+- Ticket completed on 2026-04-07 after the SQLite store and engineview decomposition shipped and validation passed.

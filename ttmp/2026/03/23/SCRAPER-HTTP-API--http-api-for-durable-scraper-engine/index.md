@@ -1,7 +1,7 @@
 ---
 Title: HTTP API for durable scraper engine
 Ticket: SCRAPER-HTTP-API
-Status: active
+Status: closed
 Topics:
     - scraper
     - http-api
@@ -46,7 +46,7 @@ The intended architecture is not "run the whole scraper over one HTTP request." 
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
 Current ticket state:
 

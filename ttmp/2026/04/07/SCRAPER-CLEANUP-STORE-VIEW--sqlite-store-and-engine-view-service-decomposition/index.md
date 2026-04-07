@@ -1,7 +1,7 @@
 ---
 Title: SQLite store and engine view service decomposition
 Ticket: SCRAPER-CLEANUP-STORE-VIEW
-Status: active
+Status: closed
 Topics:
     - scraper
     - backend
@@ -40,9 +40,9 @@ The goal is to split them by responsibility while keeping package boundaries and
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
-This is a planning ticket. No cleanup code has been applied yet.
+This ticket is complete. The planned decomposition shipped, validation stayed green, and the ticket now remains as implementation history and review context.
 
 ## Topics
 

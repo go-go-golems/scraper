@@ -1,7 +1,7 @@
 ---
 Title: 'Documentation Review: pkg/doc Embedded Help Pages'
 Ticket: DOC-REVIEW
-Status: active
+Status: closed
 Topics:
     - documentation
     - scraper
@@ -46,7 +46,7 @@ WhenToUse: ""
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
 ## Topics
 

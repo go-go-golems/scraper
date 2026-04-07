@@ -1,7 +1,7 @@
 ---
 Title: Workflow artifact browsing and per-op JavaScript replay debugging
 Ticket: SCRAPER-OP-DEBUGGER
-Status: active
+Status: closed
 Topics:
     - scraper
     - architecture
@@ -58,9 +58,9 @@ This ticket provides the design and implementation guide for that missing layer.
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
-This ticket is currently a design/research ticket. It does not implement the debugger yet. The documentation has been validated with `docmgr doctor` and published to reMarkable for review.
+This ticket is now closed as an umbrella design/research ticket. It did not implement the debugger directly; instead, it fed narrower follow-on tickets such as the artifact browser work.
 
 ## Topics
 

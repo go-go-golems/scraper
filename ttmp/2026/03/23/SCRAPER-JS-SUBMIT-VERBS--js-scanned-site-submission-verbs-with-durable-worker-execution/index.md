@@ -1,7 +1,7 @@
 ---
 Title: JS-scanned site submission verbs with durable worker execution
 Ticket: SCRAPER-JS-SUBMIT-VERBS
-Status: active
+Status: closed
 Topics:
     - scraper
     - javascript
@@ -35,7 +35,7 @@ This ticket implements a new command-discovery path for the scraper engine. Site
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
 This ticket is both a design and implementation ticket. The first validation target is `js-demo`, because it can prove the command-submission and worker-execution split without live HTTP dependencies.
 

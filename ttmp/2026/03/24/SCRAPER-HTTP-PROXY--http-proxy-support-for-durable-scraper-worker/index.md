@@ -1,7 +1,7 @@
 ---
 Title: HTTP proxy support for durable scraper worker
 Ticket: SCRAPER-HTTP-PROXY
-Status: active
+Status: closed
 Topics:
     - scraper
     - http
@@ -45,7 +45,7 @@ The important architecture decision is that scraper already has implicit environ
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
 Current ticket state:
 

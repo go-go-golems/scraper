@@ -1,7 +1,7 @@
 ---
 Title: Runtime event pipeline for worker, server, and frontend
 Ticket: SCRAPER-RUNTIME-EVENTS
-Status: active
+Status: closed
 Topics:
     - architecture
     - scraper
@@ -45,7 +45,7 @@ The design comparison is now done. The ticket treats Watermill as the standard e
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
 Current ticket state:
 

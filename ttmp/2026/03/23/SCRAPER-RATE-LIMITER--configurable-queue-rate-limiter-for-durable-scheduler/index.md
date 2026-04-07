@@ -1,7 +1,7 @@
 ---
 Title: Configurable queue rate limiter for durable scheduler
 Ticket: SCRAPER-RATE-LIMITER
-Status: active
+Status: closed
 Topics:
     - scraper
     - scheduler
@@ -33,7 +33,7 @@ This ticket exists to address a known gap in the current scraper engine. The eng
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
 This is currently a planning and design ticket. No engine code changes are proposed in this ticket itself.
 

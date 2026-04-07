@@ -1,7 +1,7 @@
 ---
 Title: Convert Hacker News and Slashdot to pure JS submit-verb sites
 Ticket: SCRAPER-PURE-JS-SITES
-Status: active
+Status: closed
 Topics:
     - scraper
     - javascript
@@ -38,7 +38,7 @@ This ticket removes the remaining bespoke Go submission path from the built-in H
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
 ## Topics
 

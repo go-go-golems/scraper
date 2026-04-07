@@ -1,7 +1,7 @@
 ---
 Title: 'Dashboard UI: Workflow Monitoring, Engine Health, Rate Limiting, Operations'
 Ticket: SCRAPER-DASHBOARD
-Status: active
+Status: closed
 Topics:
     - dashboard
     - react
@@ -46,7 +46,7 @@ WhenToUse: ""
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
 ## Topics
 

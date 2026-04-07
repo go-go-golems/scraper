@@ -40,3 +40,5 @@
   - added runtime event history fetching and SSE stream consumption
   - added a runtime event timeline card to the workflow detail page
   - fixed the `OpDetailDrawer` script-tab prop mismatch so `npm run build` passes again
+
+- Ticket administratively closed on 2026-04-07 and retained as historical context; follow-on work should use newer focused tickets where they exist.

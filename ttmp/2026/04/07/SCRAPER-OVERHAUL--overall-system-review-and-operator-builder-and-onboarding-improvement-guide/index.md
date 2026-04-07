@@ -1,7 +1,7 @@
 ---
 Title: Overall system review and operator, builder, and onboarding improvement guide
 Ticket: SCRAPER-OVERHAUL
-Status: active
+Status: closed
 Topics:
     - scraper
     - architecture
@@ -44,13 +44,13 @@ The primary outcome is a detailed, intern-facing design and implementation guide
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
 Current review status:
 
 - architecture evidence gathered across engine, sites, API, and frontend,
 - design guide drafted with answers to the requested questions,
-- implementation work intentionally deferred until the review direction is accepted.
+- implementation work intentionally deferred and split into narrower follow-on tickets.
 
 ## Topics
 

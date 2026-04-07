@@ -1,7 +1,7 @@
 ---
 Title: Initial design for generic Go scraper engine with embedded JavaScript and nereval port
 Ticket: SCRAPER-DESIGN
-Status: active
+Status: closed
 Topics:
     - scraping
     - go
@@ -38,7 +38,7 @@ The main conclusion is that the imported architecture is a good fit for the curr
 
 ## Status
 
-Current status: **active**
+Current status: **closed**
 
 Current deliverables in this ticket:
 

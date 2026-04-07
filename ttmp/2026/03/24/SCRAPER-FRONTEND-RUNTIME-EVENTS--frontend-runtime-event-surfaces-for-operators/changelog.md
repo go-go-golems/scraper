@@ -83,3 +83,5 @@
   - `runtimeEventsApi` in the current worktree had drifted back to storing decoded protobuf messages in RTK Query state
   - moved decode back to the component edge in `RuntimeEventsPage`, `WorkflowDetailPage`, and `OpDetailDrawer`
   - corrected an off-by-one enum mapping in `SeverityDotIndicator.tsx` so `INFO` events such as `WORKFLOW_UPDATED` no longer render as `WARN`
+
+- Ticket administratively closed on 2026-04-07 and retained as historical context; follow-on work should use newer focused tickets where they exist.
