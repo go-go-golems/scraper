@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: Chronological investigation notes for the Prometheus and operator metrics review, including the current observability inventory, architectural conclusions, mistakes, and proposed next tickets.
-LastUpdated: 2026-04-07T13:10:00-04:00
+LastUpdated: 2026-04-07T13:20:00-04:00
 WhatFor: Preserve the evidence and reasoning behind the Prometheus recommendation so a future engineer can understand what scraper already exposes, what it does not, and why metrics should not replace durable state.
 WhenToUse: Use when revisiting observability architecture, implementing metrics instrumentation, or checking how this ticket’s recommendations were derived.
 ---
@@ -641,3 +641,58 @@ Results:
 - submission duration histograms,
 - optional future dashboard refinements after real operator use,
 - any frontend integration work.
+
+## 2026-04-07 Follow-up: Copy reusable article into ticket
+
+### Goal
+
+The vault article was useful, but it lived outside the repo and outside the ticket bundle. The follow-up goal was to copy that reusable implementation article back into the ticket so it becomes part of the searchable doc corpus, the reMarkable export, and the repo-side historical record.
+
+### What I changed
+
+I created:
+
+- `design-doc/02-building-prometheus-and-grafana-into-a-go-application-from-scraper.md`
+
+This is the ticket-local version of the Obsidian article. It preserves the same reusable content:
+
+- architecture boundaries,
+- implementation sequence,
+- queue-wait design rationale,
+- common failure modes,
+- working rules,
+- practical commands.
+
+I also updated:
+
+- `index.md`
+- `changelog.md`
+
+so the new article is discoverable from the ticket entrypoint and visible in the change history.
+
+### Why this mattered
+
+The vault note is useful for personal durable knowledge, but ticket docs have three properties the vault note does not automatically provide:
+
+- they are versioned with the repo,
+- they participate in docmgr search and validation,
+- they are bundled into the reMarkable export for the ticket.
+
+Copying the article into the ticket keeps the reusable pattern close to the implementation it describes.
+
+### Validation performed
+
+Commands run:
+
+```bash
+cd /home/manuel/workspaces/2026-03-23/js-scraper/scraper
+docmgr doctor --ticket SCRAPER-PROMETHEUS-METRICS --stale-after 30
+remarquee upload bundle ... --force
+remarquee cloud ls '/ai/2026/04/07/SCRAPER-PROMETHEUS-METRICS/' --long --non-interactive
+```
+
+Results:
+
+- ticket validation remained green,
+- the updated bundle uploaded successfully,
+- the reMarkable directory continued to expose the ticket bundle.

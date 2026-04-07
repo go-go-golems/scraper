@@ -51,3 +51,4 @@
   - existing throughput and API panels retained.
 - Added a dedicated metrics/operator guide playbook explaining what each metric family is for, how to inspect it in Prometheus and Grafana, and how to interpret the dashboard panels.
 - Added a reusable Obsidian article documenting the Prometheus/Grafana integration pattern from scraper as a playbook for future Go applications.
+- Copied the reusable Obsidian article back into the ticket as a repo-local design doc so the implementation pattern is preserved in the searchable ticket corpus and bundled reMarkable export.

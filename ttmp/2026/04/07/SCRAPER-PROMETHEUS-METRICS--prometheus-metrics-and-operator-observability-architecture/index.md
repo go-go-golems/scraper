@@ -28,6 +28,7 @@ The core conclusion is that scraper should keep owning durable object state such
 ## Key Links
 
 - Main design doc: [design-doc/01-prometheus-metrics-architecture-and-implementation-guide-for-operator-observability.md](./design-doc/01-prometheus-metrics-architecture-and-implementation-guide-for-operator-observability.md)
+- Reusable implementation article: [design-doc/02-building-prometheus-and-grafana-into-a-go-application-from-scraper.md](./design-doc/02-building-prometheus-and-grafana-into-a-go-application-from-scraper.md)
 - Investigation diary: [reference/01-investigation-diary.md](./reference/01-investigation-diary.md)
 - Tasks: [tasks.md](./tasks.md)
 - Changelog: [changelog.md](./changelog.md)
