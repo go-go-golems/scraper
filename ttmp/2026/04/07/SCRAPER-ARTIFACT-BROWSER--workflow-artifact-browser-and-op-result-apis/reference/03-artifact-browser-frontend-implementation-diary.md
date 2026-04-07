@@ -318,7 +318,33 @@ Start at `WorkflowDetailPage.tsx` — verify `activeTab` state and the `handleBr
 
 ## Step 7: Storybook stories
 
-Not completed — `ArtifactsPanel` and `ArtifactTable` stories are stubs. `ArtifactPreviewPanel` has basic stories. Full interaction stories require wiring RTK Query with MSW which is more involved. Can be done as a follow-up.
+## Bug fix: Storybook crashes — missing RTK Query store + MSW handlers  [committed: 8320152]
+
+### What happened
+
+Storybook stories for `ArtifactsPanel` crashed on load with three errors:
+
+1. `"Middleware for RTK-Query API at reducerPath 'workflowApi' has not been added to the store"` — `preview.tsx` mock store only had `runtimeEventsApi`
+2. `"searchInputValue is not defined"` — misleading error triggered by RTK Query init failure
+3. `GET /api/v1/artifacts/art-1 404` — no MSW handlers for artifact endpoints
+
+### Root cause
+
+- `preview.tsx` mock store was missing `workflowApi`, `catalogApi`, `engineApi`, `queueApi`, `submissionApi` reducers and middleware
+- Stories had no `parameters.msw.handlers`, so real HTTP calls fired and failed
+
+### Fix
+
+- `preview.tsx`: added all 6 RTK Query APIs to the mock store
+- `web/src/stories/msw/handlers.ts` (new): shared MSW handlers with fixture data — `defaultArtifactHandlers` (4 artifacts + 3 ops) and `emptyArtifactHandlers`
+- `ArtifactsPanel.stories.tsx`: uses shared handlers
+- `ArtifactPreviewPanel.stories.tsx`: uses shared handlers, consistent artifact IDs
+
+### Also done
+
+- Removed forward bridge link (`onNavigateToOp`) from `ArtifactPreviewPanel` — the Op column in the artifact table already opens the op drawer, so the shortcut adds no value
+
+Full bug report: `reference/04-bug-report-storybook-msw-and-redux-store.md`
 
 See the existing story files:
 - `web/src/components/artifacts/ArtifactsPanel.stories.tsx`

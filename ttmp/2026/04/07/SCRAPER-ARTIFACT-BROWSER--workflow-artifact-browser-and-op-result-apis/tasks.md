@@ -41,6 +41,8 @@
 
 ## Phase 3: Frontend UI Design
 
+- [x] Add RTK Query mock store + MSW handlers for Storybook (fix: preview.tsx missing workflowApi, new: handlers.ts)
+
 - [x] Write full frontend UI design doc with ASCII screenshots and YAML component DSL.
 - [x] Add `getWorkflowArtifacts` RTK Query endpoint to `workflowApi.ts`.
 - [x] Create `ArtifactsPanel` component (two-panel split layout).
