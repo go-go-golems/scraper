@@ -1,12 +1,14 @@
 import { useState, useCallback, useRef } from 'react';
-import { Box, CircularProgress, Divider, IconButton, Typography } from '@mui/material';
+import { Box, CircularProgress, Divider, IconButton, Tooltip, Typography } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import PanelIcon from '@mui/icons-material/ViewAgenda';
 import { useGetWorkflowArtifactsQuery, useGetWorkflowOpsQuery } from '../../api/workflowApi';
 import type { WorkflowOp } from '../../api/types';
 import { FilterBar, type ArtifactFilters } from './FilterBar';
 import { ActiveFilterChips } from './ActiveFilterChips';
 import { ArtifactTable } from './ArtifactTable';
+import { ArtifactPreviewPanel } from './ArtifactPreviewPanel';
 
 interface ArtifactsPanelProps {
   workflowId: string;
@@ -34,7 +36,8 @@ function buildOpNameMap(ops: WorkflowOp[]): Record<string, string> {
 
 export function ArtifactsPanel({ workflowId }: ArtifactsPanelProps) {
   const [page, setPage] = useState(0);
-  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null); // TODO Step 5: wire to preview panel
+  const [previewVisible, setPreviewVisible] = useState(true); // Step 5: preview panel visible
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
   const [filters, setFilters] = useState<ArtifactFilters>(DEFAULT_FILTERS);
   const [searchInputValue, setSearchInputValue] = useState(''); // live, pre-debounce
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -136,6 +139,16 @@ export function ArtifactsPanel({ workflowId }: ArtifactsPanelProps) {
         </Typography>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Tooltip title={previewVisible ? 'Hide preview panel' : 'Show preview panel'}>
+            <IconButton
+              size="small"
+              onClick={() => setPreviewVisible((v) => !v)}
+              color={previewVisible ? 'primary' : 'default'}
+            >
+              <PanelIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
           <IconButton
             size="small"
             onClick={() => setPage((p) => Math.max(0, p - 1))}
@@ -161,7 +174,10 @@ export function ArtifactsPanel({ workflowId }: ArtifactsPanelProps) {
         <ArtifactTable
           artifacts={artifacts}
           selectedId={selectedArtifactId}
-          onSelectArtifact={setSelectedArtifactId}
+          onSelectArtifact={(id) => {
+            setSelectedArtifactId(id);
+            if (!previewVisible) setPreviewVisible(true);
+          }}
           opNameMap={opNameMap}
         />
       ) : !hasActiveFilters ? (
@@ -179,7 +195,44 @@ export function ArtifactsPanel({ workflowId }: ArtifactsPanelProps) {
         </Box>
       )}
 
-      {/* TODO Step 5: ArtifactPreviewPanel — right half of split pane */}
+      {/* Preview panel — right half of split pane */}
+      {previewVisible && selectedArtifactId && (
+        <Box
+          sx={{
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: 1,
+            height: 500,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <ArtifactPreviewPanel
+            artifact={
+              data?.artifacts.find((a) => a.id === selectedArtifactId) ?? null
+            }
+            onClose={() => setSelectedArtifactId(null)}
+          />
+        </Box>
+      )}
+      {previewVisible && !selectedArtifactId && (
+        <Box
+          sx={{
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: 1,
+            height: 120,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Typography variant="caption" color="text.disabled">
+            Click an artifact row to preview
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 }
