@@ -137,3 +137,35 @@ go test ./pkg/api/server ./pkg/cmd -count=1
 ```
 
 The focused packages passed again, so the API half of this cleanup ticket is structurally complete.
+
+## Fourth cleanup slice: worker observer composition
+
+With the API-side splits done, the first worker-side extraction was the smallest orchestration concern: observer composition.
+
+File added:
+
+- `pkg/cmd/worker_observers.go`
+
+What moved:
+
+- `composeSchedulerObservers(...)`
+
+What was added:
+
+- `newWorkerObserver(...)` as the worker-specific composition helper that wires:
+  - runtime-event scheduler observation
+  - Prometheus scheduler observation
+
+Why this helped:
+
+- it removes one policy/composition detail from the `RunE` body in `worker.go`
+- it makes the later `worker_runtime.go` extraction easier because observer wiring already lives elsewhere
+
+Validation for this slice:
+
+```bash
+gofmt -w pkg/cmd/worker.go pkg/cmd/worker_observers.go
+go test ./pkg/api/server ./pkg/cmd -count=1
+```
+
+The focused packages stayed green after the move.

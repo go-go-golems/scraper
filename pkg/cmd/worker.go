@@ -103,10 +103,7 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 			siteDBs := newSiteDBProvider(siteRegistry, options.sitesDir)
 			defer func() { _ = siteDBs.Close() }()
 
-			observer := composeSchedulerObservers(
-				runtimeevents.NewSchedulerObserver(eventPublisher, "worker-scheduler", options.workerID),
-				metrics.NewSchedulerObserver(metricsRegistry),
-			)
+			observer := newWorkerObserver(eventPublisher, metricsRegistry, options.workerID)
 
 			s, err := scheduler.New(store, runners, scheduler.Config{
 				MaxWorkers:           options.maxWorkers,
@@ -163,23 +160,6 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 
 	cmd.AddCommand(runCmd)
 	return cmd
-}
-
-func composeSchedulerObservers(observers ...scheduler.Observer) scheduler.Observer {
-	filtered := make([]scheduler.Observer, 0, len(observers))
-	for _, observer := range observers {
-		if observer != nil {
-			filtered = append(filtered, observer)
-		}
-	}
-	if len(filtered) == 0 {
-		return nil
-	}
-	return scheduler.ObserverFunc(func(ctx context.Context, event scheduler.Event) {
-		for _, observer := range filtered {
-			observer.OnSchedulerEvent(ctx, event)
-		}
-	})
 }
 
 func maybeStartWorkerMetricsServer(ctx context.Context, addr string, path string, metricsRegistry *metrics.Registry) (*http.Server, string, error) {

@@ -20,7 +20,7 @@
 - [ ] Keep Cobra command and flags in `worker.go`.
 - [ ] Move worker runtime setup into `worker_runtime.go`.
 - [ ] Move metrics listener boot into `worker_metrics.go`.
-- [ ] Move observer composition into `worker_observers.go`.
+- [x] Move observer composition into `worker_observers.go`.
 
 ## Validation
 
