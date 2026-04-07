@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: Chronological investigation notes for the Prometheus and operator metrics review, including the current observability inventory, architectural conclusions, mistakes, and proposed next tickets.
-LastUpdated: 2026-04-07T13:31:00-04:00
+LastUpdated: 2026-04-07T13:10:00-04:00
 WhatFor: Preserve the evidence and reasoning behind the Prometheus recommendation so a future engineer can understand what scraper already exposes, what it does not, and why metrics should not replace durable state.
 WhenToUse: Use when revisiting observability architecture, implementing metrics instrumentation, or checking how this ticket’s recommendations were derived.
 ---
@@ -544,4 +544,100 @@ Results:
 
 - submission duration histograms,
 - optional extra snapshot tests beyond current coverage,
+- any frontend integration work.
+
+## 2026-04-07 Implementation Slice 6
+
+### Goal
+
+Make the metrics work more usable to humans instead of stopping at “Prometheus is wired”: add a stronger starter Grafana dashboard, write a proper operator/developer guide for reading the metrics, and preserve the whole implementation pattern as a reusable article in the Obsidian vault.
+
+### What I changed
+
+I rewrote the Grafana dashboard in:
+
+- `ops/monitoring/grafana/dashboards/scraper-overview.json`
+
+The old dashboard was valid but too sparse. It had enough panels to prove the stack worked, but not enough structure to help an operator scan the system quickly.
+
+The updated dashboard now has:
+
+- top-row stat panels for:
+  - workers up,
+  - active workflows,
+  - ready queue depth,
+  - worst queue wait p95,
+- throughput row:
+  - workflow submit rate,
+  - op completion rate,
+- queue-health row:
+  - current queue state,
+  - queue wait p95,
+- failure and pressure row:
+  - retry rate,
+  - failure rate by error code,
+  - queue rate-limit events,
+- bottom row:
+  - p95 op duration,
+  - workflow status totals,
+  - API request rate.
+
+That layout is much closer to the actual operator questions:
+
+- is the system alive?
+- is work arriving?
+- is work completing?
+- are queues backing up?
+- are waits rising?
+- are retries or failures spiking?
+
+I then added a new playbook:
+
+- `playbook/02-metrics-and-grafana-operator-guide.md`
+
+That guide explains:
+
+- where to view metrics,
+- what each major metric family is for,
+- how to interpret the dashboard,
+- which PromQL queries are worth keeping handy,
+- how to tell whether the problem is exporter, scrape, dashboard, or application behavior.
+
+Finally, I wrote a reusable article in the Obsidian vault:
+
+- `/home/manuel/code/wesen/obsidian-vault/Projects/2026/04/07/ARTICLE - Playbook - Building Prometheus and Grafana into a Go Application from Scraper.md`
+
+That note is not a changelog. It is a reusable implementation article describing the architecture pattern, sequence, pitfalls, and working rules so the same approach can be reused in the next Go application.
+
+### Why this slice mattered
+
+There is a common failure mode in observability work where the system is technically instrumented but still not operationally legible. Raw metrics and even working alerts are not enough if the first dashboard is weak and the team has no durable explanation of what they are looking at.
+
+This slice turns the implementation from “backend metrics setup” into “an actual operator/developer observability package”.
+
+### Validation performed
+
+Commands run:
+
+```bash
+cd /home/manuel/workspaces/2026-03-23/js-scraper/scraper
+jq '.title, .version, (.panels|length)' ops/monitoring/grafana/dashboards/scraper-overview.json
+docker compose config
+docker compose up -d redis prometheus grafana
+curl -s -u admin:admin 'http://127.0.0.1:3000/api/search?query=Scraper%20Overview'
+docker compose down
+docmgr doctor --ticket SCRAPER-PROMETHEUS-METRICS --stale-after 30
+```
+
+Results:
+
+- the dashboard JSON was valid and now contains 14 panels,
+- compose config remained valid,
+- Grafana provisioning continued to expose the `Scraper Overview` dashboard,
+- ticket validation stayed green.
+
+### What remains intentionally deferred
+
+- submission duration histograms,
+- optional future dashboard refinements after real operator use,
 - any frontend integration work.

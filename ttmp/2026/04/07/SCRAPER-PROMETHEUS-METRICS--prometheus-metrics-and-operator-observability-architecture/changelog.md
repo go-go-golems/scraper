@@ -42,3 +42,12 @@
   - added Prometheus recording rules and alerts for queue-wait p95 and retry spikes,
   - documented operator response guidance for the full alert set in the local monitoring playbook.
 - Re-verified the Prometheus rule bundle by starting Prometheus locally after the queue-wait and retry alert additions.
+- Expanded the starter Grafana dashboard with a more operator-oriented layout:
+  - top-level worker/active-workflow/ready-depth/worst-queue-wait stats,
+  - queue wait p95,
+  - retry rate,
+  - failure rate by error code,
+  - workflow status totals,
+  - existing throughput and API panels retained.
+- Added a dedicated metrics/operator guide playbook explaining what each metric family is for, how to inspect it in Prometheus and Grafana, and how to interpret the dashboard panels.
+- Added a reusable Obsidian article documenting the Prometheus/Grafana integration pattern from scraper as a playbook for future Go applications.

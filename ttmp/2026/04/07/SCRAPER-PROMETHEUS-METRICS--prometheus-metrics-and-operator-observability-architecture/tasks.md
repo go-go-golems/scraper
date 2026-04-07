@@ -6,6 +6,8 @@
 - [x] Review current server, worker, engine, runtime-event, and frontend observability seams.
 - [x] Write a detailed design and implementation guide for adding Prometheus and proper operator metrics.
 - [x] Record the investigation and conclusions in the diary.
+- [x] Write durable operator/developer playbooks for viewing and interpreting the metrics stack.
+- [x] Write a reusable project report/article in the Obsidian vault so the Prometheus integration pattern can be reused in future applications.
 
 ## Architecture Decisions To Confirm
 
@@ -104,11 +106,13 @@
 - [x] Extend `docker-compose.yml` with Grafana.
 - [x] Add a Prometheus scrape config covering API server and worker targets.
 - [x] Add a starter Grafana dashboard JSON or provisioning bundle.
+- [x] Expand the starter Grafana dashboard with queue wait, retries, failure rate, workflow state, and operator summary panels.
 - [x] Add local docs/runbook for:
   - [x] starting API + worker + Prometheus + Grafana
   - [x] checking target health
   - [x] submitting demo workflows
   - [x] verifying dashboard movement
+  - [x] understanding what the metrics mean and how to interpret the dashboard
 
 ### Phase 9: Frontend Operator Surfaces
 
