@@ -6,7 +6,7 @@ import { WorkflowHeader } from '../components/workflows/WorkflowHeader';
 import { WorkflowProgressBar } from '../components/workflows/WorkflowProgressBar';
 import { OpTable } from '../components/workflows/OpTable';
 import { OpDetailDrawer } from '../components/workflows/OpDetailDrawer';
-import { RuntimeEventList } from '../components/workflows/RuntimeEventList';
+import { RuntimeEventTable } from '../components/workflows/RuntimeEventTable';
 import { CancelWorkflowButton } from '../components/workflows/CancelWorkflowButton';
 import {
   useGetWorkflowQuery,
@@ -159,7 +159,12 @@ export function WorkflowDetailPage() {
           <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
             Runtime Events
           </Typography>
-          <RuntimeEventList events={runtimeEvents} loading={runtimeEventsLoading} />
+          <RuntimeEventTable
+            events={runtimeEvents}
+            loading={runtimeEventsLoading}
+            onWorkflowClick={(id) => navigate(`/workflows/${id}`)}
+            emptyMessage="No runtime events for this workflow."
+          />
         </CardContent>
       </Card>
 

@@ -26,7 +26,7 @@ import { ArtifactPreview } from '../artifacts/ArtifactPreview';
 import { OpExecutionLog } from '../logs/OpExecutionLog';
 import { ScriptTab } from '../scripts/ScriptTab';
 import { RetryOpButton } from './RetryOpButton';
-import { RuntimeEventList } from './RuntimeEventList';
+import { RuntimeEventTable } from './RuntimeEventTable';
 import { useRuntimeEventFeed, type RuntimeEventConnectionState } from '../../features/runtime-events/runtimeEventFeed';
 
 interface OpDetailDrawerProps {
@@ -345,9 +345,10 @@ export function OpDetailDrawer({
               <Chip label={`Stream: ${runtimeConnectionState}`} size="small" variant="outlined" />
               <Chip label={`${opRuntimeEvents.length} events`} size="small" variant="outlined" />
             </Stack>
-            <RuntimeEventList
+            <RuntimeEventTable
               events={opRuntimeEvents}
               loading={opRuntimeEventsLoading}
+              dense
               emptyMessage="No runtime events for this op yet."
             />
           </>
