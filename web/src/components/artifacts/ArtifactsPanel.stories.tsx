@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { Box, Typography } from '@mui/material';
-import type { ArtifactSummary } from '../../api/types';
 import { ArtifactsPanel } from './ArtifactsPanel';
-
-// NOTE: This is the Step 2 skeleton story.
-// RTK Query provides data at runtime; these stories document the expected
-// page states. Steps 3-6 will add full interactions.
+import {
+  defaultArtifactHandlers,
+  emptyArtifactHandlers,
+  STORY_WORKFLOW_ID,
+} from '../../stories/msw/handlers';
 
 const meta: Meta<typeof ArtifactsPanel> = {
   title: 'Artifacts/ArtifactsPanel',
@@ -18,35 +18,22 @@ const meta: Meta<typeof ArtifactsPanel> = {
 export default meta;
 type Story = StoryObj<typeof ArtifactsPanel>;
 
-/** Expected layout at Step 2 skeleton. The artifacts table and filter bar are
- *  added in Steps 3-4. Preview panel in Step 5. */
-export const Skeleton: Story = {
-  args: {
-    workflowId: 'hackernews-extract-frontpage-1775586649974859668',
+export const Default: Story = {
+  name: 'Default (with artifacts)',
+  parameters: {
+    msw: { handlers: defaultArtifactHandlers },
   },
-  render: (args) => (
-    <Box sx={{ p: 2 }}>
-      <Typography variant="caption" color="text.disabled" sx={{ mb: 1, display: 'block' }}>
-        Step 2-3 — ArtifactsPanel with filter bar. Artifact table + pagination
-        added in Step 4. Preview panel in Step 5.
-      </Typography>
-      <ArtifactsPanel {...args} />
-    </Box>
-  ),
+  args: {
+    workflowId: STORY_WORKFLOW_ID,
+  },
 };
 
-/** Document the empty state — shown when the workflow has produced no artifacts. */
-export const EmptyState: Story = {
-  name: 'Empty state',
-  args: {
-    workflowId: 'empty-workflow-000',
+export const Empty: Story = {
+  name: 'Empty (no artifacts)',
+  parameters: {
+    msw: { handlers: emptyArtifactHandlers },
   },
-  render: (args) => (
-    <Box sx={{ p: 2 }}>
-      <Typography variant="caption" color="text.disabled" sx={{ mb: 1, display: 'block' }}>
-        Empty state — shown when workflow has no artifacts.
-      </Typography>
-      <ArtifactsPanel {...args} />
-    </Box>
-  ),
+  args: {
+    workflowId: STORY_WORKFLOW_ID,
+  },
 };

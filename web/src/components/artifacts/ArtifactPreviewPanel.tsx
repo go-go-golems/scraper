@@ -5,14 +5,13 @@ import {
   CircularProgress,
   Divider,
   IconButton,
-  Link,
   Tooltip,
   Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import OpenInBrowserIcon from '@mui/icons-material/OpenInBrowser';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+
 import type { ArtifactSummary } from '../../api/types';
 import { ArtifactPreview } from './ArtifactPreview';
 import { BinaryFallbackView } from './BinaryFallbackView';
@@ -20,8 +19,6 @@ import { BinaryFallbackView } from './BinaryFallbackView';
 interface ArtifactPreviewPanelProps {
   artifact: ArtifactSummary | null;
   onClose: () => void;
-  /** Navigate to the Op detail (opens the op drawer for the owning op) */
-  onNavigateToOp?: (opId: string) => void;
 }
 
 function formatSize(bytes: number): string {
@@ -48,7 +45,7 @@ function formatDate(iso: string): string {
   }
 }
 
-export function ArtifactPreviewPanel({ artifact, onClose, onNavigateToOp }: ArtifactPreviewPanelProps) {
+export function ArtifactPreviewPanel({ artifact, onClose }: ArtifactPreviewPanelProps) {
   const [body, setBody] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -133,17 +130,9 @@ export function ArtifactPreviewPanel({ artifact, onClose, onNavigateToOp }: Arti
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
-          {onNavigateToOp && (
-            <Link
-              component="button"
-              variant="caption"
-              onClick={() => onNavigateToOp(artifact.opID)}
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}
-            >
-              {artifact.opID.split(':').pop()}
-              <OpenInNewIcon sx={{ fontSize: 12 }} />
-            </Link>
-          )}
+          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+            {artifact.opID.split(':').pop()}
+          </Typography>
           <Typography variant="caption" color="text.disabled">
             {artifact.kind}
           </Typography>
