@@ -13,7 +13,7 @@
 - [ ] Extract workflow-specific methods into `workflow_store.go`.
 - [ ] Extract op enqueue/read helpers into `op_store.go`.
 - [ ] Extract leasing and heartbeat logic into `lease_store.go`.
-- [ ] Extract result/artifact logic into `result_store.go`.
+- [x] Extract result/artifact logic into `result_store.go`.
 - [x] Extract queue limiter logic into `queue_limiter.go`.
 - [x] Extract JSON/sql helper functions into `sql_helpers.go`.
 - [ ] Keep the public `Store` type stable during the move-only pass.
@@ -28,7 +28,7 @@
 
 ## Validation
 
-- [ ] Keep `go test ./pkg/engine/store/sqlite -count=1` green during the split.
+- [x] Keep `go test ./pkg/engine/store/sqlite -count=1` green during the split.
 - [ ] Keep `go test ./pkg/services/engineview ./pkg/api/server -count=1` green during the split.
 - [ ] Run `go test ./... -count=1` at the end.
 - [ ] Run `docmgr doctor --ticket SCRAPER-CLEANUP-STORE-VIEW --stale-after 30`.

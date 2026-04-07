@@ -185,3 +185,38 @@ go test ./pkg/engine/store/sqlite -count=1
 ```
 
 The SQLite package stayed green after the move.
+
+### Fourth cleanup slice: SQLite result and artifact storage methods
+
+With the helper and limiter tail moved out of `store.go`, the next clean chunk was the result/artifact section.
+
+File added:
+
+- `pkg/engine/store/sqlite/result_store.go`
+
+What moved into `result_store.go`:
+
+- `CompleteOp(...)`
+- `FailOp(...)`
+- `GetResult(...)`
+- `loadArtifacts(...)`
+
+Why this was a good next split:
+
+- these methods all operate on the `results` and `artifacts` tables
+- they share the same completion/failure lifecycle concerns
+- they still use shared store helpers from `sql_helpers.go`, so the extraction stayed move-only
+
+What changed in `store.go`:
+
+- removed the duplicated result/artifact methods after adding `result_store.go`
+- left lease handling, workflow creation, and op enqueue/read methods in place for later slices
+
+Validation for this slice:
+
+```bash
+gofmt -w pkg/engine/store/sqlite/store.go pkg/engine/store/sqlite/result_store.go
+go test ./pkg/engine/store/sqlite -count=1
+```
+
+The package passed after the move, so the public `Store` surface remained intact while reducing `store.go` further.
