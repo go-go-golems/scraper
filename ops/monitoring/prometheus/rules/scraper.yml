@@ -1,0 +1,49 @@
+groups:
+  - name: scraper-recording-rules
+    rules:
+      - record: scraper:ops_completed_rate5m
+        expr: sum by (site, queue, runner, status) (rate(scraper_ops_completed_total[5m]))
+
+      - record: scraper:queue_rate_limited_rate5m
+        expr: sum by (site, queue) (rate(scraper_queue_rate_limited_total[5m]))
+
+      - record: scraper:http_requests_rate5m
+        expr: sum by (route, method, status_class) (rate(scraper_http_requests_total[5m]))
+
+  - name: scraper-alerts
+    rules:
+      - alert: ScraperWorkerDown
+        expr: max_over_time(scraper_workers_up[2m]) < 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Scraper worker metrics endpoint is down
+          description: No worker has reported scraper_workers_up=1 for at least 2 minutes.
+
+      - alert: ScraperAPIUnavailable
+        expr: up{job="scraper-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Scraper API target is unavailable
+          description: Prometheus cannot scrape the scraper API metrics endpoint.
+
+      - alert: ScraperQueueRateLimitedHot
+        expr: scraper:queue_rate_limited_rate5m > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Scraper queue is being rate limited repeatedly
+          description: Queue {{ $labels.site }}/{{ $labels.queue }} has sustained rate-limit events over the last 10 minutes.
+
+      - alert: ScraperOpFailureRateHigh
+        expr: sum by (site, queue, runner) (rate(scraper_op_failures_total[10m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Scraper op failure rate is elevated
+          description: Site {{ $labels.site }}, queue {{ $labels.queue }}, runner {{ $labels.runner }} has sustained op failures over the last 10 minutes.

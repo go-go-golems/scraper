@@ -24,3 +24,9 @@
   - added a ticket playbook for the local smoke procedure.
 - Verified the full local smoke flow with tmux-managed API and worker processes, Prometheus targets `up`, Grafana datasource provisioning, and the starter dashboard discoverable through Grafana’s API.
 - Ran `go test ./... -count=1` successfully after the metrics and compose changes.
+- Implemented the next backend metrics slice:
+  - added `scraper_op_failures_total` for stable scheduler failure classification by site, queue, runner, and error code,
+  - added focused tests for runner metrics classification, scheduler failure metrics, and the worker metrics endpoint,
+  - added Prometheus recording rules and a first alert set for worker down, API down, sustained throttling, and elevated failure rate,
+  - mounted Prometheus rule files through `docker-compose.yml`.
+- Verified the new rule bundle by starting Prometheus locally and confirming it loads the config and starts the rule manager without errors.

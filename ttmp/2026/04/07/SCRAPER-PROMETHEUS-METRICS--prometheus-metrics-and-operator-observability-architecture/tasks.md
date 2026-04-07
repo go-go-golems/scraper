@@ -79,11 +79,11 @@
 - [x] Instrument scheduler cycle duration histograms.
 - [x] Instrument leased-op counters by site, queue, and runner kind where available.
 - [x] Instrument retry counters.
-- [ ] Instrument failure counters by stable error code/category.
+- [x] Instrument failure counters by stable error code/category.
 - [x] Instrument queue-rate-limited counters.
 - [ ] Decide how queue wait time should be measured, then add a queue-wait histogram.
 - [x] Keep idle/no-work polling out of high-volume metrics noise.
-- [ ] Add tests or focused package-level assertions for scheduler metric updates.
+- [x] Add tests or focused package-level assertions for scheduler metric updates.
 
 ### Phase 7: Runner Metrics
 
@@ -93,10 +93,10 @@
 - [x] Classify HTTP statuses by stable status classes rather than raw URLs or messages.
 - [x] Classify transport errors separately from HTTP response errors.
 - [ ] Add tests for HTTP runner metric emission on:
-  - [ ] success
-  - [ ] transport error
-  - [ ] retryable HTTP failure
-  - [ ] non-retryable HTTP failure
+  - [x] success
+  - [x] transport error
+  - [x] retryable HTTP failure
+  - [x] non-retryable HTTP failure
 
 ### Phase 8: Local Prometheus And Grafana Stack
 
@@ -123,12 +123,12 @@
 
 ### Phase 10: Alerting And Recording Rules
 
-- [ ] Add recording rules for common operator aggregations.
+- [x] Add recording rules for common operator aggregations.
 - [ ] Add alerts for:
-  - [ ] worker down
-  - [ ] API target down
-  - [ ] sustained queue throttling
-  - [ ] high failure rate by site/queue
+  - [x] worker down
+  - [x] API target down
+  - [x] sustained queue throttling
+  - [x] high failure rate by site/queue
   - [ ] excessive queue wait time
   - [ ] retry spikes
 - [ ] Document the expected operator response for each alert.

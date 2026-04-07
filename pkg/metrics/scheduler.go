@@ -28,6 +28,16 @@ func (r *Registry) ObserveOpRetried(site model.SiteName, queue model.QueueKey, r
 	r.OpRetriesTotal.WithLabelValues(string(site), string(queue), runnerKind).Inc()
 }
 
+func (r *Registry) ObserveOpFailed(site model.SiteName, queue model.QueueKey, runnerKind string, errorCode string) {
+	if r == nil {
+		return
+	}
+	if errorCode == "" {
+		errorCode = "unknown"
+	}
+	r.OpFailuresTotal.WithLabelValues(string(site), string(queue), runnerKind, errorCode).Inc()
+}
+
 func (r *Registry) ObserveQueueRateLimited(site model.SiteName, queue model.QueueKey) {
 	if r == nil {
 		return

@@ -118,7 +118,7 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 			}
 			setSchedulerSiteRuntime(s, siteRegistry, scraperDB, siteDBs.QueryExecer)
 
-			metricsServer, err := maybeStartWorkerMetricsServer(ctx, options.metricsAddr, options.metricsPath, metricsRegistry)
+			metricsServer, _, err := maybeStartWorkerMetricsServer(ctx, options.metricsAddr, options.metricsPath, metricsRegistry)
 			if err != nil {
 				return err
 			}
@@ -182,9 +182,9 @@ func composeSchedulerObservers(observers ...scheduler.Observer) scheduler.Observ
 	})
 }
 
-func maybeStartWorkerMetricsServer(ctx context.Context, addr string, path string, metricsRegistry *metrics.Registry) (*http.Server, error) {
+func maybeStartWorkerMetricsServer(ctx context.Context, addr string, path string, metricsRegistry *metrics.Registry) (*http.Server, string, error) {
 	if addr == "" || metricsRegistry == nil {
-		return nil, nil
+		return nil, "", nil
 	}
 	if path == "" {
 		path = "/metrics"
@@ -197,8 +197,9 @@ func maybeStartWorkerMetricsServer(ctx context.Context, addr string, path string
 	}
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
+	actualAddr := listener.Addr().String()
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -207,8 +208,8 @@ func maybeStartWorkerMetricsServer(ctx context.Context, addr string, path string
 	}()
 	go func() {
 		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
-			log.Warn().Err(err).Str("component", "worker-metrics").Str("address", addr).Msg("worker metrics server stopped")
+			log.Warn().Err(err).Str("component", "worker-metrics").Str("address", actualAddr).Msg("worker metrics server stopped")
 		}
 	}()
-	return server, nil
+	return server, actualAddr, nil
 }

@@ -40,6 +40,7 @@ type Registry struct {
 	SchedulerCycleDuration  *prometheus.HistogramVec
 	OpsLeasedTotal          *prometheus.CounterVec
 	OpsCompletedTotal       *prometheus.CounterVec
+	OpFailuresTotal         *prometheus.CounterVec
 	OpRetriesTotal          *prometheus.CounterVec
 	QueueRateLimitedTotal   *prometheus.CounterVec
 	OpDuration              *prometheus.HistogramVec
@@ -101,6 +102,11 @@ func NewRegistry() (*Registry, error) {
 			Name:      "ops_completed_total",
 			Help:      "Total ops completed by site, queue, runner kind, and terminal status.",
 		}, []string{"site", "queue", "runner", "status"}),
+		OpFailuresTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "op_failures_total",
+			Help:      "Total op failure outcomes by site, queue, runner kind, and stable error code.",
+		}, []string{"site", "queue", "runner", "error_code"}),
 		OpRetriesTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
 			Name:      "op_retries_total",
@@ -144,6 +150,7 @@ func NewRegistry() (*Registry, error) {
 		ret.SchedulerCycleDuration,
 		ret.OpsLeasedTotal,
 		ret.OpsCompletedTotal,
+		ret.OpFailuresTotal,
 		ret.OpRetriesTotal,
 		ret.QueueRateLimitedTotal,
 		ret.OpDuration,

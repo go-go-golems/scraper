@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: Chronological investigation notes for the Prometheus and operator metrics review, including the current observability inventory, architectural conclusions, mistakes, and proposed next tickets.
-LastUpdated: 2026-04-07T12:18:00-04:00
+LastUpdated: 2026-04-07T12:45:00-04:00
 WhatFor: Preserve the evidence and reasoning behind the Prometheus recommendation so a future engineer can understand what scraper already exposes, what it does not, and why metrics should not replace durable state.
 WhenToUse: Use when revisiting observability architecture, implementing metrics instrumentation, or checking how this ticket’s recommendations were derived.
 ---
@@ -290,3 +290,89 @@ curl -s -u admin:admin 'http://127.0.0.1:3000/api/search?query=Scraper%20Overvie
 - add more direct metrics-specific tests for runner and snapshot collectors,
 - optionally add alert rules and recording rules,
 - keep frontend work out of this ticket unless explicitly requested later.
+
+## 2026-04-07 Implementation Slice 3
+
+### Goal
+
+Land the next backend-only Prometheus slice: failure counters by stable error code, focused tests for metrics behavior, and real Prometheus recording/alerting rules mounted through Compose.
+
+### What I changed
+
+I extended `pkg/metrics` with a new counter family:
+
+- `scraper_op_failures_total{site,queue,runner,error_code}`
+
+I then wired the scheduler metrics observer so that only terminal failure events increment that counter, while retry events continue to increment the retry counter separately.
+
+I added tests in:
+
+- `pkg/metrics/runner_test.go`
+- `pkg/metrics/scheduler_observer_test.go`
+- `pkg/cmd/worker_metrics_test.go`
+
+Those cover:
+
+- successful HTTP runner classification,
+- transport error classification,
+- retryable `http_5xx` classification,
+- non-retryable `http_4xx` classification,
+- scheduler failure counter increments,
+- the worker metrics listener serving a real `/metrics` response on an ephemeral port.
+
+I also added Prometheus rule files under:
+
+- `ops/monitoring/prometheus/rules/scraper.yml`
+
+That bundle includes:
+
+- recording rules for completed ops, queue throttling rate, and HTTP request rate,
+- alerts for worker down,
+- alerts for API target down,
+- alerts for sustained queue throttling,
+- alerts for elevated op failure rates.
+
+Finally, I updated:
+
+- `ops/monitoring/prometheus/prometheus.yml`
+- `docker-compose.yml`
+
+so Prometheus actually loads the new rule directory in the local stack.
+
+### Why I chose this slice next
+
+The first two slices made metrics visible and locally testable, but they still lacked two things operators need before metrics become trustworthy:
+
+- a way to distinguish failure classes numerically rather than only through runtime events,
+- alert-ready aggregations and rules that prove the metrics model is useful beyond raw scraping.
+
+This slice fills that gap without pulling frontend work into the ticket.
+
+### Validation performed
+
+Commands run:
+
+```bash
+cd /home/manuel/workspaces/2026-03-23/js-scraper/scraper
+gofmt -w pkg/metrics/metrics.go pkg/metrics/scheduler.go pkg/metrics/scheduler_observer.go pkg/metrics/runner_test.go pkg/metrics/scheduler_observer_test.go pkg/cmd/worker.go pkg/cmd/worker_metrics_test.go
+go test ./pkg/metrics ./pkg/cmd -count=1
+go test ./... -count=1
+docker compose config
+docker compose up -d redis prometheus && sleep 3 && docker compose ps redis prometheus && docker compose logs --no-color --tail=80 prometheus && docker compose down
+```
+
+Results:
+
+- focused metrics and worker tests passed,
+- full repository tests passed,
+- `docker compose config` resolved cleanly,
+- Prometheus started successfully with the new rule files and logged `Starting rule manager...`, which is the important signal that rule loading succeeded.
+
+### What remains intentionally deferred
+
+- queue wait histograms,
+- workflow counts by workflow status in scrape-time snapshot gauges,
+- submission duration histograms,
+- alert documentation and operator response playbooks,
+- alerts for retry spikes and excessive queue wait time,
+- additional scrape-time snapshot collector tests.
