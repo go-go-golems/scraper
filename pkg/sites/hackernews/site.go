@@ -19,6 +19,16 @@ func Definition() siteregistry.Definition {
 		ScriptsRoot:       "scripts",
 		VerbsFS:           siteFS,
 		VerbsRoot:         "verbs",
+		QueuePolicies: map[model.QueueKey]model.QueuePolicy{
+			model.QueueKey("site:hackernews:http"): {
+				MaxInFlight: 1,
+				RateLimit: &model.RateLimitPolicy{
+					Kind:          model.RateLimitKindTokenBucket,
+					RatePerSecond: 1,
+					Burst:         1,
+				},
+			},
+		},
 		SQLMigrationsFS:   siteFS,
 		SQLMigrationsRoot: "migrations",
 	}
