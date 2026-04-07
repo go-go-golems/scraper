@@ -15,7 +15,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: "Records why store.go and engineview/service.go are ready for decomposition."
-LastUpdated: 2026-04-07T16:15:00-04:00
+LastUpdated: 2026-04-07T16:20:00-04:00
 WhatFor: "Resume the cleanup plan with the original reasoning intact."
 WhenToUse: "Use when implementing or reviewing the store/view split."
 ---
@@ -94,3 +94,46 @@ go test ./pkg/services/engineview ./pkg/api/server -count=1
 ```
 
 Both packages passed after the move.
+
+### Second cleanup slice: remaining engineview reads and mutations
+
+After the artifact/helper split, I moved the rest of `engineview/service.go` into dedicated files:
+
+Files added:
+
+- `pkg/services/engineview/workflow_read_service.go`
+- `pkg/services/engineview/queue_read_service.go`
+- `pkg/services/engineview/workflow_mutation_service.go`
+
+What moved into `workflow_read_service.go`:
+
+- `WorkflowSummary`
+- `WorkflowOp`
+- `ListWorkflowsOptions`
+- `WorkflowListItem`
+- `WorkflowListResult`
+- `Workflow(...)`
+- `WorkflowOps(...)`
+- `ListWorkflows(...)`
+
+What moved into `queue_read_service.go`:
+
+- `QueueStatus`
+- `ListQueues(...)`
+
+What moved into `workflow_mutation_service.go`:
+
+- `RetryOp(...)`
+- `CancelWorkflow(...)`
+
+Result:
+
+- `service.go` is now a thin file with the service type, constructor, and `EngineStatus(...)`.
+
+Validation for this slice:
+
+```bash
+go test ./pkg/services/engineview ./pkg/api/server -count=1
+```
+
+Both packages passed again after the move.

@@ -20,10 +20,10 @@
 
 ## Engine View Decomposition
 
-- [ ] Extract workflow reads into `workflow_read_service.go`.
-- [ ] Extract queue reads into `queue_read_service.go`.
+- [x] Extract workflow reads into `workflow_read_service.go`.
+- [x] Extract queue reads into `queue_read_service.go`.
 - [x] Extract artifact and op-result reads into `artifact_read_service.go`.
-- [ ] Extract retry/cancel helpers into `workflow_mutation_service.go`.
+- [x] Extract retry/cancel helpers into `workflow_mutation_service.go`.
 - [x] Extract DB-opening and existence helpers into `db_helpers.go`.
 
 ## Validation
