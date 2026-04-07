@@ -11,7 +11,7 @@
 ## API Server Cleanup
 
 - [x] Split route registration by domain into dedicated files.
-- [ ] Split request logging and metrics middleware into its own file.
+- [x] Split request logging and metrics middleware into its own file.
 - [ ] Split runtime-event router startup into its own file.
 - [ ] Keep `server.New(...)` as the composition root.
 

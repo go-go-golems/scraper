@@ -72,3 +72,37 @@ go test ./pkg/api/server ./pkg/cmd -count=1
 ```
 
 Both focused packages stayed green after the move.
+
+## Second cleanup slice: request middleware
+
+After route registration moved out, the next most obvious non-composition concern in `server.go` was the request middleware.
+
+File added:
+
+- `pkg/api/server/middleware_request.go`
+
+What moved:
+
+- `requestLogger(...)`
+- `statusRecorder`
+- `WriteHeader(...)`
+- `Flush(...)`
+
+Why this split was worth doing early:
+
+- it removes request-level mechanics from the server assembly path
+- it keeps logging, runtime-event request emission, and Prometheus HTTP observation together
+- it leaves `server.go` focused on dependency assembly and lifecycle wiring
+
+One small follow-up fix was needed after the move:
+
+- `server.go` still needed the `watermill` import because `startRuntimeEventRouter(...)` still constructs a router with `watermill.NopLogger{}`
+
+Validation for this slice:
+
+```bash
+gofmt -w pkg/api/server/server.go pkg/api/server/middleware_request.go
+go test ./pkg/api/server ./pkg/cmd -count=1
+```
+
+Both focused packages passed again after the import cleanup.
