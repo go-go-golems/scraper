@@ -1,8 +1,5 @@
-import { useState, useCallback } from 'react';
-import {
-  Box,
-  Collapse,
-  IconButton,
+import { useState, useCallback, Fragment } from 'react';
+import { Box, IconButton,
   Skeleton,
   Table,
   TableBody,
@@ -287,7 +284,7 @@ export function RuntimeEventTable({
                 const id = event.id || `${event.kind}-${index}`;
                 const isExpanded = expandedId === id;
                 return (
-                  <Box component="tbody" key={id}>
+                  <Fragment key={id}>
                     <TableRow
                       hover
                       sx={{ cursor: expandable ? 'pointer' : 'default' }}
@@ -336,7 +333,7 @@ export function RuntimeEventTable({
                         onOpClick={onOpClick}
                       />
                     )}
-                  </Box>
+                  </Fragment>
                 );
               })}
           </TableBody>
