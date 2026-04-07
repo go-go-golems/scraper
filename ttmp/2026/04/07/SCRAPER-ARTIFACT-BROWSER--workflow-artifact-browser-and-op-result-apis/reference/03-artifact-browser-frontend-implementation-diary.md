@@ -195,9 +195,44 @@ Start at `FilterBar.tsx`. Verify the `searchInputValue` / `onSearchChange` split
 
 ---
 
-## Step 4: ArtifactTable + pagination
+## Step 4: ArtifactTable + pagination  [committed: 56b28bf]
 
-[TODO]
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Replace the placeholder list in `ArtifactsPanel` with a proper `ArtifactTable` (MUI Table) and add pagination controls.
+
+**Commit (code):** 56b28bf — "feat(ArtifactTable): add ArtifactTable with pagination controls"
+
+### What I did
+
+- Created `ArtifactTable.tsx`: MUI `Table` with Name/Op/Kind/Size/Actions columns. Row click selects artifact (for Step 5 preview). Action buttons: preview (`OpenInBrowser`) + download (`CloudDownload` as `<a>`).
+- Updated `ArtifactsPanel`: now owns `selectedArtifactId` state (stub for Step 5), uses `ArtifactTable`, adds prev/next pagination controls wired to the `page` state → `offset` param.
+- `Pagination` math: `startItem/endItem` from `offset+1` to `min(offset+limit, total)`, page count from `Math.ceil(total/limit)`.
+- Created `ArtifactTable.stories.tsx`: Default, WithSelection, ManyRows, Empty.
+
+### Key decisions
+
+- **Icons**: `OpenInBrowser` (not `OpenInNew`) and `CloudDownload` (not `Download`) — confirmed available in `@mui/icons-material`.
+- **`selectedArtifactId` lives in `ArtifactsPanel`**: `ArtifactTable` is a pure presentational table — it takes `selectedId` + `onSelectArtifact`. State management stays in the parent so Step 5 can wire it to the preview panel without changing the table contract.
+- **Download as native `<a>`**: `component="a" href={...} download` on the IconButton. This is the simplest reliable download mechanism without needing programmatic fetch+blob.
+
+### What was tricky to build
+
+The `open in new tab` vs `download` distinction. For download, `target="_blank"` + `download` attribute is needed on the `<a>` tag. Using MUI's `IconButton component="a"` makes the whole button a link, which works cleanly.
+
+### What warrants a second pair of eyes
+
+The `component="a"` approach for download — verify that the `href` URL (`/api/v1/artifacts/{id}`) triggers a browser download rather than navigation. The backend should set `Content-Disposition: attachment` headers. If not, the browser might try to display HTML responses inline.
+
+### What should be done in the future
+
+- N/A
+
+### Code review instructions
+
+Start at `ArtifactTable.tsx`. Verify columns match the design doc. Check that `ArtifactsPanel` passes the right `offset = page * 20` to the query. Validate: `cd web && npx tsc --noEmit`.
 
 ---
 

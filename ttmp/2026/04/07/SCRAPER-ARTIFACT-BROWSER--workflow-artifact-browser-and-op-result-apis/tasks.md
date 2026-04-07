@@ -45,12 +45,12 @@
 - [x] Add `getWorkflowArtifacts` RTK Query endpoint to `workflowApi.ts`.
 - [x] Create `ArtifactsPanel` component (two-panel split layout).
 - [x] Create `FilterBar` component (op dropdown + kind + type + search).
-- [ ] Create `ArtifactTable` component (full-width table replacing list layout).
+- [x] Create `ArtifactTable` component (full-width table replacing list layout).
 - [ ] Create `ArtifactPreviewPanel` component (right-half preview).
 - [x] Create `ActiveFilterChips` component (dismissible filter chips).
 - [ ] Create `BinaryFallbackView` component (icon + size + download for non-previewable).
-- [ ] Wire filter bar → query params → `refetch()`.
-- [ ] Add pagination controls to artifact table.
+- [x] Wire filter bar → query params → `refetch()`.
+- [x] Add pagination controls to artifact table.
 - [ ] Add "→ Op detail" bridge link from preview panel.
 - [ ] Add reverse bridge link in `OpResultTab` to open artifact browser filtered to current op.
 - [ ] Add Storybook stories for all new components.
