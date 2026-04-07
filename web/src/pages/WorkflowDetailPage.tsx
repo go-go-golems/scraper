@@ -17,7 +17,7 @@ import {
   useCancelWorkflowMutation,
 } from '../api/workflowApi';
 import { useGetScriptQuery } from '../api/catalogApi';
-import { useRuntimeEventFeed } from '../features/runtime-events/runtimeEventFeed';
+import { useGetRecentRuntimeEventsQuery } from '../api/runtimeEventsApi';
 import { useToast } from '../components/common/ToastProvider';
 
 export function WorkflowDetailPage() {
@@ -55,10 +55,10 @@ export function WorkflowDetailPage() {
     { site: siteName ?? '', path: scriptPath ?? '' },
     { skip: !siteName || !scriptPath },
   );
-  const { events: runtimeEvents, isLoadingHistory: runtimeEventsLoading } = useRuntimeEventFeed({
-    serverFilters: { workflowId, limit: 50 },
-    stream: Boolean(workflowId),
-  });
+  const { data: runtimeEvents = [], isLoading: runtimeEventsLoading } = useGetRecentRuntimeEventsQuery(
+    { workflowId, limit: 50 },
+    { skip: !workflowId },
+  );
 
   const [retryOp, { isLoading: retryLoading }] = useRetryOpMutation();
   const [cancelWorkflow, { isLoading: cancelLoading }] = useCancelWorkflowMutation();

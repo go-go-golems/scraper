@@ -27,7 +27,7 @@ import { OpExecutionLog } from '../logs/OpExecutionLog';
 import { ScriptTab } from '../scripts/ScriptTab';
 import { RetryOpButton } from './RetryOpButton';
 import { RuntimeEventTable } from './RuntimeEventTable';
-import { useRuntimeEventFeed, type RuntimeEventConnectionState } from '../../features/runtime-events/runtimeEventFeed';
+import { useGetRecentRuntimeEventsQuery } from '../../api/runtimeEventsApi';
 
 interface OpDetailDrawerProps {
   op: WorkflowOp | null;
@@ -60,7 +60,9 @@ function KindIcon({ kind }: { kind: string }) {
   return null;
 }
 
-function connectionColor(state: RuntimeEventConnectionState): 'disabled' | 'success' | 'warning' | 'error' {
+type ConnectionState = 'connecting' | 'live' | 'error' | 'closed';
+
+function connectionColor(state: ConnectionState): 'disabled' | 'success' | 'warning' | 'error' {
   switch (state) {
     case 'live':
       return 'success';
@@ -92,17 +94,24 @@ export function OpDetailDrawer({
   const selectedSpec = op?.op;
   const runtimeTabActive = open && activeTab === 'runtime' && Boolean(selectedSpec);
   const {
-    events: opRuntimeEvents,
-    isLoadingHistory: opRuntimeEventsLoading,
-    connectionState: runtimeConnectionState,
-  } = useRuntimeEventFeed({
-    serverFilters: {
+    data: opRuntimeEvents = [],
+    isLoading: opRuntimeEventsLoading,
+    isError: opRuntimeEventsError,
+    isSuccess: opRuntimeEventsSuccess,
+  } = useGetRecentRuntimeEventsQuery(
+    {
       workflowId: selectedSpec?.WorkflowID,
       opId: selectedSpec?.ID,
       limit: 40,
     },
-    stream: runtimeTabActive,
-  });
+    { skip: !runtimeTabActive },
+  );
+
+  const runtimeConnectionState: ConnectionState =
+    !runtimeTabActive ? 'closed' :
+    opRuntimeEventsLoading ? 'connecting' :
+    opRuntimeEventsError ? 'error' :
+    opRuntimeEventsSuccess ? 'live' : 'closed';
 
   const handleTabChange = useCallback((_: unknown, value: TabId) => {
     setActiveTab(value);

@@ -18,22 +18,21 @@ import FilterListIcon from '@mui/icons-material/FilterList';
 import { RuntimeEventTable } from '../components/workflows/RuntimeEventTable';
 import { MultiSelectChipFilter, type MultiSelectOption } from '../components/common/MultiSelectChipFilter';
 import { TimeRangeSelector, type TimeRange } from '../components/common/TimeRangeSelector';
-import {
-  useRuntimeEventFeed,
-  type RuntimeEventConnectionState,
-} from '../features/runtime-events/runtimeEventFeed';
+import { useGetRecentRuntimeEventsQuery } from '../api/runtimeEventsApi';
+import { runtimeEventOccurredAtMillis } from '../api/runtimeEventsApi';
 import {
   RuntimeEventSeverity,
   RuntimeEventSource,
 } from '../pb/proto/scraper/runtime/v1/events_pb';
 import dayjs from 'dayjs';
 
-function connectionColor(state: RuntimeEventConnectionState): 'default' | 'success' | 'warning' | 'error' {
+type ConnectionState = 'connecting' | 'live' | 'error' | 'closed';
+
+function connectionColor(state: ConnectionState): 'default' | 'success' | 'warning' | 'error' {
   switch (state) {
     case 'live':
       return 'success';
     case 'connecting':
-    case 'paused':
       return 'warning';
     case 'error':
       return 'error';
@@ -42,9 +41,9 @@ function connectionColor(state: RuntimeEventConnectionState): 'default' | 'succe
   }
 }
 
-function formatLastEventAt(lastEventAt: number | null): string {
-  if (!lastEventAt) return 'No events received yet';
-  return `Last event ${new Date(lastEventAt).toLocaleString()}`;
+function formatLastEventAt(events: ReturnType<typeof runtimeEventOccurredAtMillis> | null): string {
+  if (!events) return 'No events received yet';
+  return `Last event ${new Date(events).toLocaleString()}`;
 }
 
 const severityOptions: MultiSelectOption[] = [
@@ -73,6 +72,7 @@ export function RuntimeEventsPage() {
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [timeRange, setTimeRange] = useState<TimeRange>({ mode: 'live' });
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [paused, setPaused] = useState(false);
 
   // Compute since/until from time range for server-side filtering
   const serverSince = useMemo(() => {
@@ -94,22 +94,30 @@ export function RuntimeEventsPage() {
 
   const serverUntil = timeRange.mode === 'absolute' ? timeRange.to : undefined;
 
-  const { events, isLoadingHistory, connectionState, lastEventAt, clearEvents, pause, resume } =
-    useRuntimeEventFeed({
-      serverFilters: {
-        workflowId: workflowId || undefined,
-        opId: opId || undefined,
-        site: site || undefined,
-        workerId: workerId || undefined,
-        limit: 100,
-        since: serverSince,
-        until: serverUntil,
-      },
-      clientFilters: {
-        severity: 'all',
-        source: 'all',
-      },
-    });
+  // RTK Query — SSE managed by onCacheEntryAdded, pause via skip
+  const { data: events = [], isLoading, isError, isSuccess } = useGetRecentRuntimeEventsQuery(
+    {
+      workflowId: workflowId || undefined,
+      opId: opId || undefined,
+      site: site || undefined,
+      workerId: workerId || undefined,
+      limit: 100,
+      since: serverSince,
+      until: serverUntil,
+    },
+    { skip: paused },
+  );
+
+  const connectionState: ConnectionState =
+    paused ? 'closed' :
+    isLoading ? 'connecting' :
+    isError ? 'error' :
+    isSuccess ? 'live' : 'closed';
+
+  const lastEventAt = useMemo(() => {
+    if (events.length === 0) return null;
+    return runtimeEventOccurredAtMillis(events[0]);
+  }, [events]);
 
   // Client-side filtering by multi-select chips
   const filteredEvents = useMemo(() => {
@@ -123,8 +131,6 @@ export function RuntimeEventsPage() {
       return true;
     });
   }, [events, selectedSeverities, selectedSources]);
-
-  const isPaused = connectionState === 'paused';
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -144,14 +150,11 @@ export function RuntimeEventsPage() {
               <Chip label={formatLastEventAt(lastEventAt)} variant="outlined" />
               <IconButton
                 size="small"
-                onClick={isPaused ? resume : pause}
-                title={isPaused ? 'Resume stream' : 'Pause stream'}
+                onClick={() => setPaused((p) => !p)}
+                title={paused ? 'Resume stream' : 'Pause stream'}
               >
-                {isPaused ? <PlayArrowIcon fontSize="small" /> : <PauseIcon fontSize="small" />}
+                {paused ? <PlayArrowIcon fontSize="small" /> : <PauseIcon fontSize="small" />}
               </IconButton>
-              <Button variant="outlined" size="small" onClick={clearEvents} disabled={events.length === 0}>
-                Clear
-              </Button>
             </Stack>
 
             <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
@@ -220,7 +223,7 @@ export function RuntimeEventsPage() {
         <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
           <RuntimeEventTable
             events={filteredEvents}
-            loading={isLoadingHistory}
+            loading={isLoading}
             showPagination
             onWorkflowClick={(id) => navigate(`/workflows/${id}`)}
             emptyMessage="No runtime events matched the current filters."

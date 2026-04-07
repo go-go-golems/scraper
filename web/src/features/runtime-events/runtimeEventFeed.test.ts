@@ -8,11 +8,13 @@ import {
   RuntimeEventV1Schema,
 } from '../../pb/proto/scraper/runtime/v1/events_pb';
 import {
-  buildRuntimeEventSearchParams,
   filterRuntimeEvents,
   mergeRuntimeEvents,
+} from './runtimeEventHelpers';
+import {
   runtimeEventOccurredAtMillis,
-} from './runtimeEventFeed';
+  type RuntimeEventsParams,
+} from '../../api/runtimeEventsApi';
 
 interface EventOverrides {
   id?: string;
@@ -38,13 +40,26 @@ function makeEvent(overrides: EventOverrides = {}): RuntimeEventV1 {
   });
 }
 
-describe('runtimeEventFeed helpers', () => {
+function buildSearchParams(params: RuntimeEventsParams): string {
+  const searchParams = new URLSearchParams();
+  if (params.workflowId) searchParams.set('workflowId', params.workflowId);
+  if (params.opId) searchParams.set('opId', params.opId);
+  if (params.site) searchParams.set('site', params.site);
+  if (params.workerId) searchParams.set('workerId', params.workerId);
+  if (params.limit) searchParams.set('limit', String(params.limit));
+  if (params.since) searchParams.set('since', params.since);
+  if (params.until) searchParams.set('until', params.until);
+  if (params.offset) searchParams.set('offset', String(params.offset));
+  return searchParams.toString();
+}
+
+describe('runtimeEvent helpers', () => {
   it('sorts merged events from newest to oldest and dedupes by id', () => {
     const older = makeEvent({ id: 'same', message: 'older', occurredAtSeconds: 10n });
     const newerReplacement = makeEvent({ id: 'same', message: 'newer', occurredAtSeconds: 12n });
     const newest = makeEvent({ id: 'two', message: 'newest', occurredAtSeconds: 15n });
 
-    const merged = mergeRuntimeEvents([older], [newerReplacement, newest]);
+    const merged = mergeRuntimeEvents([older], [newerReplacement, newest], runtimeEventOccurredAtMillis);
 
     expect(merged.map((event) => event.id)).toEqual(['two', 'same']);
     expect(merged[1].message).toBe('newer');
@@ -65,13 +80,13 @@ describe('runtimeEventFeed helpers', () => {
   });
 
   it('builds stable query strings for server filters', () => {
-    expect(buildRuntimeEventSearchParams({
+    expect(buildSearchParams({
       workflowId: 'wf-1',
       opId: 'op-1',
       site: 'example',
-      workerId: 'worker-a',
+      workerId: 'worker_a',
       limit: 25,
-    })).toBe('workflowId=wf-1&opId=op-1&site=example&workerId=worker-a&limit=25');
+    })).toBe('workflowId=wf-1&opId=op-1&site=example&workerId=worker_a&limit=25');
   });
 
   it('converts protobuf timestamps to epoch milliseconds', () => {
