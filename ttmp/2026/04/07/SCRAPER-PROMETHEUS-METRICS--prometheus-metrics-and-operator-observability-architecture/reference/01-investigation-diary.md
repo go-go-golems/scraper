@@ -189,3 +189,104 @@ Results:
 - Prometheus and Grafana compose wiring,
 - local scrape-health runbook,
 - any frontend integration.
+
+## 2026-04-07 Implementation Slice 2
+
+### Goal
+
+Make the Prometheus work locally testable by adding Prometheus and Grafana to Compose, provisioning a starter dashboard stack, writing an operator/developer smoke playbook, and validating the end-to-end scrape path with real processes.
+
+### What I changed
+
+I extended `docker-compose.yml` with:
+
+- `prometheus`
+- `grafana`
+- the existing `redis` service left intact
+
+I added monitoring config under:
+
+- `ops/monitoring/prometheus/prometheus.yml`
+- `ops/monitoring/grafana/provisioning/datasources/prometheus.yml`
+- `ops/monitoring/grafana/provisioning/dashboards/dashboards.yml`
+- `ops/monitoring/grafana/dashboards/scraper-overview.json`
+
+I also added a ticket playbook:
+
+- `playbook/01-local-prometheus-and-grafana-smoke-test.md`
+
+### How the local topology works
+
+The current local dev topology assumes:
+
+- scraper API runs on the host at `0.0.0.0:8080`
+- scraper worker runs on the host with `--metrics-address 0.0.0.0:9091`
+- Prometheus and Grafana run in Docker
+- Prometheus scrapes `host.docker.internal:8080` and `host.docker.internal:9091`
+
+That is why the playbook explicitly uses `0.0.0.0` rather than `127.0.0.1`.
+
+### Manual smoke procedure I ran
+
+I used `tmux` for the long-running scraper processes as required by the repo guidance.
+
+Commands used:
+
+```bash
+cd /home/manuel/workspaces/2026-03-23/js-scraper/scraper
+lsof-who -p 3000 -k || true
+lsof-who -p 8080 -k || true
+lsof-who -p 9090 -k || true
+lsof-who -p 9091 -k || true
+
+docker compose up -d redis prometheus grafana
+
+tmux new-session -d -s scraper-api \
+  "cd /home/manuel/workspaces/2026-03-23/js-scraper/scraper && \
+   go run ./cmd/scraper api serve \
+     --address 0.0.0.0:8080 \
+     --engine-db /tmp/scraper-prom-metrics-smoke/engine.db \
+     --sites-dir /tmp/scraper-prom-metrics-smoke/sites"
+
+tmux new-session -d -s scraper-worker \
+  "cd /home/manuel/workspaces/2026-03-23/js-scraper/scraper && \
+   go run ./cmd/scraper worker run \
+     --engine-db /tmp/scraper-prom-metrics-smoke/engine.db \
+     --sites-dir /tmp/scraper-prom-metrics-smoke/sites \
+     --poll-interval 50ms \
+     --metrics-address 0.0.0.0:9091"
+
+curl -sf http://127.0.0.1:8080/metrics | rg 'scraper_http_requests_total|scraper_engine_workflows_total'
+curl -sf http://127.0.0.1:9091/metrics | rg 'scraper_scheduler_cycles_total|scraper_workers_up'
+
+curl -s -X POST http://127.0.0.1:8080/api/v1/sites/js-demo/verbs/seed:submit \
+  -H 'Content-Type: application/json' \
+  -d '{"workflowID":"prom-smoke-001","values":{"count":3,"multiplier":4,"prefix":"prom"}}'
+
+curl -s http://127.0.0.1:9090/api/v1/targets
+curl -s -u admin:admin http://127.0.0.1:3000/api/datasources
+curl -s -u admin:admin 'http://127.0.0.1:3000/api/search?query=Scraper%20Overview'
+```
+
+### What worked
+
+- `docker compose config` validated successfully.
+- API `/metrics` returned scraper metrics.
+- Worker `/metrics` returned scheduler-cycle and worker-up metrics.
+- Prometheus saw both `scraper-api` and `scraper-worker` targets as `health: up`.
+- Grafana had the provisioned `Prometheus` datasource.
+- Grafana search returned the starter `Scraper Overview` dashboard.
+- `go test ./... -count=1` passed after these changes.
+
+### What went wrong
+
+- I accidentally ran `gofmt` against the Markdown playbook, which of course failed with `expected 'package', found '--'`. That was harmless, but it belongs in the diary because it is exactly the kind of sloppy command mistake that wastes time if hidden.
+- I also forgot to quote the Grafana search URL the first time, and zsh treated the `?query=...` segment as globbing input. Quoting the URL fixed it immediately.
+
+### Remaining work after this slice
+
+- add scheduler failure counters by stable error code/category,
+- design and implement queue wait histograms,
+- add more direct metrics-specific tests for runner and snapshot collectors,
+- optionally add alert rules and recording rules,
+- keep frontend work out of this ticket unless explicitly requested later.

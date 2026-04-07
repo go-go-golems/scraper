@@ -40,7 +40,7 @@
 - [ ] Add server tests covering:
   - [x] `/metrics` returns `200`
   - [x] scraper metric families are present
-  - [ ] request metrics increment after serving API requests
+  - [x] request metrics increment after serving API requests
 
 ### Phase 3: Snapshot Collectors
 
@@ -64,7 +64,7 @@
 - [x] Start a small HTTP server from the worker process when metrics are enabled.
 - [x] Ensure worker shutdown also closes the metrics listener cleanly.
 - [x] Export worker liveness/process metrics.
-- [ ] Add integration or smoke tests showing the worker exposes `/metrics`.
+- [x] Add integration or smoke tests showing the worker exposes `/metrics`.
 
 ### Phase 5: Submission Metrics
 
@@ -100,15 +100,15 @@
 
 ### Phase 8: Local Prometheus And Grafana Stack
 
-- [ ] Extend `docker-compose.yml` with Prometheus.
-- [ ] Extend `docker-compose.yml` with Grafana.
-- [ ] Add a Prometheus scrape config covering API server and worker targets.
-- [ ] Add a starter Grafana dashboard JSON or provisioning bundle.
-- [ ] Add local docs/runbook for:
-  - [ ] starting API + worker + Prometheus + Grafana
-  - [ ] checking target health
-  - [ ] submitting demo workflows
-  - [ ] verifying dashboard movement
+- [x] Extend `docker-compose.yml` with Prometheus.
+- [x] Extend `docker-compose.yml` with Grafana.
+- [x] Add a Prometheus scrape config covering API server and worker targets.
+- [x] Add a starter Grafana dashboard JSON or provisioning bundle.
+- [x] Add local docs/runbook for:
+  - [x] starting API + worker + Prometheus + Grafana
+  - [x] checking target health
+  - [x] submitting demo workflows
+  - [x] verifying dashboard movement
 
 ### Phase 9: Frontend Operator Surfaces
 
@@ -135,20 +135,20 @@
 
 ## Cross-Cutting Review Checks
 
-- [ ] Verify that no metric uses high-cardinality labels such as `workflow_id`, `op_id`, or `request_id`.
-- [ ] Verify that queue, site, verb, runner, and status labels are bounded and intentional.
+- [x] Verify that no metric uses high-cardinality labels such as `workflow_id`, `op_id`, or `request_id`.
+- [x] Verify that queue, site, verb, runner, and status labels are bounded and intentional.
 - [ ] Verify that runtime events and metrics are complementary rather than duplicative.
-- [ ] Verify that sensitive proxy details are not accidentally exported as metrics or labels.
-- [ ] Verify that the scraper frontend still uses scraper APIs for object-level debugging rather than trying to use Prometheus as a debugging database.
+- [x] Verify that sensitive proxy details are not accidentally exported as metrics or labels.
+- [x] Verify that the scraper frontend still uses scraper APIs for object-level debugging rather than trying to use Prometheus as a debugging database.
 
 ## Validation Plan
 
-- [ ] `go test ./... -count=1`
+- [x] `go test ./... -count=1`
 - [x] Add focused package tests under `pkg/metrics/...`
 - [x] Add API/server metrics tests
-- [ ] Add worker metrics smoke test
-- [ ] Add local compose smoke test for Prometheus scrape health
-- [ ] Add local Grafana smoke test for dashboard visibility
+- [x] Add worker metrics smoke test
+- [x] Add local compose smoke test for Prometheus scrape health
+- [x] Add local Grafana smoke test for dashboard visibility
 
 ## Follow-On Tickets To Consider
 

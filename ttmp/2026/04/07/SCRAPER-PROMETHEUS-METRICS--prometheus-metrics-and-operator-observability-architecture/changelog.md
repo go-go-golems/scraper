@@ -17,3 +17,10 @@
   - instrumented submission, scheduler, and runner paths,
   - added focused metrics tests and `/metrics` handler coverage.
 - Deferred queue wait histograms, failure counters by stable error code, and compose/Grafana wiring to the next slice.
+- Implemented the local monitoring stack:
+  - extended `docker-compose.yml` with Prometheus and Grafana,
+  - added Prometheus scrape config targeting local API and worker metrics,
+  - provisioned a Grafana Prometheus datasource and starter `Scraper Overview` dashboard,
+  - added a ticket playbook for the local smoke procedure.
+- Verified the full local smoke flow with tmux-managed API and worker processes, Prometheus targets `up`, Grafana datasource provisioning, and the starter dashboard discoverable through Grafana’s API.
+- Ran `go test ./... -count=1` successfully after the metrics and compose changes.
