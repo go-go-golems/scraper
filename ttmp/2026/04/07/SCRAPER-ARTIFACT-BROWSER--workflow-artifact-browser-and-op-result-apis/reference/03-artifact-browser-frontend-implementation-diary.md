@@ -16,6 +16,8 @@ RelatedFiles:
       Note: Added WorkflowArtifactListResponse type (commit 7834370)
     - Path: web/src/api/workflowApi.ts
       Note: Added getWorkflowArtifacts endpoint (commit 7834370)
+    - Path: web/src/components/artifacts/ArtifactsPanel.tsx
+      Note: Created ArtifactsPanel skeleton (commit e0410e4)
     - Path: web/src/pages/WorkflowDetailPage.tsx
 ExternalSources: []
 Summary: Step-by-step implementation diary for the artifact browser frontend (Phase 2 of SCRAPER-ARTIFACT-BROWSER).
@@ -23,6 +25,7 @@ LastUpdated: 2026-04-07T21:10:00-04:00
 WhatFor: Track frontend implementation progress, decisions, failures, and review notes.
 WhenToUse: Resume frontend work without rediscovery. Reference when reviewing or handing off.
 ---
+
 
 
 
@@ -98,9 +101,50 @@ const { data } = useGetWorkflowArtifactsQuery(
 
 ---
 
-## Step 2: ArtifactsPanel skeleton
+## Step 2: ArtifactsPanel skeleton  [committed: e0410e4]
 
-[TODO]
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Create `ArtifactsPanel` as the root component, wire it to `useGetWorkflowArtifactsQuery`, and add it to `WorkflowDetailPage`.
+
+**Inferred user intent:** Get the skeleton rendering on screen before layering on complexity.
+
+**Commit (code):** e0410e4 — "feat(ArtifactsPanel): add ArtifactsPanel skeleton wired to useGetWorkflowArtifactsQuery"
+
+### What I did
+
+- Created `web/src/components/artifacts/ArtifactsPanel.tsx` — owns `page`/`limit` state, calls `useGetWorkflowArtifactsQuery`, renders loading/error/empty/full states. Comment stubs mark where Steps 3-5 will land.
+- Created `web/src/components/artifacts/ArtifactsPanel.stories.tsx` — minimal skeleton story + empty state story.
+- Added `ArtifactsPanel` to `WorkflowDetailPage` as a new "Artifacts" card below Runtime Events. Added a `Divider` to visually separate the future filter bar slot.
+
+### Key decisions
+
+- **Tab structure deferred**: The design doc specifies `Overview | Ops | Runtime | Artifacts | Site Info` tabs. Adding them now would require migrating the Ops and Runtime Events sections into tab panels, which is a larger change. Added the Artifacts card at the bottom for now; the tab structure will be added as part of Step 3 (filter bar) since both touch the same area.
+- **Preview panel deferral**: The preview panel (right half of the split pane) is intentionally skipped in the skeleton. It requires per-artifact body fetching and is a larger lift. Step 5 adds it.
+- **Page state in component**: `page` and `limit` are local `useState` for now. When pagination is wired in Step 4, these will be lifted or managed via URL params.
+
+### What worked
+
+- `npx tsc --noEmit` clean.
+- `ArtifactsPanel` correctly uses `skip: !workflowId` so it won't fire until the page has a workflow ID.
+
+### What was tricky to build
+
+The trade-off between adding tabs now vs. keeping the change minimal. Chose minimal: a new card at the bottom is safe and lets the query fire and return real data without restructuring the page. The tab shell will come back when the filter bar (Step 3) is added.
+
+### What warrants a second pair of eyes
+
+The tab structure decision — if tabs are required for the final design, we should add them in Step 3 rather than later.
+
+### What should be done in the future
+
+- Add tab bar structure to `WorkflowDetailPage` when Step 3 (filter bar) is implemented.
+
+### Code review instructions
+
+Start at `ArtifactsPanel.tsx`. Verify the query params (`limit=20, offset=0`) match the design doc. Verify the `skip` condition (`!workflowId`) is correct. Validate: `cd web && npx tsc --noEmit`.
 
 ---
 

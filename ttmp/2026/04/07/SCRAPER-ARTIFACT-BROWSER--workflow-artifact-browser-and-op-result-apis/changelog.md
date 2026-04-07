@@ -19,3 +19,12 @@ Step 1 (frontend): Wire getWorkflowArtifacts RTK Query endpoint in workflowApi.t
 
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/api/workflowApi.ts — Added getWorkflowArtifacts endpoint
 
+
+## 2026-04-07
+
+Step 2 (frontend): Add ArtifactsPanel skeleton + stories + wire into WorkflowDetailPage (commit e0410e4)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/components/artifacts/ArtifactsPanel.tsx — Step 2 skeleton
+

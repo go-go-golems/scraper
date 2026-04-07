@@ -43,7 +43,7 @@
 
 - [x] Write full frontend UI design doc with ASCII screenshots and YAML component DSL.
 - [x] Add `getWorkflowArtifacts` RTK Query endpoint to `workflowApi.ts`.
-- [ ] Create `ArtifactsPanel` component (two-panel split layout).
+- [x] Create `ArtifactsPanel` component (two-panel split layout).
 - [ ] Create `FilterBar` component (op dropdown + kind + type + search).
 - [ ] Create `ArtifactTable` component (full-width table replacing list layout).
 - [ ] Create `ArtifactPreviewPanel` component (right-half preview).
