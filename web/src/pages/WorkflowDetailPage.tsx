@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Box, Card, CardContent, IconButton, Typography } from '@mui/material';
+import { Box, Card, CardContent, Divider, IconButton, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { WorkflowHeader } from '../components/workflows/WorkflowHeader';
 import { WorkflowProgressBar } from '../components/workflows/WorkflowProgressBar';
@@ -8,6 +8,7 @@ import { OpTable } from '../components/workflows/OpTable';
 import { OpDetailDrawer } from '../components/workflows/OpDetailDrawer';
 import { RuntimeEventTable } from '../components/workflows/RuntimeEventTable';
 import { CancelWorkflowButton } from '../components/workflows/CancelWorkflowButton';
+import { ArtifactsPanel } from '../components/artifacts/ArtifactsPanel';
 import {
   useGetWorkflowQuery,
   useGetWorkflowOpsQuery,
@@ -178,6 +179,19 @@ export function WorkflowDetailPage() {
             onWorkflowClick={(id) => navigate(`/workflows/${id}`)}
             emptyMessage="No runtime events for this workflow."
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
+            Artifacts
+          </Typography>
+          <Divider sx={{ mb: 2 }} />
+          {/* TODO Step 3: Add filter bar */}
+          {/* TODO Step 4: Add artifact table + pagination */}
+          {/* TODO Step 5: Add preview panel */}
+          <ArtifactsPanel workflowId={workflowId} />
         </CardContent>
       </Card>
 
