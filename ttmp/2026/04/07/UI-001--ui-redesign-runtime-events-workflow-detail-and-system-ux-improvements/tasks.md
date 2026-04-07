@@ -264,6 +264,122 @@ _The core event table that replaces RuntimeEventList in all 3 locations._
 
 ---
 
+## Phase 2B: SSE Rewrite — RTK Query `onCacheEntryAdded` (Bug Fix)
+
+_Rewrite the SSE streaming from the buggy `useRuntimeEventFeed` hook into RTK Query's built-in `onCacheEntryAdded` lifecycle. This is the fix for the infinite loop bug documented in `analysis/01-bug-analysis-runtimeeventfeed-infinite-loop.md`._
+
+_**Status:** Phase 2 (table component) is done. This phase replaces the broken hook that feeds data to it._
+
+### 2B.1 Rewrite runtimeEventsApi with `onCacheEntryAdded` 🔴
+
+- [ ] ⬜ Edit `web/src/api/runtimeEventsApi.ts`
+  - Add `onCacheEntryAdded` to `getRecentRuntimeEvents` endpoint
+  - Inside `onCacheEntryAdded`:
+    - `await cacheDataLoaded` — if rejected (no backend), return early
+    - Build SSE URL from `arg` (workflowId, opId, site, workerId)
+    - Open `new EventSource(sseUrl)`
+    - On `'runtime-event'` message: decode, `updateCachedData` draft to dedupe + unshift + sort + trim to 500
+    - `await cacheEntryRemoved` → `eventSource.close()`
+  - Add `keepUnusedDataFor: 30` so cache survives brief unmounts
+  - Change `transformResponse` to decode `JsonValue[]` → `RuntimeEventV1[]` (not `RuntimeEventJson[]`)
+  - Move `buildSSEUrl` helper into this file (from `buildRuntimeEventSearchParams` in the hook)
+  - Move `runtimeEventOccurredAtMillis` helper here for sorting
+  - Export `runtimeEventOccurredAtMillis` (still needed by consumers for display)
+- [ ] ⬜ Verify: `npx tsc --noEmit` passes
+
+### 2B.2 Move shared helpers out of the hook 🔴
+
+- [ ] ⬜ Create `web/src/features/runtime-events/runtimeEventHelpers.ts`
+  - Move these pure functions from `runtimeEventFeed.ts`:
+    - `runtimeEventOccurredAtMillis(event)` — already exported, used by consumers
+    - `filterRuntimeEvents(events, clientFilters)` — still used in RuntimeEventsPage
+    - `mergeRuntimeEvents(current, incoming)` — may be useful standalone but primary use moves to `onCacheEntryAdded` draft logic
+    - `decodeRuntimeEvent(json)` — re-export from `runtimeEventsApi.ts` or import from there
+  - Keep `RuntimeEventClientFilters` type here
+- [ ] ⬜ Update imports in consumers that import these helpers from `runtimeEventFeed.ts`
+- [ ] ⬜ Verify: `npx tsc --noEmit` passes
+
+### 2B.3 Rewrite RuntimeEventsPage consumer 🔴
+
+- [ ] ⬜ Edit `web/src/pages/RuntimeEventsPage.tsx`
+  - Remove import of `useRuntimeEventFeed`, `RuntimeEventConnectionState`
+  - Replace with `useGetRecentRuntimeEventsQuery(serverFilters)` directly
+  - Derive connection state from RTK Query status:
+    ```
+    isLoading → 'connecting'
+    isError  → 'error'
+    isSuccess → 'live'
+    ```
+  - Keep client-side filtering with `useMemo` using `filterRuntimeEvents` from helpers
+  - Add pause/resume via `{ skip: paused }` query option
+  - Keep `clearEvents` as local state reset if needed, or remove if RTK Query cache invalidation suffices
+  - Remove `lastEventAt` local state — derive from `events[0]` via `useMemo`
+- [ ] ⬜ Verify: page compiles, no TS errors
+
+### 2B.4 Rewrite WorkflowDetailPage consumer 🔴
+
+- [ ] ⬜ Edit `web/src/pages/WorkflowDetailPage.tsx`
+  - Replace `useRuntimeEventFeed({ serverFilters: { workflowId, limit: 50 } })` with:
+    `useGetRecentRuntimeEventsQuery({ workflowId, limit: 50 }, { skip: !workflowId })`
+  - Replace `isLoadingHistory` with `isLoading` from query result
+  - Replace `events: runtimeEvents` with `data: runtimeEvents = []`
+  - Remove import of `useRuntimeEventFeed`
+- [ ] ⬜ Verify: page compiles
+
+### 2B.5 Rewrite OpDetailDrawer consumer 🔴
+
+- [ ] ⬜ Edit `web/src/components/workflows/OpDetailDrawer.tsx`
+  - Replace `useRuntimeEventFeed({ serverFilters: { workflowId, opId, limit: 40 }, stream: runtimeTabActive })` with:
+    `useGetRecentRuntimeEventsQuery({ workflowId: selectedSpec?.WorkflowID, opId: selectedSpec?.ID, limit: 40 }, { skip: !runtimeTabActive })`
+  - Derive connection state from query status
+  - Remove `RuntimeEventConnectionState` import from the old hook
+- [ ] ⬜ Verify: drawer compiles
+
+### 2B.6 Delete old hook and test 🔴
+
+- [ ] ⬜ Delete `web/src/features/runtime-events/runtimeEventFeed.ts`
+- [ ] ⬜ Delete `web/src/features/runtime-events/runtimeEventFeed.test.ts` (if exists)
+- [ ] ⬜ Search codebase for any remaining imports from `runtimeEventFeed` — verify zero
+- [ ] ⬜ `npx tsc --noEmit` — zero errors
+- [ ] ⬜ `pnpm build` — clean build
+
+### 2B.7 Fix Storybook — RTK Query cache pre-seeding 🟡
+
+RTK Query's `onCacheEntryAdded` only fires when a query subscription is created AND the initial fetch resolves. In Storybook (no backend), the fetch fails → `cacheDataLoaded` rejects → the SSE logic returns early — no infinite loop. But the page shows an error state.
+
+To show realistic data in stories, we pre-seed the RTK Query cache so the query resolves immediately from cache (no network call, no `onCacheEntryAdded` SSE attempt).
+
+- [ ] ⬜ Edit `web/.storybook/preview.tsx`
+  - Add `runtimeEventsApi` reducer + middleware to the mock store
+  - Create a `createMockStoreWithApi()` helper that sets up the full store
+- [ ] ⬜ Create `web/src/test-utils/mockRuntimeEvents.ts`
+  - Export `generateMockRuntimeEvents(count: number): RuntimeEventV1[]`
+  - Move the `mockEvent` factory from `RuntimeEventTable.stories.tsx` here (deduplicate)
+  - Support overrides: severity distribution, time range, workflowId/opId scoping
+  - Export `seedRuntimeEventsCache(store, params, events)` helper that dispatches `runtimeEventsApi.util.updateQueryData(...)`
+- [ ] ⬜ Edit `web/src/pages/RuntimeEventsPage.stories.tsx`
+  - Use `createMockStoreWithApi()` from preview or create inline
+  - Call `seedRuntimeEventsCache()` before rendering to pre-populate events
+  - Story "Default": 20 mock events, connection shows 'live'
+  - Story "Empty": no events, shows empty state
+  - Story "Loading": skip cache seeding, let it show skeleton
+  - Story "Error": simulate error state
+- [ ] ⬜ Update `web/src/components/workflows/RuntimeEventTable.stories.tsx`
+  - Import `mockEvent` from `test-utils/mockRuntimeEvents` instead of defining locally
+- [ ] ⬜ Verify: all stories load without infinite loop or console errors
+
+### 2B.8 Verify end-to-end with real backend 🟡
+
+- [ ] ⬜ Start the Go backend
+- [ ] ⬜ Visit `/events` — events load from REST, then SSE stream pushes live updates
+- [ ] ⬜ Visit `/workflows/:id` — workflow-scoped events load and stream
+- [ ] ⬜ Open OpDetailDrawer, switch to Runtime tab — op-scoped events load
+- [ ] ⬜ Pause/resume on RuntimeEventsPage — query skips, SSE closes; resumes correctly
+- [ ] ⬜ Kill the backend mid-stream — error state shown, no infinite loop
+- [ ] ⬜ Restart backend — query retries, SSE reconnects
+
+---
+
 ## Phase 3: Workflow Detail Page Redesign (Day 8–11)
 
 _Transform from vertical scroll into a tabbed, dense layout._

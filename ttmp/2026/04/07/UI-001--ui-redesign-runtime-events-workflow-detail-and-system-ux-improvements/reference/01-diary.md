@@ -282,3 +282,74 @@ The hook's 4 useState + 4 useEffect pattern creates cascading re-renders when RT
 - It has a test file at `web/src/features/runtime-events/runtimeEventFeed.test.ts`
 - 3 consumers: RuntimeEventsPage, WorkflowDetailPage, OpDetailDrawer
 - Each consumer creates its own SSE connection (3 connections for the same data)
+
+---
+
+## Step 6: Phase 2B — SSE Rewrite with RTK Query `onCacheEntryAdded`
+
+Starting the architectural fix for the infinite loop bug. The analysis doc recommended using RTK Query's built-in `onCacheEntryAdded` lifecycle instead of the current `useRuntimeEventFeed` hook with its 4 useState + 4 useEffect chain. Created Phase 2B tasks (2B.1–2B.8) in the ticket.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Work on docmgr ticket UI-001 and @ttmp/.../analysis/01-bug-analysis-runtimeeventfeed-infinite-loop.md in particular. Create tasks in the ticket for implementing the proper SSE redux rtk-query pattern (including storybook stories and real mock, i'm not sure if we can mock through msw, if not, then through rtk-query if possible)."
+
+**Assistant interpretation:** Create implementation tasks for the RTK Query `onCacheEntryAdded` SSE pattern, including Storybook mocking strategy, then work through them task by task.
+
+**Inferred user intent:** Complete the bug fix end-to-end with proper Storybook support, committing incrementally.
+
+### Commit (code): e647cc3 — "refactor(UI-001): rewrite SSE streaming with RTK Query onCacheEntryAdded"
+### Commit (code): 47ff46d — "feat(UI-001): shared mock factory + cache-seeded Storybook stories"
+
+### What I did
+- Rewrote `runtimeEventsApi.ts` with `onCacheEntryAdded` SSE lifecycle
+- Created `runtimeEventHelpers.ts` with extracted pure functions (`filterRuntimeEvents`, `mergeRuntimeEvents`)
+- Updated 3 consumers (RuntimeEventsPage, WorkflowDetailPage, OpDetailDrawer) to use `useGetRecentRuntimeEventsQuery` directly
+- Deleted `runtimeEventFeed.ts` (the buggy hook)
+- Updated Storybook global store to include `runtimeEventsApi` reducer + middleware
+- Created shared `test-utils/mockRuntimeEvents.ts` with `generateMockEvents()` factory
+- Rewrote `RuntimeEventsPage.stories.tsx` with cache pre-seeding (no network/SSE)
+- Deduplicated mock data from `RuntimeEventTable.stories.tsx` into shared factory
+
+### Why
+The `useRuntimeEventFeed` hook had 4 useState + 4 useEffect causing cascading re-renders when RTK Query retried failed fetches. RTK Query's built-in `onCacheEntryAdded` lifecycle manages SSE natively: no local state, no effect chains, auto-cleanup on unsubscribe.
+
+### What worked
+- `onCacheEntryAdded` pattern is clean — cacheDataLoaded rejection on no-backend prevents SSE from even opening
+- Cache pre-seeding via `store.dispatch(runtimeEventsApi.util.updateQueryData(...))` works perfectly for Storybook — the query resolves from cache, onCacheEntryAdded sees it as already fulfilled, no SSE opened
+- All 157 tests pass including the new RuntimeEventsPage stories
+
+### What didn't work
+- `export constWithManyEvents` — missing space caused a syntax error that broke Storybook indexing. Caught by vitest run.
+- Using `require()` in `runtimeEventHelpers.ts` for the `seedRuntimeEventsCache` helper — abandoned in favor of having callers pass the API object directly, then simplified further by just inlining the cache seeding in stories
+
+### What I learned
+- RTK Query's `updateQueryData` is synchronous and uses Immer — you can `draft.splice(0, draft.length, ...events)` to replace the entire cache entry
+- The `onCacheEntryAdded` callback only fires when a new cache entry is created — if data is already in cache (from pre-seeding), the callback may still fire but `cacheDataLoaded` resolves immediately from cache
+- Storybook's CSF parser is stricter than TypeScript — syntax errors in stories break the entire test run
+
+### What was tricky to build
+- Getting the Storybook store right: adding `runtimeEventsApi` reducer + middleware to the global preview.tsx decorator fixed all 6 OpDetailDrawer story failures at once
+- The cache seeding timing: `store.dispatch(updateQueryData(...))` must happen before the component mounts, which means it goes in the decorator function, not in a useEffect
+
+### What warrants a second pair of eyes
+- The `onCacheEntryAdded` error handling — if `cacheDataLoaded` rejects, we return early and never open SSE. Is this the right behavior? Or should we retry?
+- The `keepUnusedDataFor: 30` — 30 seconds might be too short or too long for the use case
+- The sort in `updateCachedData` draft — sorting on every SSE message could be expensive with 500 events. Consider only sorting on initial load and inserting at the correct position for subsequent events.
+
+### What should be done in the future
+- Task 2B.8: End-to-end verification with real backend
+- Consider adding `maxRetries` logic in `onCacheEntryAdded` for transient failures
+- Consider optimizing the draft sort to insertion-sort instead of full re-sort
+
+### Code review instructions
+- Start with `web/src/api/runtimeEventsApi.ts` — the `onCacheEntryAdded` is the key change
+- Check `web/src/pages/RuntimeEventsPage.tsx` for the consumer pattern (pause via `{ skip: paused }`)
+- Check `web/.storybook/preview.tsx` for the global store setup
+- Check `web/src/test-utils/mockRuntimeEvents.ts` for the shared factory
+- Run `npx vitest run` — all 157 tests should pass
+
+### Technical details
+- `cacheDataLoaded` resolves when the initial REST query succeeds; rejects if the query fails
+- `cacheEntryRemoved` resolves when all subscribers unsubscribe (component unmount or `skip: true`)
+- `updateCachedData` uses Immer — mutations to the draft are applied immutably
+- The `buildSSEUrl` function only includes scoping params (workflowId, opId, site, workerId) — not pagination/time params
