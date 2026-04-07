@@ -203,3 +203,9 @@ export interface ArtifactSummary {
   previewable: boolean;
   previewKind?: string;
 }
+
+export interface WorkflowArtifactListResponse {
+  workflowID: string;
+  total: number;
+  artifacts: ArtifactSummary[];
+}

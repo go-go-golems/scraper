@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { WorkflowListItem, WorkflowSummary, WorkflowOp, OpResult, ArtifactSummary } from './types';
+import type { WorkflowListItem, WorkflowSummary, WorkflowOp, OpResult, ArtifactSummary, WorkflowArtifactListResponse } from './types';
 import { engineApi } from './engineApi';
 import { queueApi } from './queueApi';
 import { runtimeEventsApi } from './runtimeEventsApi';
@@ -19,7 +19,7 @@ interface ListWorkflowsResponse {
 export const workflowApi = createApi({
   reducerPath: 'workflowApi',
   baseQuery: fetchBaseQuery({ baseUrl: '/api/v1' }),
-  tagTypes: ['WorkflowList', 'Workflow', 'WorkflowOps', 'OpResult', 'OpArtifacts'],
+  tagTypes: ['WorkflowList', 'Workflow', 'WorkflowOps', 'OpResult', 'OpArtifacts', 'WorkflowArtifacts'],
   endpoints: (builder) => ({
     listWorkflows: builder.query<ListWorkflowsResponse, ListWorkflowsParams>({
       query: (params) => {
@@ -49,6 +49,32 @@ export const workflowApi = createApi({
       query: ({ workflowId, opId }) => `/workflows/${workflowId}/ops/${opId}/result`,
       transformResponse: (response: { result: OpResult | null }) => response.result,
       providesTags: (_result, _error, { workflowId, opId }) => [{ type: 'OpResult', id: `${workflowId}:${opId}` }],
+    }),
+    getWorkflowArtifacts: builder.query<WorkflowArtifactListResponse, {
+      workflowId: string;
+      opId?: string;
+      kind?: string;
+      contentType?: string;
+      search?: string;
+      limit?: number;
+      offset?: number;
+    }>({
+      query: ({ workflowId, opId, kind, contentType, search, limit = 20, offset = 0 }) => {
+        const sp = new URLSearchParams();
+        if (opId) sp.set('opId', opId);
+        if (kind) sp.set('kind', kind);
+        if (contentType) sp.set('contentType', contentType);
+        if (search) sp.set('search', search);
+        sp.set('limit', String(limit));
+        sp.set('offset', String(offset));
+        return `/workflows/${workflowId}/artifacts?${sp}`;
+      },
+      // Keep the full response so callers can access both artifacts[] and total via
+      // selectFromResult. For a simple artifacts-only slice, use:
+      //   selectFromResult: (r) => r.data ?? []
+      providesTags: (_result, _error, { workflowId }) => [
+        { type: 'WorkflowArtifacts', id: workflowId },
+      ],
     }),
     getOpArtifacts: builder.query<ArtifactSummary[], { wfId: string; opId: string }>({
       query: ({ wfId, opId }) => `/workflows/${wfId}/ops/${opId}/artifacts`,
@@ -107,6 +133,7 @@ export const {
   useGetWorkflowQuery,
   useGetWorkflowOpsQuery,
   useGetOpResultQuery,
+  useGetWorkflowArtifactsQuery,
   useGetOpArtifactsQuery,
   useRetryOpMutation,
   useCancelWorkflowMutation,
