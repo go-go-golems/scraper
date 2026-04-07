@@ -18,6 +18,7 @@ import {
 } from '../api/workflowApi';
 import { useGetScriptQuery } from '../api/catalogApi';
 import { useRuntimeEventFeed } from '../features/runtime-events/runtimeEventFeed';
+import { useToast } from '../components/common/ToastProvider';
 
 export function WorkflowDetailPage() {
   const { workflowId } = useParams<{ workflowId: string }>();
@@ -61,6 +62,7 @@ export function WorkflowDetailPage() {
 
   const [retryOp, { isLoading: retryLoading }] = useRetryOpMutation();
   const [cancelWorkflow, { isLoading: cancelLoading }] = useCancelWorkflowMutation();
+  const { showToast } = useToast();
 
   useEffect(() => {
     if (!artifacts || artifacts.length === 0) return;
@@ -91,15 +93,25 @@ export function WorkflowDetailPage() {
     setDrawerOpen(false);
   }, []);
 
-  const handleRetryOp = useCallback(() => {
+  const handleRetryOp = useCallback(async () => {
     if (!selectedOpId || !workflowId) return;
-    retryOp({ wfId: workflowId, opId: selectedOpId });
-  }, [workflowId, selectedOpId, retryOp]);
+    try {
+      await retryOp({ wfId: workflowId, opId: selectedOpId }).unwrap();
+      showToast('Op retry initiated', 'success');
+    } catch {
+      showToast('Failed to retry op', 'error');
+    }
+  }, [workflowId, selectedOpId, retryOp, showToast]);
 
-  const handleCancelWorkflow = useCallback(() => {
+  const handleCancelWorkflow = useCallback(async () => {
     if (!workflowId) return;
-    cancelWorkflow(workflowId);
-  }, [workflowId, cancelWorkflow]);
+    try {
+      await cancelWorkflow(workflowId).unwrap();
+      showToast('Workflow canceled', 'info');
+    } catch {
+      showToast('Failed to cancel workflow', 'error');
+    }
+  }, [workflowId, cancelWorkflow, showToast]);
 
   if (!workflowId) {
     return <Typography color="text.disabled">No workflow ID</Typography>;

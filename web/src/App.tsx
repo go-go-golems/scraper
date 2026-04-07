@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppErrorBoundary } from './components/common/AppErrorBoundary';
+import { ToastProvider } from './components/common/ToastProvider';
 import { AppShell } from './components/layout/AppShell';
 import { EngineOverviewPage } from './pages/EngineOverviewPage';
 import { WorkflowsPage } from './pages/WorkflowsPage';
@@ -14,7 +15,8 @@ function App() {
   return (
     <BrowserRouter>
       <AppErrorBoundary>
-        <AppShell>
+        <ToastProvider>
+          <AppShell>
         <Routes>
           <Route path="/" element={<EngineOverviewPage />} />
           <Route path="/workflows" element={<WorkflowsPage />} />
@@ -25,7 +27,8 @@ function App() {
           <Route path="/sites/:siteName" element={<SiteDetailPage />} />
           <Route path="/submit" element={<SubmitWorkflowPage />} />
         </Routes>
-        </AppShell>
+          </AppShell>
+        </ToastProvider>
       </AppErrorBoundary>
     </BrowserRouter>
   );

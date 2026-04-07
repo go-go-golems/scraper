@@ -1,20 +1,19 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import {
-  Alert,
   Box,
   Button,
   Card,
   CardContent,
   CircularProgress,
   Grid,
-  Snackbar,
   Typography,
 } from '@mui/material';
 import { SitePicker } from '../components/submit/SitePicker';
 import { VerbPicker } from '../components/submit/VerbPicker';
 import { VerbParameterForm } from '../components/submit/VerbParameterForm';
 import { RecentSubmissionsTable } from '../components/submit/RecentSubmissionsTable';
+import { useToast } from '../components/common/ToastProvider';
 import { useListSitesQuery, useListVerbsQuery } from '../api/catalogApi';
 import { useSubmitWorkflowMutation } from '../api/submissionApi';
 import {
@@ -38,11 +37,7 @@ export function SubmitWorkflowPage() {
   });
 
   const [submitWorkflow, { isLoading: submitting }] = useSubmitWorkflowMutation();
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
-    open: false,
-    message: '',
-    severity: 'success',
-  });
+  const { showToast } = useToast();
 
   const activeVerb = verbs.find((v) => v.name === selectedVerb) ?? null;
 
@@ -80,23 +75,15 @@ export function SubmitWorkflowPage() {
         }),
       );
 
-      setSnackbar({
-        open: true,
-        message: `Workflow ${result.workflow.ID} submitted (${result.submittedCount} ops)`,
-        severity: 'success',
-      });
+      showToast(`Workflow ${result.workflow.ID} submitted (${result.submittedCount} ops)`, 'success');
     } catch (err) {
       const message =
         err && typeof err === 'object' && 'data' in err
           ? String((err as { data: { error?: string } }).data?.error ?? 'Submission failed')
           : 'Submission failed';
-      setSnackbar({ open: true, message, severity: 'error' });
+      showToast(message, 'error');
     }
-  }, [selectedSite, selectedVerb, fieldValues, submitWorkflow, dispatch]);
-
-  const handleCloseSnackbar = useCallback(() => {
-    setSnackbar((prev) => ({ ...prev, open: false }));
-  }, []);
+  }, [selectedSite, selectedVerb, fieldValues, submitWorkflow, dispatch, showToast]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -182,23 +169,6 @@ export function SubmitWorkflowPage() {
           </CardContent>
         </Card>
       )}
-
-      {/* Snackbar */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={5000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          variant="filled"
-          sx={{ width: '100%' }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 }
