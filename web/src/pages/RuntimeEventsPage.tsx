@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
+  Button,
   Card,
   CardContent,
   Chip,
@@ -47,7 +48,7 @@ export function RuntimeEventsPage() {
   const [severity, setSeverity] = useState<RuntimeEventSeverity | 'all'>('all');
   const [source, setSource] = useState<RuntimeEventSource | 'all'>('all');
 
-  const { events, isLoadingHistory, connectionState, lastEventAt } = useRuntimeEventFeed({
+  const { events, isLoadingHistory, connectionState, lastEventAt, clearEvents } = useRuntimeEventFeed({
     serverFilters: {
       workflowId: workflowId || undefined,
       opId: opId || undefined,
@@ -73,10 +74,13 @@ export function RuntimeEventsPage() {
               </Typography>
             </Box>
 
-            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
               <Chip label={`Stream: ${connectionState}`} color={connectionColor(connectionState)} />
               <Chip label={`${events.length} events`} variant="outlined" />
               <Chip label={formatLastEventAt(lastEventAt)} variant="outlined" />
+              <Button variant="outlined" size="small" onClick={clearEvents} disabled={events.length === 0}>
+                Clear
+              </Button>
             </Stack>
 
             <Box

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { RuntimeEventV1 } from '../../pb/proto/scraper/runtime/v1/events_pb';
 import {
   RuntimeEventSeverity,
@@ -87,6 +87,11 @@ export function useRuntimeEventFeed({
 
   const { data: recentRuntimeEvents = [], isLoading } = useGetRecentRuntimeEventsQuery(serverFilters);
 
+  const clearEvents = useCallback(() => {
+    setAllEvents([]);
+    setLastEventAt(null);
+  }, []);
+
   useEffect(() => {
     setAllEvents([]);
     setLastEventAt(null);
@@ -154,5 +159,6 @@ export function useRuntimeEventFeed({
     isLoadingHistory: isLoading,
     connectionState,
     lastEventAt,
+    clearEvents,
   };
 }
