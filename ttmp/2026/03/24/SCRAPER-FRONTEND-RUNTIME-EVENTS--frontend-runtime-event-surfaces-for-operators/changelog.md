@@ -70,3 +70,16 @@
   - `/events` loads cleanly
   - `/workflows` loads cleanly
   - `/events` shows `Stream: live` with an updating event count and no console warnings
+- Tightened worker/operator noise around runtime events and queue policy:
+  - changed `queue_rate_limited` scheduler log lines from info to trace so the worker terminal is no longer flooded by expected 1 rps pacing on Hacker News
+  - configured the built-in Hacker News HTTP fetch queue (`site:hackernews:http`) with an explicit token-bucket rate limit of 1 request per second and burst 1
+- Debugged a confusing “workflow stuck in progress” local runtime issue and fixed the environment rather than the code:
+  - identified that the API had been started with quoted `--engine-db` and `--sites-dir` values, which created a separate literal directory tree under `\"./tmp-scraper`
+  - confirmed that the API and worker were therefore pointed at different SQLite databases
+  - removed the accidental quoted-path tree
+  - restarted API and worker in tmux against the shared unquoted `./tmp-scraper/engine.db` and `./tmp-scraper/sites` paths with `--events-backend redis`
+  - resubmitted a fresh Hacker News extract workflow into the repaired stack and confirmed end-to-end success plus live runtime-event delivery
+- Fixed a second frontend regression discovered during the same debugging pass:
+  - `runtimeEventsApi` in the current worktree had drifted back to storing decoded protobuf messages in RTK Query state
+  - moved decode back to the component edge in `RuntimeEventsPage`, `WorkflowDetailPage`, and `OpDetailDrawer`
+  - corrected an off-by-one enum mapping in `SeverityDotIndicator.tsx` so `INFO` events such as `WORKFLOW_UPDATED` no longer render as `WARN`

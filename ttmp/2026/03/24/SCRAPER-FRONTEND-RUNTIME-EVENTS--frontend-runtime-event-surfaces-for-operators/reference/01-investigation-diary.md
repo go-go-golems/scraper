@@ -875,3 +875,267 @@ This diary complements the main design document. The design doc is the artifact 
 ## Related
 
 - `SCRAPER-RUNTIME-EVENTS` for the backend transport and initial frontend workflow timeline
+
+## 2026-04-07 continuation: local runtime repair and UI regression fixes
+
+### Prompt context
+
+The user continued manual testing against the local runtime-event stack and reported three classes of problems at once:
+
+1. the worker terminal was flooded by `queue_rate_limited` messages after the Hacker News HTTP queue was moved to 1 rps,
+2. the `/events` page showed no live data,
+3. the frontend again emitted Redux non-serializable warnings for `occurredAt.seconds` and visually labeled `workflow_updated` as `WARN`.
+
+The user then reported a specific workflow URL that appeared to be “in progress” without anything happening.
+
+### Assistant interpretation
+
+This was not one bug. It was a compound failure made of:
+
+- expected scheduler behavior with bad log-level ergonomics,
+- a local-process/runtime mismatch,
+- and a frontend state-shape regression.
+
+The correct response was to separate those problems instead of trying to solve them all with one speculative patch.
+
+### Investigation sequence
+
+I first inspected the runtime-event frontend and backend paths that were relevant to the symptoms:
+
+- `web/src/api/runtimeEventsApi.ts`
+- `web/src/pages/RuntimeEventsPage.tsx`
+- `web/src/pages/WorkflowDetailPage.tsx`
+- `web/src/components/workflows/OpDetailDrawer.tsx`
+- `web/src/components/workflows/SeverityDotIndicator.tsx`
+- `pkg/runtimeevents/scheduler.go`
+- `pkg/api/handlers/runtime_events.go`
+- `pkg/runtimeevents/backend.go`
+- `pkg/engine/scheduler/scheduler.go`
+
+Then I inspected live API state and local process state using:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/api/v1/workflows/<workflow-id>'
+curl -sS 'http://127.0.0.1:8080/api/v1/workflows/<workflow-id>/ops'
+curl -sS 'http://127.0.0.1:8080/api/v1/engine/status'
+tmux capture-pane -pt scraper-worker
+ps -ef | rg 'scraper api serve|scraper worker run'
+```
+
+### What I found
+
+#### 1. Queue-rate-limit logging was technically correct but operationally noisy
+
+The scheduler emits `EventQueueRateLimited` when a queue has ready work but cannot lease due to queue policy. After the Hacker News fetch queue was moved to 1 rps, this became expected behavior and therefore terminal spam.
+
+The scheduler log switch in `pkg/engine/scheduler/scheduler.go` still routed that event through the default `info` branch.
+
+#### 2. The `/events` page was empty because the runtime-event backend had been off in one running stack
+
+At one point the live API and worker were both running without `--events-backend redis`, so the runtime-event API returned:
+
+```json
+{"events":[]}
+```
+
+That was not a frontend rendering bug. It was a process-launch configuration issue.
+
+#### 3. The “workflow is stuck” state was caused by API and worker looking at different SQLite databases
+
+This was the most important finding.
+
+The live process list showed an API started with quoted flag values:
+
+```text
+--engine-db "./tmp-scraper/engine.db"
+--sites-dir "./tmp-scraper/sites"
+```
+
+while the worker was using:
+
+```text
+--engine-db ./tmp-scraper/engine.db
+--sites-dir ./tmp-scraper/sites
+```
+
+Those are not the same paths once embedded quotes are passed through a shell boundary. The quoted values created a literal directory tree named:
+
+```text
+\"./tmp-scraper
+```
+
+I confirmed that both trees existed:
+
+- normal runtime DB: `./tmp-scraper/engine.db`
+- accidental quoted runtime DB: `\"./tmp-scraper/engine.db\"`
+
+That explained the observed behavior exactly:
+
+- the API showed a workflow with one `ready` op and zero active leases,
+- the worker kept polling a different database and therefore never leased that op.
+
+#### 4. The Redux warning regression had reappeared because `runtimeEventsApi` had drifted back
+
+The current worktree version of `web/src/api/runtimeEventsApi.ts` was again using:
+
+- `transformResponse` to decode JSON directly into protobuf messages,
+- `updateCachedData` to patch decoded protobuf messages into RTK Query state.
+
+That put protobuf `bigint` timestamp fields such as `occurredAt.seconds` back inside Redux state and actions, which recreated the exact non-serializable warnings seen earlier in the day.
+
+#### 5. `workflow_updated` showing as `WARN` was a frontend enum-label bug
+
+The backend mapping in `pkg/runtimeevents/scheduler.go` was still correct:
+
+- `EventWorkflowUpdated` -> `RUNTIME_EVENT_SEVERITY_INFO`
+
+The UI bug came from `web/src/components/workflows/SeverityDotIndicator.tsx`, where the numeric enum mapping was off by one:
+
+```text
+0 -> DEBUG
+1 -> INFO
+2 -> WARN
+3 -> ERROR
+```
+
+But the generated enum values are actually:
+
+```text
+1 -> DEBUG
+2 -> INFO
+3 -> WARN
+4 -> ERROR
+```
+
+So real `INFO` events were being painted as `WARN`.
+
+### What I changed
+
+#### Log noise reduction
+
+In `pkg/engine/scheduler/scheduler.go`:
+
+- changed `EventQueueRateLimited` logging from the default `info` branch to the trace-only branch shared with `EventIdle`
+
+This preserves the event and the metrics signal while removing normal operator-terminal spam.
+
+#### Hacker News rate limit
+
+In `pkg/sites/hackernews/site.go`:
+
+- added an explicit queue policy for `site:hackernews:http`
+- set `MaxInFlight: 1`
+- set token-bucket rate limit to `RatePerSecond: 1`, `Burst: 1`
+
+In `pkg/sites/hackernews/site_test.go`:
+
+- added a focused definition test that locks this policy in
+
+#### Frontend serialization fix
+
+In `web/src/api/runtimeEventsApi.ts`:
+
+- changed the RTK Query endpoint to cache raw `JsonValue[]`
+- removed protobuf decode from `transformResponse`
+- changed SSE cache patching to keep raw JSON rather than decoded messages
+
+In the component consumers:
+
+- `web/src/pages/RuntimeEventsPage.tsx`
+- `web/src/pages/WorkflowDetailPage.tsx`
+- `web/src/components/workflows/OpDetailDrawer.tsx`
+
+I moved decode to the component edge using `useMemo`, so Redux state stays serializable while the UI still works with decoded `RuntimeEventV1` values.
+
+#### Severity label fix
+
+In `web/src/components/workflows/SeverityDotIndicator.tsx`:
+
+- corrected the numeric enum mapping so `INFO` is rendered as `INFO` and `WARN` is rendered as `WARN`
+
+### Environment repair work
+
+After confirming the API/worker DB split, I repaired the local runtime directly:
+
+```bash
+kill <old worker pids>
+pkill -f 'scraper api serve'
+rm -rf '\".'
+docker compose up -d redis
+tmux new-session -d -s scraper-api 'cd ... && go run ./cmd/scraper api serve --address 0.0.0.0:8080 --engine-db ./tmp-scraper/engine.db --sites-dir ./tmp-scraper/sites --events-backend redis'
+tmux new-session -d -s scraper-worker 'cd ... && go run ./cmd/scraper worker run --engine-db ./tmp-scraper/engine.db --sites-dir ./tmp-scraper/sites --poll-interval 50ms --metrics-address 0.0.0.0:9091 --events-backend redis --http-proxy http://...'
+```
+
+This did two things:
+
+- removed the accidental quoted-path runtime tree,
+- ensured both processes used the same engine DB and site DB directory.
+
+### What happened to the previously stuck workflow
+
+The workflow the user linked,
+
+`hackernews-extract-frontpage-1775586346661331397`
+
+was stored in the accidental quoted-path database tree. Once that tree was removed, that workflow no longer existed in the repaired runtime.
+
+This was the correct cleanup choice because the quoted tree was a launch bug, not a legitimate environment we wanted to preserve.
+
+### Verification after repair
+
+I resubmitted a fresh Hacker News extract workflow into the repaired stack:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8080/api/v1/sites/hackernews/verbs/extract-frontpage:submit \
+  -H 'Content-Type: application/json' \
+  -d '{"values":{"base-url":"https://news.ycombinator.com/","max-pages":5}}'
+```
+
+New workflow ID:
+
+`hackernews-extract-frontpage-1775586649974859668`
+
+I then verified:
+
+- API health:
+  - `curl http://127.0.0.1:8080/healthz` -> `{"ok":true}`
+- worker metrics:
+  - `scraper_workers_up{worker_id="scraper-worker"} 1`
+- worker activity:
+  - tmux pane showed `op_leased` and `op_succeeded`
+- workflow completion:
+  - final workflow status was `succeeded`
+  - stats were `Total: 10`, `Succeeded: 10`
+- runtime events:
+  - `GET /api/v1/runtime-events?workflowId=<new-id>&limit=10` returned scheduler and runner events
+  - `WORKFLOW_UPDATED` was present with `severity: INFO`
+
+### Validation performed
+
+Commands run:
+
+```bash
+go test ./pkg/engine/scheduler -count=1
+go test ./pkg/sites/hackernews -count=1
+go test ./pkg/runtimeevents -count=1
+cd web && npm run test:unit
+```
+
+Results:
+
+- the focused Go tests passed,
+- the runtime-event helper/unit tests passed,
+- the app-wide frontend build remained blocked by pre-existing Storybook/type issues outside this fix set,
+- the repaired runtime stack produced successful live Hacker News runs and runtime-event history.
+
+### Commits made during this continuation
+
+- `4e0cdbe` `Rate limit Hacker News fetch queue`
+- `4aa6c53` `Silence queue rate-limit info logs`
+- `9c9a7ca` `Fix runtime event UI serialization and severity labels`
+
+### What should happen next
+
+- Keep using unquoted runtime paths when launching API and worker from `tmux`.
+- If local launch automation is scripted, make sure it never embeds literal quotes into `--engine-db` and `--sites-dir` flag values.
+- If we want truly durable event history rather than recent in-memory plus live stream, that needs separate design work because the current API serves from the in-process hub, not durable storage.
