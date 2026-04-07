@@ -106,3 +106,34 @@ go test ./pkg/api/server ./pkg/cmd -count=1
 ```
 
 Both focused packages passed again after the import cleanup.
+
+## Third cleanup slice: runtime-event router startup
+
+The last API-server concern still mixed into `server.go` was runtime-event router startup.
+
+File added:
+
+- `pkg/api/server/runtime_event_router.go`
+
+What moved:
+
+- `startRuntimeEventRouter(...)`
+
+What this achieved:
+
+- `server.go` now mostly reads as a composition root:
+  - open event resources
+  - build services and handlers
+  - register routes
+  - wrap middleware
+  - wire shutdown cleanup
+- route registration, request middleware, and event-router startup are all out in dedicated files
+
+Validation for this slice:
+
+```bash
+gofmt -w pkg/api/server/server.go pkg/api/server/runtime_event_router.go
+go test ./pkg/api/server ./pkg/cmd -count=1
+```
+
+The focused packages passed again, so the API half of this cleanup ticket is structurally complete.

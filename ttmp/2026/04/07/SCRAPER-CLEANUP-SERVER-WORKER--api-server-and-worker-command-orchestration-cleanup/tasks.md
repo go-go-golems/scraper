@@ -12,8 +12,8 @@
 
 - [x] Split route registration by domain into dedicated files.
 - [x] Split request logging and metrics middleware into its own file.
-- [ ] Split runtime-event router startup into its own file.
-- [ ] Keep `server.New(...)` as the composition root.
+- [x] Split runtime-event router startup into its own file.
+- [x] Keep `server.New(...)` as the composition root.
 
 ## Worker Command Cleanup
 

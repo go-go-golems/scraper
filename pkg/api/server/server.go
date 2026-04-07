@@ -1,12 +1,9 @@
 package server
 
 import (
-	"context"
 	"net/http"
 	"time"
 
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/go-go-golems/scraper/pkg/api/handlers"
 	"github.com/go-go-golems/scraper/pkg/metrics"
 	"github.com/go-go-golems/scraper/pkg/runtimeevents"
@@ -14,7 +11,6 @@ import (
 	"github.com/go-go-golems/scraper/pkg/services/engineview"
 	"github.com/go-go-golems/scraper/pkg/services/submission"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
-	"github.com/rs/zerolog/log"
 )
 
 type Config struct {
@@ -78,30 +74,4 @@ func New(cfg Config, siteRegistry *siteregistry.Registry) (*http.Server, error) 
 		_ = eventResources.Close()
 	})
 	return server, nil
-}
-
-func startRuntimeEventRouter(resources *runtimeevents.Resources, hub *runtimeevents.Hub) (*message.Router, error) {
-	if resources == nil || resources.Subscriber == nil {
-		return nil, nil
-	}
-
-	router, err := message.NewRouter(message.RouterConfig{}, watermill.NopLogger{})
-	if err != nil {
-		return nil, err
-	}
-	router.AddNoPublisherHandler("runtime-events-hub", resources.Topic, resources.Subscriber, func(msg *message.Message) error {
-		event, err := runtimeevents.EventFromMessage(msg)
-		if err != nil {
-			return err
-		}
-		hub.Add(event)
-		return nil
-	})
-
-	go func() {
-		if err := router.Run(context.Background()); err != nil {
-			log.Warn().Err(err).Msg("runtime event router stopped")
-		}
-	}()
-	return router, nil
 }
