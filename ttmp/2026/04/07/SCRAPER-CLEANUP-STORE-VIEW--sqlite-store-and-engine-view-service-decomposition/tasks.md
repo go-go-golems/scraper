@@ -11,7 +11,7 @@
 ## Store Decomposition
 
 - [x] Extract workflow-specific methods into `workflow_store.go`.
-- [ ] Extract op enqueue/read helpers into `op_store.go`.
+- [x] Extract op enqueue/read helpers into `op_store.go`.
 - [ ] Extract leasing and heartbeat logic into `lease_store.go`.
 - [x] Extract result/artifact logic into `result_store.go`.
 - [x] Extract queue limiter logic into `queue_limiter.go`.

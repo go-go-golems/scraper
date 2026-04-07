@@ -258,3 +258,39 @@ go test ./pkg/engine/store/sqlite -count=1
 ```
 
 The package stayed green again, so the move remained strictly structural.
+
+### Sixth cleanup slice: SQLite op methods
+
+Once the workflow methods were out, the remaining non-lease body of `store.go` was almost entirely op-centric.
+
+File added:
+
+- `pkg/engine/store/sqlite/op_store.go`
+
+What moved into `op_store.go`:
+
+- `Enqueue(...)`
+- `GetOp(...)`
+- `RefreshRunnableOps(...)`
+- `ListQueueCandidates(...)`
+- `loadDependencies(...)`
+
+Why this grouping made sense:
+
+- these methods all work from the `ops` table or `op_dependencies`
+- `RefreshRunnableOps(...)` and `ListQueueCandidates(...)` are scheduler-facing op lifecycle helpers
+- `loadDependencies(...)` belongs with op materialization, not with leasing
+
+What remained in `store.go` after this slice:
+
+- store shell: `Open(...)`, `Close(...)`, `CurrentVersion(...)`
+- lease acquisition and heartbeat only
+
+Validation for this slice:
+
+```bash
+gofmt -w pkg/engine/store/sqlite/store.go pkg/engine/store/sqlite/op_store.go
+go test ./pkg/engine/store/sqlite -count=1
+```
+
+The SQLite package passed again after the move, which left the final lease-only slice as the remaining store decomposition step.

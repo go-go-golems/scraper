@@ -9,3 +9,4 @@
 - Extracted SQLite queue limiter logic and shared SQL/JSON helpers into dedicated store files without changing behavior.
 - Extracted SQLite result completion, failure handling, result loading, and artifact loading into `result_store.go`.
 - Extracted workflow creation, reads, status updates, and workflow stats into `workflow_store.go`.
+- Extracted op enqueueing, op reads, dependency loading, runnable refresh, and queue candidate listing into `op_store.go`.
