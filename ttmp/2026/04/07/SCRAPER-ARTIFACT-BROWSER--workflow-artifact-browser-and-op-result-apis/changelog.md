@@ -37,3 +37,12 @@ Step 3 (frontend): FilterBar with op/kind/type dropdowns + debounced search + Ac
 
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/components/artifacts/FilterBar.tsx — Step 3 FilterBar
 
+
+## 2026-04-07
+
+Phase 2 frontend complete: getWorkflowArtifacts query (Step 1), ArtifactsPanel skeleton (Step 2), FilterBar + ActiveFilterChips (Step 3), ArtifactTable + pagination (Step 4), ArtifactPreviewPanel + BinaryFallbackView (Step 5), bridge links + tab structure (Step 6). Stories deferred. Commits: 7834370, e0410e4, 633bbb1, 56b28bf, de02d69, ad44040
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/api/workflowApi.ts — Phase 2 complete
+

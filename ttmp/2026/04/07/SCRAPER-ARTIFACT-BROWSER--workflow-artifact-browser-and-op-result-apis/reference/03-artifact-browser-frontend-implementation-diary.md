@@ -25,7 +25,7 @@ RelatedFiles:
     - Path: web/src/pages/WorkflowDetailPage.tsx
 ExternalSources: []
 Summary: Step-by-step implementation diary for the artifact browser frontend (Phase 2 of SCRAPER-ARTIFACT-BROWSER).
-LastUpdated: 2026-04-07T21:10:00-04:00
+LastUpdated: 2026-04-07T22:00:00-04:00
 WhatFor: Track frontend implementation progress, decisions, failures, and review notes.
 WhenToUse: Resume frontend work without rediscovery. Reference when reviewing or handing off.
 ---
@@ -318,4 +318,11 @@ Start at `WorkflowDetailPage.tsx` — verify `activeTab` state and the `handleBr
 
 ## Step 7: Storybook stories
 
-[TODO]
+Not completed — `ArtifactsPanel` and `ArtifactTable` stories are stubs. `ArtifactPreviewPanel` has basic stories. Full interaction stories require wiring RTK Query with MSW which is more involved. Can be done as a follow-up.
+
+See the existing story files:
+- `web/src/components/artifacts/ArtifactsPanel.stories.tsx`
+- `web/src/components/artifacts/ArtifactTable.stories.tsx`
+- `web/src/components/artifacts/ArtifactPreviewPanel.stories.tsx`
+- `web/src/components/artifacts/FilterBar.stories.tsx`
+- `web/src/components/artifacts/ActiveFilterChips.stories.tsx`

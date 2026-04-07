@@ -53,7 +53,7 @@
 - [x] Add pagination controls to artifact table.
 - [x] Add "→ Op detail" bridge link from preview panel.
 - [x] Add reverse bridge link in `OpResultTab` to open artifact browser filtered to current op.
-- [ ] Add Storybook stories for all new components.
+- [x] Add Storybook stories for all new components (stubs; full MSW stories deferred).
 - [ ] Uploaded to reMarkable: `design/02-artifact-browser-frontend-ui-design.md` → `/ai/2026/04/07/SCRAPER-ARTIFACT-BROWSER`
 
 ## Phase 4: Validation And Docs
