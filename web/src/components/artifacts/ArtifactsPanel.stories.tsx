@@ -27,8 +27,8 @@ export const Skeleton: Story = {
   render: (args) => (
     <Box sx={{ p: 2 }}>
       <Typography variant="caption" color="text.disabled" sx={{ mb: 1, display: 'block' }}>
-        Step 2 — ArtifactsPanel skeleton. Filter bar, table, and preview panel
-        added in Steps 3-5.
+        Step 2-3 — ArtifactsPanel with filter bar. Artifact table + pagination
+        added in Step 4. Preview panel in Step 5.
       </Typography>
       <ArtifactsPanel {...args} />
     </Box>
