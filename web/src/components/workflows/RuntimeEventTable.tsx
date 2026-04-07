@@ -3,8 +3,6 @@ import {
   Box,
   Collapse,
   IconButton,
-  KeyboardArrowDownIcon,
-  KeyboardArrowUpIcon,
   Skeleton,
   Table,
   TableBody,
@@ -14,6 +12,8 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import type { RuntimeEventV1 } from '../../pb/proto/scraper/runtime/v1/events_pb';
 import {
   RuntimeEventKind,
