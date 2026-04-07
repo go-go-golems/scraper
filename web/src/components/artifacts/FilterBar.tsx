@@ -52,7 +52,7 @@ const CONTENT_TYPE_OPTIONS = [
   { value: 'application/octet-stream', label: 'binary / other' },
 ];
 
-export function FilterBar({ filters, onFiltersChange, ops }: FilterBarProps) {
+export function FilterBar({ filters, onFiltersChange, onSearchChange, searchInputValue, ops }: FilterBarProps) {
   const selectId = useId();
 
   const handleChange = (field: keyof ArtifactFilters) => (e: SelectChangeEvent<string> | React.ChangeEvent<HTMLInputElement>) => {
