@@ -236,9 +236,41 @@ Start at `ArtifactTable.tsx`. Verify columns match the design doc. Check that `A
 
 ---
 
-## Step 5: ArtifactPreviewPanel
+## Step 5: ArtifactPreviewPanel  [committed: de02d69]
 
-[TODO]
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Add the right-half preview panel with metadata header, action buttons, and content dispatch by MIME type.
+
+**Commit (code):** de02d69 — "feat(ArtifactPreviewPanel): add preview panel with body fetch + dispatch by content type"
+
+### What I did
+
+- Created `ArtifactPreviewPanel.tsx`: metadata header (name, op link, kind, contentType, size, created), action bar (Open Raw, Download), body fetch from `/api/v1/artifacts/{id}` on `artifact` prop change, dispatches content to `ArtifactPreview` (HTML/JSON/text) or `<img>` (images) or `BinaryFallbackView` (binary). Close button wired.
+- Created `BinaryFallbackView.tsx`: `InsertDriveFile` icon + size + contentType + download button for non-previewable artifacts.
+- Created `ArtifactPreviewPanel.stories.tsx`: Empty, JsonArtifact, HtmlArtifact, BinaryArtifact.
+- Updated `ArtifactsPanel`: owns `previewVisible` state, renders `ArtifactPreviewPanel` below the table (bordered card), toggle via `ViewAgenda` icon button in the pagination bar.
+
+### Key decisions
+
+- **Fetch on `artifact` change**: `useEffect` watches `artifact.id` and fetches `/api/v1/artifacts/{id}` as text. `loading` state shown during fetch.
+- **Content dispatch**: `isPreviewable` check uses `artifact.previewable` + `contentType` check. Images use `<img src>` (browser handles fetch). Binary uses `BinaryFallbackView`.
+- **Preview panel layout**: rendered below the table in a bordered `Box`. Toggle hides/shows the entire panel. `selectedArtifactId` state in `ArtifactsPanel` — `ArtifactPreviewPanel` is purely presentational.
+- **Open Raw**: `component="a" href={...} target="_blank"` — opens raw artifact in a new tab.
+
+### What warrants a second pair of eyes
+
+The `fetch` in `ArtifactPreviewPanel` fetches raw text. For large binary files, this would fail. The `artifact.previewable` field gates this, but worth verifying that very large HTML responses (e.g., 10MB) don't cause memory issues — `ArtifactPreview` renders them as a `<pre>` which could be slow.
+
+### What should be done in the future
+
+- N/A
+
+### Code review instructions
+
+Start at `ArtifactPreviewPanel.tsx`. Verify the `useEffect` dependency on `artifact?.id` is correct (fetch re-fires when artifact changes). Check that `BinaryFallbackView` is shown for non-previewable artifacts. Validate: `cd web && npx tsc --noEmit`.
 
 ---
 

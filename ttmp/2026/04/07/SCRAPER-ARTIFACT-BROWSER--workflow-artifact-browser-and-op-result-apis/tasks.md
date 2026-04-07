@@ -46,7 +46,7 @@
 - [x] Create `ArtifactsPanel` component (two-panel split layout).
 - [x] Create `FilterBar` component (op dropdown + kind + type + search).
 - [x] Create `ArtifactTable` component (full-width table replacing list layout).
-- [ ] Create `ArtifactPreviewPanel` component (right-half preview).
+- [x] Create `ArtifactPreviewPanel` component (right-half preview).
 - [x] Create `ActiveFilterChips` component (dismissible filter chips).
 - [ ] Create `BinaryFallbackView` component (icon + size + download for non-previewable).
 - [x] Wire filter bar → query params → `refetch()`.
