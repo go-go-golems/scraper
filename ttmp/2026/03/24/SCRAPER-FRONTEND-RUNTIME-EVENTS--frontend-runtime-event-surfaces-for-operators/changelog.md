@@ -54,6 +54,9 @@
   - kept raw JSON in `runtimeEventsApi` and moved protobuf decode back into `useRuntimeEventFeed`
   - fixed invalid nested MUI typography markup in `RuntimeEventList.tsx`
   - lowered scheduler idle logging from info to trace in `pkg/engine/scheduler/scheduler.go`
+- Refined runtime event publishing policy:
+  - stopped mapping scheduler `EventIdle` into published runtime events
+  - kept idle detection local to the worker via trace logs only so `/events` and workflow runtime feeds do not fill with empty-poll noise
 - Revalidated the app manually in the browser:
   - `/events` loads cleanly
   - `/workflows` loads cleanly

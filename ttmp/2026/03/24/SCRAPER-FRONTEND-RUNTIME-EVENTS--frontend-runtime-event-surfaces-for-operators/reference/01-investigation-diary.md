@@ -18,12 +18,78 @@ RelatedFiles:
       Note: Backend route and SSE bootstrap used to validate the frontend assumptions
 ExternalSources: []
 Summary: Chronological research log for the frontend runtime event follow-up ticket.
-LastUpdated: 2026-04-07T11:17:41-04:00
+LastUpdated: 2026-04-07T11:23:19-04:00
 WhatFor: Preserve the reasoning, commands, evidence, and writing decisions used to produce the frontend runtime event implementation guide.
 WhenToUse: Use when continuing this ticket or reviewing why the guide recommends its current phased frontend plan.
 ---
 
 # Investigation diary
+
+## Step 5: Drop idle poll events from the published runtime-event stream
+
+The user reviewed the new `/events` console and made a sensible product call: even if empty worker polls are useful for local debugging, they do not belong in the operator-facing runtime event stream. At the frontend level they are pure noise because a healthy but idle worker can generate them continuously.
+
+### Prompt Context
+
+**User prompt (verbatim):** "don't send a no leasable queues event to the rfontend either, that just pollutes the log. Or do you think we need that event?"
+
+**Assistant interpretation:** Remove scheduler idle events from the published runtime-event pipeline unless there is a strong operational reason to keep them.
+
+**Inferred user intent:** Keep the runtime-event UI focused on meaningful workflow and worker state changes instead of per-poll chatter.
+
+### What I changed
+
+- In `pkg/runtimeevents/scheduler.go`:
+  - changed `FromSchedulerEvent(...)` to return `nil, nil` for `scheduler.EventIdle`
+  - removed idle-specific kind and severity mapping because idle is no longer published
+- In `pkg/runtimeevents/scheduler_observer.go`:
+  - added a `nil` guard so dropped scheduler events are skipped cleanly before publish
+- In `pkg/runtimeevents/scheduler_test.go`:
+  - changed the idle test to assert that idle scheduler events are dropped rather than translated into `RuntimeEventV1`
+
+### Why
+
+- A worker idle poll is not a durable business event. It says only that one scheduler cycle found no leaseable work.
+- At frontend timescales this creates a misleading, high-volume stream that hides real state transitions such as submit, lease, retry, failure, and success.
+- If the product eventually needs liveness or heartbeat semantics, that should be implemented as an explicit low-frequency heartbeat signal, not as one event per empty poll cycle.
+
+### What worked
+
+- `go test ./pkg/runtimeevents ./pkg/engine/scheduler -count=1` passed after the change.
+- The publish policy is now aligned with the user-visible logging policy introduced earlier:
+  - idle remains available locally as trace logs
+  - idle no longer reaches Redis, SSE, or the frontend event list
+
+### What didn't work
+
+- There was no pre-existing observer-level test for dropped scheduler events, so this slice relies on the mapper test plus the observer `nil` guard.
+
+### What I learned
+
+- The right boundary for this decision is the runtime-event mapping layer, not the UI. Filtering it out earlier avoids needless transport, storage, replay, and browser work.
+
+### What warrants a second pair of eyes
+
+- Whether the proto enum should keep the `WORKER_IDLE` value for future compatibility even though the current system no longer emits it. I left the schema unchanged because removing enum values has broader contract implications than simply ceasing to publish them.
+
+### What should be done in the future
+
+- If worker liveness becomes an operator requirement, add a dedicated heartbeat or worker-status channel with coarse sampling and explicit retention rules.
+
+### Code review instructions
+
+- Start with:
+  - `pkg/runtimeevents/scheduler.go`
+  - `pkg/runtimeevents/scheduler_observer.go`
+  - `pkg/runtimeevents/scheduler_test.go`
+- Validate by:
+  - running `go test ./pkg/runtimeevents ./pkg/engine/scheduler -count=1`
+  - confirming the frontend no longer receives `no leaseable queues` runtime events
+
+### Technical details
+
+- Before this patch, `scheduler.EventIdle` mapped to `RUNTIME_EVENT_KIND_WORKER_IDLE` with debug severity and was published through the same Watermill pipeline as real workflow events.
+- After this patch, idle events terminate at `FromSchedulerEvent(...)` and are intentionally not represented as `RuntimeEventV1` messages.
 
 ## Step 1: Create the frontend follow-up ticket and map the current event surfaces
 
