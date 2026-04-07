@@ -32,7 +32,7 @@ export const workflowApi = createApi({
       },
       providesTags: (result) => [
         { type: 'WorkflowList', id: 'LIST' },
-        ...(result?.workflows.map(({ workflow }) => ({ type: 'Workflow' as const, id: workflow.ID })) ?? []),
+        ...(result?.workflows?.map(({ workflow }) => ({ type: 'Workflow' as const, id: workflow.ID })) ?? []),
       ],
     }),
     getWorkflow: builder.query<WorkflowSummary, string>({
