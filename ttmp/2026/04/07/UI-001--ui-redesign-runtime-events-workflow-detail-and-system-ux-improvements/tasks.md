@@ -18,7 +18,7 @@ _Infrastructure that all later phases depend on._
 
 ### 0.1 Error Boundary 🔴
 
-- [ ] ⬜ Create `web/src/components/common/AppErrorBoundary.tsx`
+- [x] ⬜ Create `web/src/components/common/AppErrorBoundary.tsx`
   - Use React class component with `componentDidCatch` / `getDerivedStateFromError`
   - Fallback UI: MUI Card with "Something went wrong" heading
   - Show error.message always; show error.stack only in `import.meta.env.DEV`
