@@ -42,7 +42,7 @@
 ## Phase 3: Frontend UI Design
 
 - [x] Write full frontend UI design doc with ASCII screenshots and YAML component DSL.
-- [ ] Add `getWorkflowArtifacts` RTK Query endpoint to `workflowApi.ts`.
+- [x] Add `getWorkflowArtifacts` RTK Query endpoint to `workflowApi.ts`.
 - [ ] Create `ArtifactsPanel` component (two-panel split layout).
 - [ ] Create `FilterBar` component (op dropdown + kind + type + search).
 - [ ] Create `ArtifactTable` component (full-width table replacing list layout).
