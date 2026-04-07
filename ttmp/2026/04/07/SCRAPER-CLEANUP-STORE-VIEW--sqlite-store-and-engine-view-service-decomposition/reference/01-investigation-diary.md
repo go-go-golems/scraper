@@ -220,3 +220,41 @@ go test ./pkg/engine/store/sqlite -count=1
 ```
 
 The package passed after the move, so the public `Store` surface remained intact while reducing `store.go` further.
+
+### Fifth cleanup slice: SQLite workflow methods
+
+After moving result/artifact logic out, the workflow-oriented methods were a clean, self-contained group.
+
+File added:
+
+- `pkg/engine/store/sqlite/workflow_store.go`
+
+What moved into `workflow_store.go`:
+
+- `CreateWorkflow(...)`
+- `GetWorkflow(...)`
+- `UpdateWorkflowStatus(...)`
+- `GetWorkflowStats(...)`
+
+Why this split works well:
+
+- these methods all center on `workflows` plus workflow-scoped status aggregation
+- they reuse existing shared helpers instead of adding new behavior
+- removing them cuts a large chunk of non-lease, non-op logic out of `store.go`
+
+What stayed in `store.go` after this slice:
+
+- `Open(...)`, `Close(...)`, and `CurrentVersion(...)`
+- op enqueue/read/runnable logic
+- queue candidate listing
+- lease acquisition and heartbeat
+- dependency loading wrapper
+
+Validation for this slice:
+
+```bash
+gofmt -w pkg/engine/store/sqlite/store.go pkg/engine/store/sqlite/workflow_store.go
+go test ./pkg/engine/store/sqlite -count=1
+```
+
+The package stayed green again, so the move remained strictly structural.
