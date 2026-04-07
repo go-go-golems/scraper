@@ -9,3 +9,4 @@
 - Added backend support for workflow-level artifact listing and real op-result retrieval.
 - Added service tests and server endpoint tests for the new artifact/result routes.
 - Updated the existing frontend op-result query to consume the new `{ result: ... }` response envelope.
+- Added browser-oriented artifact list enrichment with preview hints plus workflow artifact filtering and pagination parameters.

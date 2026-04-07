@@ -49,33 +49,51 @@ func TestListWorkflowArtifacts(t *testing.T) {
 	}))
 
 	completeLeasedOpWithArtifacts(t, ctx, store, "js-demo", "site:js-demo:http", now, map[string]string{
-		"name": "frontpage.html",
-		"kind": "http-response-body",
-		"body": "<html>frontpage</html>",
+		"name":        "frontpage.html",
+		"kind":        "http-response-body",
+		"body":        "<html>frontpage</html>",
+		"contentType": "text/html",
 	})
 	completeLeasedOpWithArtifacts(t, ctx, store, "js-demo", "site:js-demo:js", now.Add(time.Second), map[string]string{
-		"name": "summary.json",
-		"kind": "json-output",
-		"body": `{"stories":30}`,
+		"name":        "summary.json",
+		"kind":        "json-output",
+		"body":        `{"stories":30}`,
+		"contentType": "application/json",
 	})
 	completeLeasedOpWithArtifacts(t, ctx, store, "js-demo", "site:js-demo:http", now.Add(2*time.Second), map[string]string{
-		"name": "other.html",
-		"kind": "http-response-body",
-		"body": "<html>other</html>",
+		"name":        "other.html",
+		"kind":        "http-response-body",
+		"body":        "<html>other</html>",
+		"contentType": "text/html",
 	})
 
 	service := NewService(engineDB)
-	result, err := service.ListWorkflowArtifacts(ctx, "wf-artifacts")
+	result, err := service.ListWorkflowArtifacts(ctx, "wf-artifacts", ListWorkflowArtifactsOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, model.WorkflowID("wf-artifacts"), result.WorkflowID)
+	require.Equal(t, 2, result.Total)
 	require.Len(t, result.Artifacts, 2)
 	require.Equal(t, model.OpID("wf-artifacts:fetch"), result.Artifacts[0].OpID)
 	require.Equal(t, "frontpage.html", result.Artifacts[0].Name)
+	require.True(t, result.Artifacts[0].Previewable)
+	require.Equal(t, "html", result.Artifacts[0].PreviewKind)
 	require.Equal(t, model.OpID("wf-artifacts:extract"), result.Artifacts[1].OpID)
 	require.Equal(t, "summary.json", result.Artifacts[1].Name)
+	require.True(t, result.Artifacts[1].Previewable)
+	require.Equal(t, "json", result.Artifacts[1].PreviewKind)
 
-	missing, err := service.ListWorkflowArtifacts(ctx, "wf-missing")
+	filtered, err := service.ListWorkflowArtifacts(ctx, "wf-artifacts", ListWorkflowArtifactsOptions{
+		OpID:   "wf-artifacts:extract",
+		Search: "summary",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, filtered)
+	require.Equal(t, 1, filtered.Total)
+	require.Len(t, filtered.Artifacts, 1)
+	require.Equal(t, "summary.json", filtered.Artifacts[0].Name)
+
+	missing, err := service.ListWorkflowArtifacts(ctx, "wf-missing", ListWorkflowArtifactsOptions{})
 	require.NoError(t, err)
 	require.Nil(t, missing)
 }
@@ -170,7 +188,7 @@ func completeLeasedOpWithArtifacts(
 					ID:          model.ArtifactID(string(op.ID) + ":artifact"),
 					Name:        artifact["name"],
 					Kind:        artifact["kind"],
-					ContentType: "text/plain",
+					ContentType: artifact["contentType"],
 					Body:        []byte(artifact["body"]),
 					Metadata: map[string]string{
 						"source": "test",

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-go-golems/scraper/pkg/engine/model"
@@ -71,6 +72,8 @@ type ArtifactSummary struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 	Size        int               `json:"size"`
 	CreatedAt   time.Time         `json:"createdAt"`
+	Previewable bool              `json:"previewable"`
+	PreviewKind string            `json:"previewKind,omitempty"`
 }
 
 type ArtifactDetail struct {
@@ -81,6 +84,16 @@ type ArtifactDetail struct {
 type WorkflowArtifactsResult struct {
 	WorkflowID model.WorkflowID  `json:"workflowID"`
 	Artifacts  []ArtifactSummary `json:"artifacts"`
+	Total      int               `json:"total"`
+}
+
+type ListWorkflowArtifactsOptions struct {
+	OpID        model.OpID
+	Kind        string
+	ContentType string
+	Search      string
+	Limit       int
+	Offset      int
 }
 
 type Service struct {
@@ -403,12 +416,13 @@ func (s *Service) ListArtifacts(ctx context.Context, workflowID model.WorkflowID
 		}
 		_ = json.Unmarshal([]byte(metadataText), &a.Metadata)
 		a.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+		enrichArtifactSummary(&a)
 		ret = append(ret, a)
 	}
 	return ret, rows.Err()
 }
 
-func (s *Service) ListWorkflowArtifacts(ctx context.Context, workflowID model.WorkflowID) (*WorkflowArtifactsResult, error) {
+func (s *Service) ListWorkflowArtifacts(ctx context.Context, workflowID model.WorkflowID, opts ListWorkflowArtifactsOptions) (*WorkflowArtifactsResult, error) {
 	db, err := s.openReadDB()
 	if err != nil {
 		return nil, err
@@ -426,12 +440,52 @@ func (s *Service) ListWorkflowArtifacts(ctx context.Context, workflowID model.Wo
 		return nil, nil
 	}
 
+	where := []string{"workflow_id = ?"}
+	args := []any{workflowID}
+	if opts.OpID != "" {
+		where = append(where, "op_id = ?")
+		args = append(args, opts.OpID)
+	}
+	if opts.Kind != "" {
+		where = append(where, "kind = ?")
+		args = append(args, opts.Kind)
+	}
+	if opts.ContentType != "" {
+		where = append(where, "content_type = ?")
+		args = append(args, opts.ContentType)
+	}
+	if strings.TrimSpace(opts.Search) != "" {
+		where = append(where, "(id LIKE ? OR op_id LIKE ? OR name LIKE ? OR kind LIKE ? OR content_type LIKE ?)")
+		needle := "%" + strings.TrimSpace(opts.Search) + "%"
+		args = append(args, needle, needle, needle, needle, needle)
+	}
+	whereClause := strings.Join(where, " AND ")
+
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	offset := opts.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	var total int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(1) FROM artifacts WHERE `+whereClause, args...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("count workflow artifacts: %w", err)
+	}
+
+	queryArgs := append(append([]any{}, args...), limit, offset)
 	rows, err := db.QueryContext(ctx,
 		`SELECT id, workflow_id, op_id, name, kind, content_type, metadata_json, length(body), created_at
 		 FROM artifacts
-		 WHERE workflow_id = ?
-		 ORDER BY created_at, op_id, id`,
-		workflowID,
+		 WHERE `+whereClause+`
+		 ORDER BY created_at, op_id, id
+		 LIMIT ? OFFSET ?`,
+		queryArgs...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list workflow artifacts: %w", err)
@@ -441,6 +495,7 @@ func (s *Service) ListWorkflowArtifacts(ctx context.Context, workflowID model.Wo
 	ret := &WorkflowArtifactsResult{
 		WorkflowID: workflowID,
 		Artifacts:  []ArtifactSummary{},
+		Total:      total,
 	}
 	for rows.Next() {
 		var a ArtifactSummary
@@ -451,6 +506,7 @@ func (s *Service) ListWorkflowArtifacts(ctx context.Context, workflowID model.Wo
 		}
 		_ = json.Unmarshal([]byte(metadataText), &a.Metadata)
 		a.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+		enrichArtifactSummary(&a)
 		ret.Artifacts = append(ret.Artifacts, a)
 	}
 	if err := rows.Err(); err != nil {
@@ -520,6 +576,7 @@ func (s *Service) GetArtifact(ctx context.Context, artifactID model.ArtifactID) 
 	}
 	_ = json.Unmarshal([]byte(metadataText), &a.Metadata)
 	a.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+	enrichArtifactSummary(&a.ArtifactSummary)
 	return &a, nil
 }
 
@@ -642,6 +699,28 @@ func workflowOpExists(ctx context.Context, db *sql.DB, workflowID model.Workflow
 		return false, fmt.Errorf("query op existence: %w", err)
 	}
 	return true, nil
+}
+
+func enrichArtifactSummary(a *ArtifactSummary) {
+	a.Previewable, a.PreviewKind = classifyArtifactPreview(a.ContentType)
+}
+
+func classifyArtifactPreview(contentType string) (bool, string) {
+	ct := strings.ToLower(strings.TrimSpace(contentType))
+	switch {
+	case strings.Contains(ct, "application/json"):
+		return true, "json"
+	case strings.Contains(ct, "text/html"):
+		return true, "html"
+	case strings.HasPrefix(ct, "text/"):
+		return true, "text"
+	case strings.Contains(ct, "javascript"):
+		return true, "text"
+	case strings.Contains(ct, "xml"):
+		return true, "text"
+	default:
+		return false, "binary"
+	}
 }
 
 func loadDependencies(ctx context.Context, db *sql.DB, opID model.OpID) ([]model.Dependency, error) {

@@ -156,11 +156,21 @@ Purpose:
 - allow grouping by op
 - support future filtering by kind/content type/name
 
+Suggested v1 query parameters:
+
+- `opId`
+- `kind`
+- `contentType`
+- `search`
+- `limit`
+- `offset`
+
 Recommended v1 response:
 
 ```json
 {
   "workflowID": "wf-123",
+  "total": 1,
   "artifacts": [
     {
       "id": "wf-123:frontpage-fetch:response-body",
@@ -173,7 +183,9 @@ Recommended v1 response:
         "source": "fetch"
       },
       "size": 48123,
-      "createdAt": "2026-04-07T14:20:01Z"
+      "createdAt": "2026-04-07T14:20:01Z",
+      "previewable": true,
+      "previewKind": "html"
     }
   ]
 }
@@ -229,6 +241,7 @@ Suggested Go DTO:
 ```go
 type WorkflowArtifactListResponse struct {
     WorkflowID model.WorkflowID              `json:"workflowID"`
+    Total      int                           `json:"total"`
     Artifacts  []engineview.ArtifactSummary  `json:"artifacts"`
 }
 ```

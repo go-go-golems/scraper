@@ -27,17 +27,17 @@
 
 ## Phase 2: Artifact Browser Data Shape
 
-- [ ] Enrich artifact summaries for browser use:
-  - [ ] owning op id
-  - [ ] workflow id
-  - [ ] name
-  - [ ] kind
-  - [ ] content type
-  - [ ] size
-  - [ ] created at
-  - [ ] previewability hints
-- [ ] Decide whether filtering is server-side, client-side, or hybrid for v1.
-- [ ] Add pagination and filtering support if the browser needs it immediately.
+- [x] Enrich artifact summaries for browser use:
+  - [x] owning op id
+  - [x] workflow id
+  - [x] name
+  - [x] kind
+  - [x] content type
+  - [x] size
+  - [x] created at
+  - [x] previewability hints
+- [x] Decide whether filtering is server-side, client-side, or hybrid for v1.
+- [x] Add pagination and filtering support if the browser needs it immediately.
 
 ## Phase 3: UI Integration Preparation
 

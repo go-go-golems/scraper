@@ -135,7 +135,17 @@ func (h *EngineHandler) OpArtifacts(w http.ResponseWriter, r *http.Request) {
 
 func (h *EngineHandler) WorkflowArtifacts(w http.ResponseWriter, r *http.Request) {
 	workflowID := model.WorkflowID(r.PathValue("workflowID"))
-	result, err := h.service.ListWorkflowArtifacts(r.Context(), workflowID)
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	result, err := h.service.ListWorkflowArtifacts(r.Context(), workflowID, engineview.ListWorkflowArtifactsOptions{
+		OpID:        model.OpID(q.Get("opId")),
+		Kind:        q.Get("kind"),
+		ContentType: q.Get("contentType"),
+		Search:      q.Get("search"),
+		Limit:       limit,
+		Offset:      offset,
+	})
 	if err != nil {
 		writeServiceError(w, err)
 		return
@@ -147,6 +157,7 @@ func (h *EngineHandler) WorkflowArtifacts(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, apitypes.WorkflowArtifactListResponse{
 		WorkflowID: result.WorkflowID,
 		Artifacts:  result.Artifacts,
+		Total:      result.Total,
 	})
 }
 

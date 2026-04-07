@@ -16,7 +16,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: "Records the evidence and implementation progress for workflow artifact browsing and op-result APIs."
-LastUpdated: 2026-04-07T15:36:00-04:00
+LastUpdated: 2026-04-07T15:47:00-04:00
 WhatFor: "Resume backend implementation without re-discovering the current artifact/result seams."
 WhenToUse: "Use when continuing the ticket or reviewing why the ticket is scoped to artifacts/results but not JS replay."
 ---
@@ -172,3 +172,44 @@ docmgr doctor --ticket SCRAPER-ARTIFACT-BROWSER --stale-after 30
 - Full Go test suite passed.
 - The ticket validates after adding the new `artifacts` and `workflows` vocabulary slugs.
 - `npm run build` still fails for pre-existing Storybook/type issues elsewhere in `web/`. The errors are not caused by this backend slice.
+
+## Second backend slice
+
+After the foundation endpoints were in place, I expanded the workflow artifact endpoint so it is actually suitable for a browser view instead of being a raw dump.
+
+### Added contract improvements
+
+- `total` count in the workflow artifact list response
+- server-side filtering by:
+  - `opId`
+  - `kind`
+  - `contentType`
+  - `search`
+- pagination via:
+  - `limit`
+  - `offset`
+- preview hints on each artifact summary:
+  - `previewable`
+  - `previewKind`
+
+### Why this matters
+
+Without those fields, the future browser UI would need to:
+
+- fetch everything up front,
+- re-derive preview behavior client-side,
+- and handle large workflows awkwardly.
+
+With the current contract, the browser can render:
+
+- filtered workflow-local artifact tables,
+- smarter previews for JSON, HTML, and text,
+- and cheap server-side paging for larger workflows.
+
+### Additional validation
+
+I extended both service and server tests to verify:
+
+- `total` reflects filtered and unfiltered result sets
+- preview hints are populated for HTML and JSON artifacts
+- query filtering by `opId` and `search` works as expected

@@ -200,4 +200,6 @@ export interface ArtifactSummary {
   metadata?: Record<string, string>;
   size: number;
   createdAt: string;
+  previewable: boolean;
+  previewKind?: string;
 }

@@ -253,8 +253,8 @@ func TestServerArtifactAndOpResultEndpoints(t *testing.T) {
 			{ID: "api-artifacts:extract", WorkflowID: "api-artifacts", Site: "js-demo", Kind: "js", Queue: "site:js-demo:js", DedupKey: "extract"},
 		},
 	}))
-	require.NoError(t, completeServerTestOp(ctx, store, "js-demo", "site:js-demo:http", now, "frontpage.html", "http-response-body", "<html>frontpage</html>", []byte(`{"url":"https://example.com"}`)))
-	require.NoError(t, completeServerTestOp(ctx, store, "js-demo", "site:js-demo:js", now.Add(time.Second), "summary.json", "json-output", `{"stories":30}`, []byte(`{"stories":30}`)))
+	require.NoError(t, completeServerTestOp(ctx, store, "js-demo", "site:js-demo:http", now, "frontpage.html", "http-response-body", "text/html", "<html>frontpage</html>", []byte(`{"url":"https://example.com"}`)))
+	require.NoError(t, completeServerTestOp(ctx, store, "js-demo", "site:js-demo:js", now.Add(time.Second), "summary.json", "json-output", "application/json", `{"stories":30}`, []byte(`{"stories":30}`)))
 	require.NoError(t, store.Close())
 
 	server, err := apiserver.New(apiserver.Config{
@@ -277,17 +277,39 @@ func TestServerArtifactAndOpResultEndpoints(t *testing.T) {
 
 	artifactPayload := struct {
 		WorkflowID string `json:"workflowID"`
+		Total      int    `json:"total"`
 		Artifacts  []struct {
-			ID   string `json:"id"`
-			OpID string `json:"opID"`
-			Name string `json:"name"`
+			ID          string `json:"id"`
+			OpID        string `json:"opID"`
+			Name        string `json:"name"`
+			Previewable bool   `json:"previewable"`
+			PreviewKind string `json:"previewKind"`
 		} `json:"artifacts"`
 	}{}
 	require.NoError(t, json.NewDecoder(artifactsResp.Body).Decode(&artifactPayload))
 	require.Equal(t, "api-artifacts", artifactPayload.WorkflowID)
+	require.Equal(t, 2, artifactPayload.Total)
 	require.Len(t, artifactPayload.Artifacts, 2)
 	require.Equal(t, "api-artifacts:fetch", artifactPayload.Artifacts[0].OpID)
 	require.Equal(t, "frontpage.html", artifactPayload.Artifacts[0].Name)
+	require.True(t, artifactPayload.Artifacts[0].Previewable)
+	require.Equal(t, "html", artifactPayload.Artifacts[0].PreviewKind)
+
+	filteredResp, err := http.Get(ts.URL + "/api/v1/workflows/api-artifacts/artifacts?opId=api-artifacts:extract&search=summary")
+	require.NoError(t, err)
+	defer filteredResp.Body.Close()
+	require.Equal(t, http.StatusOK, filteredResp.StatusCode)
+
+	filteredPayload := struct {
+		Total     int `json:"total"`
+		Artifacts []struct {
+			Name string `json:"name"`
+		} `json:"artifacts"`
+	}{}
+	require.NoError(t, json.NewDecoder(filteredResp.Body).Decode(&filteredPayload))
+	require.Equal(t, 1, filteredPayload.Total)
+	require.Len(t, filteredPayload.Artifacts, 1)
+	require.Equal(t, "summary.json", filteredPayload.Artifacts[0].Name)
 
 	resultResp, err := http.Get(ts.URL + "/api/v1/workflows/api-artifacts/ops/api-artifacts:extract/result")
 	require.NoError(t, err)
@@ -424,6 +446,7 @@ func completeServerTestOp(
 	now time.Time,
 	artifactName string,
 	artifactKind string,
+	artifactContentType string,
 	artifactBody string,
 	resultData []byte,
 ) error {
@@ -447,7 +470,7 @@ func completeServerTestOp(
 					ID:          model.ArtifactID(string(op.ID) + ":artifact"),
 					Name:        artifactName,
 					Kind:        artifactKind,
-					ContentType: "text/plain",
+					ContentType: artifactContentType,
 					Metadata:    map[string]string{"source": "test"},
 					Body:        []byte(artifactBody),
 				},
