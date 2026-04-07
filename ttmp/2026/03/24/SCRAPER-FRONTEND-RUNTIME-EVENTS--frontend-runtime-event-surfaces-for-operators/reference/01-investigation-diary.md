@@ -18,12 +18,187 @@ RelatedFiles:
       Note: Backend route and SSE bootstrap used to validate the frontend assumptions
 ExternalSources: []
 Summary: Chronological research log for the frontend runtime event follow-up ticket.
-LastUpdated: 2026-04-07T11:23:19-04:00
+LastUpdated: 2026-04-07T11:35:50-04:00
 WhatFor: Preserve the reasoning, commands, evidence, and writing decisions used to produce the frontend runtime event implementation guide.
 WhenToUse: Use when continuing this ticket or reviewing why the guide recommends its current phased frontend plan.
 ---
 
 # Investigation diary
+
+## Step 7: Audit RTK Query invalidation and fix cross-slice cache staleness
+
+The next user report was broader than runtime events. After submission, the queue widget did not update immediately. That pointed to a cache-consistency problem rather than a runtime-event problem, so I paused feature work and made a dedicated pass over every RTK Query slice in `web/src/api/`.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Then, make a big pass on all the rtk-query stuff and make a full matrix in the ticket that examines which queries get invalidated by which other queries: when i submit a  new op, the queue widget for example desnt update."
+
+**Assistant interpretation:** Audit all RTK Query query and mutation endpoints, identify stale-cache paths such as submit not refreshing queue state, fix the code, and document the entire invalidation matrix in the ticket.
+
+**Inferred user intent:** Turn cache invalidation from an ad hoc accident into an explicit frontend design rule so operator pages update immediately and predictably after workflow mutations.
+
+### What I changed
+
+- In `web/src/api/submissionApi.ts`:
+  - added `onQueryStarted(...)` for `submitWorkflow`
+  - after a successful submit, invalidated:
+    - `engineApi` `EngineStatus`
+    - `queueApi` `QueueStatus`
+    - `runtimeEventsApi` `RuntimeEvents`
+    - `workflowApi` `WorkflowList:LIST`, `Workflow:{workflowId}`, and `WorkflowOps:{workflowId}`
+- In `web/src/api/workflowApi.ts`:
+  - expanded `tagTypes` to include `OpResult` and `OpArtifacts`
+  - made `listWorkflows(...)` provide both `WorkflowList:LIST` and per-row `Workflow:{workflowId}` tags
+  - made `getOpResult(...)` provide `OpResult:{workflowId}:{opId}`
+  - made `getOpArtifacts(...)` provide `OpArtifacts:{workflowId}:{opId}`
+  - updated `retryOp(...)` to invalidate:
+    - workflow list
+    - workflow summary
+    - workflow ops
+    - op result
+    - op artifacts
+  - added cross-slice invalidation after retry into engine, queue, and runtime-event queries
+  - updated `cancelWorkflow(...)` to invalidate workflow summary and workflow ops more precisely
+  - added cross-slice invalidation after cancel into engine, queue, and runtime-event queries
+- In the ticket docs:
+  - added `design-doc/02-rtk-query-invalidation-matrix-and-cache-consistency-guide.md`
+  - updated `index.md` and `tasks.md` so the RTK Query pass is tracked explicitly
+
+### Why
+
+- Scraper uses multiple RTK Query `createApi(...)` slices. Tags are slice-local.
+- That means invalidating a `Workflow` tag inside `workflowApi` has no effect on `queueApi` or `engineApi`.
+- Before this patch, submit/retry/cancel mutated backend state that affected:
+  - workflows,
+  - queue readiness,
+  - engine aggregate counters,
+  - recent runtime event history,
+  but only some same-slice queries were being invalidated.
+- Polling masked the issue eventually, but it did not provide immediate UI coherence.
+
+### What worked
+
+- `npm run test:unit` passed after the API-slice changes.
+- `npm run build` passed after the API-slice changes.
+- The resulting invalidation rules are now simple to explain:
+  - same-slice refresh uses `invalidatesTags`
+  - cross-slice refresh uses `otherApi.util.invalidateTags(...)` inside `onQueryStarted(...)` after `queryFulfilled`
+
+### What didn't work
+
+- There were no pre-existing RTK Query behavior tests around invalidation, so this pass still relies on static reasoning plus build/test validation rather than dedicated store-level integration tests.
+
+### What I learned
+
+- The most important frontend cache rule in this repo is not “remember to add tags.” It is “remember that tags stop at the API-slice boundary.”
+- Once the slice boundary is made explicit, the stale queue widget is easy to explain and easy to fix.
+
+### What was tricky to build
+
+- The subtle part was separating same-slice invalidation from cross-slice invalidation.
+- It would be easy to overfit on workflow pages and forget that:
+  - queue pages,
+  - overview widgets,
+  - runtime-event history queries,
+  all depend on the same backend mutation even though they live in different API slices.
+- Another subtle point was detail-level drawer data. Retrying an op can make old result and artifact queries stale unless those endpoints provide their own tags.
+
+### What warrants a second pair of eyes
+
+- Whether scraper should eventually consolidate more of these slices, or keep the current multi-slice structure and just treat cross-slice invalidation as normal practice.
+- Whether we should add dedicated RTK Query integration tests with a test store and mocked base queries now that the invalidation graph has become more important.
+
+### What should be done in the future
+
+- Add integration tests for submit/retry/cancel invalidation behavior.
+- Decide whether runtime-event history should stay purely invalidation-driven plus SSE, or whether some pages should prefetch on navigation as well.
+- Revisit polling intervals once immediate invalidation is reliable, especially on overview and queue pages.
+
+### Code review instructions
+
+- Start with:
+  - `web/src/api/submissionApi.ts`
+  - `web/src/api/workflowApi.ts`
+  - `ttmp/.../design-doc/02-rtk-query-invalidation-matrix-and-cache-consistency-guide.md`
+- Validate by:
+  - running `npm run test:unit`
+  - running `npm run build`
+  - submitting a workflow and confirming the queue and overview widgets refresh without waiting for the next polling tick
+
+### Technical details
+
+- The root bug was that `submissionApi` had no invalidation behavior at all even though submission mutates data consumed by `workflowApi`, `queueApi`, `engineApi`, and `runtimeEventsApi`.
+- `listWorkflows(...)` now provides both a list sentinel and per-workflow tags so row-level workflow invalidation can reach list consumers.
+- `getOpResult(...)` and `getOpArtifacts(...)` now provide tags so retry can invalidate drawer-local detail queries cleanly.
+
+## Step 6: Add a clear button to the global runtime-event console
+
+After the idle event filtering change, the user wanted one more operator affordance on `/events`: a way to clear the current browser-side event buffer without reloading the whole page. That is a UI behavior, not a backend data mutation, so the right implementation point is the shared frontend feed hook.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Add a clear button to the events view."
+
+**Assistant interpretation:** Add a clear action to the global `/events` page that wipes the current displayed event list while preserving the ability to receive new live events.
+
+**Inferred user intent:** Make the operator console usable as a live scratchpad during manual testing instead of forcing a full page refresh to visually reset the stream.
+
+### What I changed
+
+- In `web/src/features/runtime-events/runtimeEventFeed.ts`:
+  - added a `clearEvents()` callback that empties the local merged event buffer and resets `lastEventAt`
+  - exposed that callback from `useRuntimeEventFeed(...)`
+- In `web/src/pages/RuntimeEventsPage.tsx`:
+  - added an outlined `Clear` button beside the stream and event-count chips
+  - wired the button to `clearEvents()`
+  - disabled the button when there are no currently displayed events
+
+### Why
+
+- The runtime-event console is acting partly as an operator dashboard and partly as a debugging tail view.
+- In that kind of screen, “clear current view and keep listening” is materially more useful than “reload the entire page and rebuild all state.”
+- Keeping the behavior local to the hook avoids inventing any server-side “clear history” semantics, which would have been the wrong abstraction for this request.
+
+### What worked
+
+- `npm run test:unit` passed.
+- `npm run build` passed.
+- The implementation is small and localized because the shared feed hook already owns the merged in-browser event state.
+
+### What didn't work
+
+- Nothing notable in this slice; the existing helper tests were sufficient for quick regression coverage, and the production build remained green.
+
+### What I learned
+
+- The shared feed abstraction continues to pay off. Small runtime-event UX behaviors like “clear current buffer” can be added once in the hook and reused by additional runtime-event surfaces later if needed.
+
+### What warrants a second pair of eyes
+
+- Whether future pages should share this same clear behavior or whether some surfaces, such as workflow detail pages, should remain history-oriented and omit it.
+
+### What should be done in the future
+
+- If we add submit-page live progress or queue/overview runtime widgets, consider whether each surface should expose:
+  - no clear action,
+  - a local clear action,
+  - or a “pause / resume stream” control alongside clear.
+
+### Code review instructions
+
+- Start with:
+  - `web/src/features/runtime-events/runtimeEventFeed.ts`
+  - `web/src/pages/RuntimeEventsPage.tsx`
+- Validate by:
+  - running `npm run test:unit`
+  - running `npm run build`
+  - opening `/events`
+  - confirming `Clear` empties the visible list and that newly arriving SSE events repopulate it
+
+### Technical details
+
+- `clearEvents()` mutates only local React state inside the hook. It does not touch RTK Query cache, backend history, Redis, or SSE subscriptions.
+- Because the history merge effect only runs when the query result changes, clearing the local list does not immediately repopulate old history from the current cached query value. New stream events still append normally after the clear.
 
 ## Step 5: Drop idle poll events from the published runtime-event stream
 

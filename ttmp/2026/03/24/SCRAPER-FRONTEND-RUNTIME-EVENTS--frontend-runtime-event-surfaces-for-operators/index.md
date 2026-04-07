@@ -25,8 +25,8 @@ RelatedFiles:
         Existing workflow-local runtime event UI that motivates the follow-up work
         existing runtime event timeline motivating this follow-up ticket
 ExternalSources: []
-Summary: Follow-up ticket that plans the next wave of frontend runtime event UX on top of the newly landed backend event pipeline.
-LastUpdated: 2026-03-24T21:20:07-04:00
+Summary: Follow-up ticket that plans and now partially implements the next wave of frontend runtime event UX on top of the backend event pipeline, including cache-consistency work across RTK Query slices.
+LastUpdated: 2026-04-07T11:28:44-04:00
 WhatFor: Track and document the next phase of frontend work that turns runtime events into operator-facing pages, panels, and widgets.
 WhenToUse: Use when planning or implementing new runtime event pages, hooks, filters, panels, or dashboard widgets in the web app.
 ---
@@ -41,6 +41,7 @@ This ticket is the frontend follow-up to the runtime event backend work. The bac
 The primary document is the intern-facing design and implementation guide in:
 
 - `design-doc/01-frontend-runtime-event-surfaces-architecture-and-intern-implementation-guide.md`
+- `design-doc/02-rtk-query-invalidation-matrix-and-cache-consistency-guide.md`
 
 The ticket is intentionally documentation-first. It exists to give a new engineer a safe map of the system before more UI code is written.
 
@@ -48,6 +49,8 @@ The ticket is intentionally documentation-first. It exists to give a new enginee
 
 - Design doc:
   `design-doc/01-frontend-runtime-event-surfaces-architecture-and-intern-implementation-guide.md`
+- RTK Query matrix:
+  `design-doc/02-rtk-query-invalidation-matrix-and-cache-consistency-guide.md`
 - Diary:
   `reference/01-investigation-diary.md`
 - Tasks:
@@ -63,6 +66,7 @@ This ticket currently contains:
 
 - architecture analysis,
 - an intern-oriented implementation guide,
+- an RTK Query invalidation matrix and cache-consistency guide,
 - a phased task breakdown,
 - a research diary.
 

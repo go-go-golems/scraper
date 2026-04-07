@@ -57,6 +57,15 @@
 - Refined runtime event publishing policy:
   - stopped mapping scheduler `EventIdle` into published runtime events
   - kept idle detection local to the worker via trace logs only so `/events` and workflow runtime feeds do not fill with empty-poll noise
+- Added operator-console buffer control:
+  - exposed `clearEvents()` from the shared `useRuntimeEventFeed` hook
+  - added a `Clear` button on `web/src/pages/RuntimeEventsPage.tsx` to wipe the current in-browser event list without reloading the page
+- Completed an RTK Query cache-consistency pass across the frontend:
+  - audited all query and mutation slices under `web/src/api/`
+  - added cross-slice invalidation from workflow submission into workflow, queue, engine, and runtime-event queries
+  - added cross-slice invalidation from retry and cancel mutations into queue, engine, and runtime-event queries
+  - added missing `OpResult` and `OpArtifacts` tags so workflow drawer detail queries refresh after retry
+  - documented the full invalidation matrix in `design-doc/02-rtk-query-invalidation-matrix-and-cache-consistency-guide.md`
 - Revalidated the app manually in the browser:
   - `/events` loads cleanly
   - `/workflows` loads cleanly

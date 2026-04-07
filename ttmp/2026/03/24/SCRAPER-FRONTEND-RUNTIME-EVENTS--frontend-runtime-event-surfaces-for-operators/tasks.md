@@ -51,3 +51,11 @@
 - [ ] Add stream-hook tests with mocked `EventSource`
 - [ ] Add page-level tests for history-plus-stream merge behavior
 - [ ] Review reconnect behavior and stale-connection UX
+
+## Phase 7: RTK Query Cache Consistency
+
+- [x] Audit all RTK Query API slices, queries, mutations, and tag usage
+- [x] Document a full query-to-mutation invalidation matrix in the ticket
+- [x] Add cross-slice invalidation for workflow submission
+- [x] Add cross-slice invalidation for retry and cancel mutations
+- [x] Add missing workflow detail tags for op result and artifact queries
