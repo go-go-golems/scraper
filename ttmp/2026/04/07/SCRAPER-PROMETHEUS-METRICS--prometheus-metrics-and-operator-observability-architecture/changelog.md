@@ -35,3 +35,10 @@
   - added scrape-time snapshot collector coverage with a real SQLite-backed engine fixture,
   - added direct submission metrics tests for accepted, not-found, and validation-error paths.
 - Ran `go test ./... -count=1` successfully after the snapshot and submission test additions.
+- Implemented the next backend metrics slice:
+  - added durable queue-wait measurement based on the actual leaseable timestamp for each op,
+  - exported `scraper_queue_wait_seconds{site,queue,runner}`,
+  - added queue-wait tests at the model and scheduler-metrics layers,
+  - added Prometheus recording rules and alerts for queue-wait p95 and retry spikes,
+  - documented operator response guidance for the full alert set in the local monitoring playbook.
+- Re-verified the Prometheus rule bundle by starting Prometheus locally after the queue-wait and retry alert additions.

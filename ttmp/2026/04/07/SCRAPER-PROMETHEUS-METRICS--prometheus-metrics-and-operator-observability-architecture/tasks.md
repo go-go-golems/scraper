@@ -21,7 +21,7 @@
 - [x] Add Prometheus client dependencies to the top-level Go module.
 - [x] Create `pkg/metrics/` with a central registry/bootstrap API.
 - [x] Define shared metric names, label names, and helper functions for status-class mapping.
-- [ ] Split metrics into logical groups:
+- [x] Split metrics into logical groups:
   - [x] API server metrics
   - [x] submission metrics
   - [x] scheduler metrics
@@ -37,7 +37,7 @@
 - [x] Add HTTP request duration histograms in the existing request wrapper.
 - [x] Use route-pattern labels rather than raw URL paths.
 - [x] Confirm `/healthz` and `/metrics` are both accessible without interfering with current API routes.
-- [ ] Add server tests covering:
+- [x] Add server tests covering:
   - [x] `/metrics` returns `200`
   - [x] scraper metric families are present
   - [x] request metrics increment after serving API requests
@@ -46,7 +46,7 @@
 
 - [x] Implement a collector that exports engine snapshot gauges from `engineview.Service` and/or SQLite inspection helpers.
 - [x] Export workflow counts by status.
-- [ ] Export queue gauges:
+- [x] Export queue gauges:
   - [x] pending
   - [x] ready
   - [x] running
@@ -81,7 +81,7 @@
 - [x] Instrument retry counters.
 - [x] Instrument failure counters by stable error code/category.
 - [x] Instrument queue-rate-limited counters.
-- [ ] Decide how queue wait time should be measured, then add a queue-wait histogram.
+- [x] Decide how queue wait time should be measured, then add a queue-wait histogram.
 - [x] Keep idle/no-work polling out of high-volume metrics noise.
 - [x] Add tests or focused package-level assertions for scheduler metric updates.
 
@@ -92,7 +92,7 @@
 - [x] Instrument HTTP runner duration histograms in `pkg/engine/runner/http.go`.
 - [x] Classify HTTP statuses by stable status classes rather than raw URLs or messages.
 - [x] Classify transport errors separately from HTTP response errors.
-- [ ] Add tests for HTTP runner metric emission on:
+- [x] Add tests for HTTP runner metric emission on:
   - [x] success
   - [x] transport error
   - [x] retryable HTTP failure
@@ -124,14 +124,14 @@
 ### Phase 10: Alerting And Recording Rules
 
 - [x] Add recording rules for common operator aggregations.
-- [ ] Add alerts for:
+- [x] Add alerts for:
   - [x] worker down
   - [x] API target down
   - [x] sustained queue throttling
   - [x] high failure rate by site/queue
-  - [ ] excessive queue wait time
-  - [ ] retry spikes
-- [ ] Document the expected operator response for each alert.
+  - [x] excessive queue wait time
+  - [x] retry spikes
+- [x] Document the expected operator response for each alert.
 
 ## Cross-Cutting Review Checks
 

@@ -10,6 +10,12 @@ groups:
       - record: scraper:http_requests_rate5m
         expr: sum by (route, method, status_class) (rate(scraper_http_requests_total[5m]))
 
+      - record: scraper:op_retries_rate5m
+        expr: sum by (site, queue, runner) (rate(scraper_op_retries_total[5m]))
+
+      - record: scraper:queue_wait_p95_15m
+        expr: histogram_quantile(0.95, sum by (le, site, queue, runner) (rate(scraper_queue_wait_seconds_bucket[15m])))
+
   - name: scraper-alerts
     rules:
       - alert: ScraperWorkerDown
@@ -47,3 +53,21 @@ groups:
         annotations:
           summary: Scraper op failure rate is elevated
           description: Site {{ $labels.site }}, queue {{ $labels.queue }}, runner {{ $labels.runner }} has sustained op failures over the last 10 minutes.
+
+      - alert: ScraperQueueWaitHigh
+        expr: scraper:queue_wait_p95_15m > 300
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Scraper queue wait time is elevated
+          description: Queue {{ $labels.site }}/{{ $labels.queue }} has a p95 queue wait above 5 minutes over the last 15 minutes.
+
+      - alert: ScraperRetrySpike
+        expr: scraper:op_retries_rate5m > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Scraper retries are spiking
+          description: Site {{ $labels.site }}, queue {{ $labels.queue }}, runner {{ $labels.runner }} is retrying ops at an elevated rate.

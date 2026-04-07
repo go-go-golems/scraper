@@ -47,17 +47,18 @@ const (
 )
 
 type Event struct {
-	Kind       EventKind
-	OccurredAt time.Time
-	WorkflowID model.WorkflowID
-	OpID       model.OpID
-	Site       model.SiteName
-	Queue      model.QueueKey
-	RunnerKind string
-	Status     model.WorkflowStatus
-	Attempt    int
-	Message    string
-	Error      *model.OpError
+	Kind              EventKind
+	OccurredAt        time.Time
+	WorkflowID        model.WorkflowID
+	OpID              model.OpID
+	Site              model.SiteName
+	Queue             model.QueueKey
+	RunnerKind        string
+	QueueWaitDuration time.Duration
+	Status            model.WorkflowStatus
+	Attempt           int
+	Message           string
+	Error             *model.OpError
 }
 
 type Observer interface {
@@ -264,15 +265,16 @@ func (s *Scheduler) RunOnce(ctx context.Context) (*CycleResult, error) {
 			result.Processed++
 			processedWorkflows[op.WorkflowID] = struct{}{}
 			s.emit(ctx, Event{
-				Kind:       EventOpLeased,
-				OccurredAt: now,
-				WorkflowID: op.WorkflowID,
-				OpID:       op.ID,
-				Site:       op.Site,
-				Queue:      op.Queue,
-				RunnerKind: op.Kind,
-				Attempt:    op.RetryState.Attempt + 1,
-				Message:    "leased op",
+				Kind:              EventOpLeased,
+				OccurredAt:        now,
+				WorkflowID:        op.WorkflowID,
+				OpID:              op.ID,
+				Site:              op.Site,
+				Queue:             op.Queue,
+				RunnerKind:        op.Kind,
+				QueueWaitDuration: op.QueueWaitDuration(now),
+				Attempt:           op.RetryState.Attempt + 1,
+				Message:           "leased op",
 			})
 
 			if err := s.executeLeasedOp(ctx, *op, *lease, now); err != nil {

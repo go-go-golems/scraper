@@ -15,6 +15,7 @@ func NewSchedulerObserver(registry *Registry) scheduler.Observer {
 		switch event.Kind {
 		case scheduler.EventOpLeased:
 			registry.ObserveOpLeased(event.Site, event.Queue, event.RunnerKind)
+			registry.ObserveQueueWait(event.Site, event.Queue, event.RunnerKind, event.QueueWaitDuration)
 		case scheduler.EventOpFailed:
 			errorCode := ""
 			if event.Error != nil {

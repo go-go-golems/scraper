@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: Repeatable local procedure for running scraper API and worker with Prometheus metrics enabled and verifying Prometheus and Grafana scrape them correctly.
-LastUpdated: 2026-04-07T13:18:00-04:00
+LastUpdated: 2026-04-07T13:26:00-04:00
 WhatFor: Give developers a concrete local workflow for validating the Prometheus integration without guessing ports, flags, or Grafana setup.
 WhenToUse: Use after backend Prometheus instrumentation lands or when debugging local scrape failures in the development stack.
 ---
@@ -89,8 +89,8 @@ tmux capture-pane -pt scraper-worker
 Verify the raw metrics endpoints:
 
 ```bash
-curl -s http://127.0.0.1:8080/metrics | rg 'scraper_http_requests_total|scraper_engine_workflows_total'
-curl -s http://127.0.0.1:9091/metrics | rg 'scraper_scheduler_cycles_total|scraper_workers_up'
+curl -s http://127.0.0.1:8080/metrics | rg 'scraper_http_requests_total|scraper_engine_workflows_total|scraper_engine_workflow_status_total'
+curl -s http://127.0.0.1:9091/metrics | rg 'scraper_scheduler_cycles_total|scraper_workers_up|scraper_queue_wait_seconds'
 ```
 
 Submit a demo workflow:
@@ -141,6 +141,32 @@ rm -rf "$SCRAPER_TMPDIR"
 - Prometheus target API shows both `scraper-api` and `scraper-worker` as `up`
 - Grafana loads with a provisioned Prometheus datasource
 - The starter dashboard `Scraper Overview` appears under the `Scraper` folder
+
+## Alert Response Guidance
+
+- `ScraperWorkerDown`
+  - Check `tmux capture-pane -pt scraper-worker`
+  - Verify the worker process is running and `--metrics-address` is set
+  - Restart the worker if the process is gone or the listener failed to bind
+- `ScraperAPIUnavailable`
+  - Check `tmux capture-pane -pt scraper-api`
+  - Verify the API is bound to `0.0.0.0:8080`
+  - Confirm `curl http://127.0.0.1:8080/metrics` works on the host
+- `ScraperQueueRateLimitedHot`
+  - Inspect queue policy and token bucket configuration for the affected `site/queue`
+  - Check whether throughput is intentionally capped or whether the queue is under-provisioned
+  - Correlate with runtime events to see whether jobs are backing up
+- `ScraperOpFailureRateHigh`
+  - Inspect runtime events and workflow details for the affected `site/queue/runner`
+  - Separate transient upstream failures from permanent verb or input errors
+  - If failures are retryable, check whether they are also causing retry spikes
+- `ScraperQueueWaitHigh`
+  - Check whether the queue is starved by rate limits or worker capacity
+  - Compare `scraper_queue_state_total` ready/running counts with `scraper_queue_wait_seconds`
+  - If queue wait is isolated to one queue, inspect that queue’s policies and runner type
+- `ScraperRetrySpike`
+  - Look for upstream flakiness, bad proxy behavior, or unstable verb logic
+  - Correlate retries with failure-rate and queue-wait alerts to decide whether the issue is transient or systemic
 
 ## Notes
 

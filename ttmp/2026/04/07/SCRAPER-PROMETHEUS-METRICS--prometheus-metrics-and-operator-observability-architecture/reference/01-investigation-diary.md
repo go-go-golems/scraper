@@ -12,7 +12,7 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: Chronological investigation notes for the Prometheus and operator metrics review, including the current observability inventory, architectural conclusions, mistakes, and proposed next tickets.
-LastUpdated: 2026-04-07T13:03:00-04:00
+LastUpdated: 2026-04-07T13:31:00-04:00
 WhatFor: Preserve the evidence and reasoning behind the Prometheus recommendation so a future engineer can understand what scraper already exposes, what it does not, and why metrics should not replace durable state.
 WhenToUse: Use when revisiting observability architecture, implementing metrics instrumentation, or checking how this ticket’s recommendations were derived.
 ---
@@ -443,3 +443,105 @@ Results:
 - submission duration histograms,
 - alert documentation and operator response playbooks,
 - retry-spike and excessive-queue-wait alerts.
+
+## 2026-04-07 Implementation Slice 5
+
+### Goal
+
+Finish the last high-value backend observability gap before any optional future refinements: add a real queue-wait histogram, wire the final missing alerts, and document what an operator should do when those alerts fire.
+
+### Queue wait design choice
+
+I did not use raw op creation time as the queue-wait clock. That would overstate waits for dependent ops and retryable failures, because an op may exist long before it becomes legally leaseable.
+
+Instead, queue wait is measured from the durable time the op became eligible to be leased:
+
+- for dependency promotion and recovered expired leases, that is `updated_at`,
+- for retryable failures with a backoff window, that is `max(updated_at, next_attempt_at)`.
+
+That rule keeps the metric aligned with actual scheduling semantics instead of the broader workflow lifecycle.
+
+### What I changed
+
+I extended `model.OpSpec` with internal-only timing fields tagged with `json:"-"` in:
+
+- `pkg/engine/model/types.go`
+
+and added helpers to compute:
+
+- `ReadyAt()`
+- `QueueWaitDuration(now)`
+
+I then populated those fields from SQLite in:
+
+- `pkg/engine/store/sqlite/store.go`
+
+for both `GetOp` and `LeaseReadyOp`.
+
+I extended scheduler events in:
+
+- `pkg/engine/scheduler/scheduler.go`
+
+to carry `QueueWaitDuration` on leased-op events.
+
+I extended metrics in:
+
+- `pkg/metrics/metrics.go`
+- `pkg/metrics/scheduler.go`
+- `pkg/metrics/scheduler_observer.go`
+
+with a new histogram:
+
+- `scraper_queue_wait_seconds{site,queue,runner}`
+
+I used a wider queue-wait bucket set than op duration because operator-visible waits can span minutes or hours, not just milliseconds or seconds.
+
+I added tests in:
+
+- `pkg/engine/model/types_test.go`
+- `pkg/metrics/scheduler_observer_test.go`
+
+to verify the queue-wait timing rules and histogram updates.
+
+I also finished the remaining rule bundle in:
+
+- `ops/monitoring/prometheus/rules/scraper.yml`
+
+with:
+
+- `scraper:op_retries_rate5m`
+- `scraper:queue_wait_p95_15m`
+- `ScraperQueueWaitHigh`
+- `ScraperRetrySpike`
+
+And I updated:
+
+- `playbook/01-local-prometheus-and-grafana-smoke-test.md`
+
+with alert-response guidance for all implemented alerts.
+
+### Validation performed
+
+Commands run:
+
+```bash
+cd /home/manuel/workspaces/2026-03-23/js-scraper/scraper
+gofmt -w pkg/engine/model/types.go pkg/engine/model/types_test.go pkg/engine/store/sqlite/store.go pkg/engine/scheduler/scheduler.go pkg/metrics/metrics.go pkg/metrics/scheduler.go pkg/metrics/scheduler_observer.go pkg/metrics/scheduler_observer_test.go
+go test ./pkg/engine/model ./pkg/engine/scheduler ./pkg/engine/store/sqlite ./pkg/metrics -count=1
+go test ./... -count=1
+docker compose config
+docker compose up -d redis prometheus && sleep 3 && docker compose logs --no-color --tail=120 prometheus && docker compose down
+```
+
+Results:
+
+- focused model/scheduler/store/metrics tests passed,
+- full repository tests passed,
+- compose config remained valid,
+- Prometheus started successfully and loaded the expanded rule bundle, again logging `Starting rule manager...`.
+
+### What remains intentionally deferred
+
+- submission duration histograms,
+- optional extra snapshot tests beyond current coverage,
+- any frontend integration work.

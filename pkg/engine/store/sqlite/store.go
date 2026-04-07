@@ -155,7 +155,7 @@ func (s *Store) Enqueue(ctx context.Context, ops []model.OpSpec) error {
 func (s *Store) GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error) {
 	row := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, workflow_id, parent_id, site, kind, queue_key, dedup_key, input_json, retry_json, retry_state_json, metadata_json
+		`SELECT id, workflow_id, parent_id, site, kind, queue_key, dedup_key, input_json, retry_json, retry_state_json, metadata_json, next_attempt_at, created_at, updated_at
 		 FROM ops WHERE id = ?`,
 		id,
 	)
@@ -166,6 +166,9 @@ func (s *Store) GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error)
 	var retryText string
 	var retryStateText string
 	var metadataText string
+	var nextAttemptText sql.NullString
+	var createdAt string
+	var updatedAt string
 	if err := row.Scan(
 		&op.ID,
 		&op.WorkflowID,
@@ -178,6 +181,9 @@ func (s *Store) GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error)
 		&retryText,
 		&retryStateText,
 		&metadataText,
+		&nextAttemptText,
+		&createdAt,
+		&updatedAt,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -198,6 +204,15 @@ func (s *Store) GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error)
 	}
 	if err := unmarshalJSON(metadataText, &op.Metadata); err != nil {
 		return nil, fmt.Errorf("decode op metadata: %w", err)
+	}
+	op.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+	op.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updatedAt)
+	if nextAttemptText.Valid && nextAttemptText.String != "" {
+		nextAttemptAt, err := time.Parse(time.RFC3339Nano, nextAttemptText.String)
+		if err != nil {
+			return nil, fmt.Errorf("parse next attempt time: %w", err)
+		}
+		op.NextReadyAt = &nextAttemptAt
 	}
 
 	dependencies, err := s.loadDependencies(ctx, id)
@@ -419,7 +434,7 @@ func (s *Store) LeaseReadyOp(
 
 	row := tx.QueryRowContext(
 		ctx,
-		`SELECT id, workflow_id, parent_id, site, kind, queue_key, dedup_key, input_json, retry_json, retry_state_json, metadata_json
+		`SELECT id, workflow_id, parent_id, site, kind, queue_key, dedup_key, input_json, retry_json, retry_state_json, metadata_json, next_attempt_at, created_at, updated_at
 		 FROM ops
 		 WHERE status = ?
 		   AND queue_key = ?
@@ -443,6 +458,9 @@ func (s *Store) LeaseReadyOp(
 	var retryText string
 	var retryStateText string
 	var metadataText string
+	var nextAttemptText sql.NullString
+	var createdAt string
+	var updatedAt string
 	if err := row.Scan(
 		&op.ID,
 		&op.WorkflowID,
@@ -455,6 +473,9 @@ func (s *Store) LeaseReadyOp(
 		&retryText,
 		&retryStateText,
 		&metadataText,
+		&nextAttemptText,
+		&createdAt,
+		&updatedAt,
 	); err != nil {
 		_ = tx.Rollback()
 		if err == sql.ErrNoRows {
@@ -487,6 +508,16 @@ func (s *Store) LeaseReadyOp(
 	if err := unmarshalJSON(metadataText, &op.Metadata); err != nil {
 		_ = tx.Rollback()
 		return nil, nil, fmt.Errorf("decode op metadata: %w", err)
+	}
+	op.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+	op.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updatedAt)
+	if nextAttemptText.Valid && nextAttemptText.String != "" {
+		nextAttemptAt, err := time.Parse(time.RFC3339Nano, nextAttemptText.String)
+		if err != nil {
+			_ = tx.Rollback()
+			return nil, nil, fmt.Errorf("parse next attempt time: %w", err)
+		}
+		op.NextReadyAt = &nextAttemptAt
 	}
 
 	dependencies, err := loadDependenciesTx(ctx, tx, op.ID)

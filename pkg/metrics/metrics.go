@@ -29,6 +29,28 @@ var durationBuckets = []float64{
 	60,
 }
 
+var queueWaitBuckets = []float64{
+	0.01,
+	0.05,
+	0.1,
+	0.25,
+	0.5,
+	1,
+	2.5,
+	5,
+	10,
+	30,
+	60,
+	120,
+	300,
+	600,
+	1800,
+	3600,
+	21600,
+	43200,
+	86400,
+}
+
 type Registry struct {
 	registry *prometheus.Registry
 
@@ -43,6 +65,7 @@ type Registry struct {
 	OpFailuresTotal         *prometheus.CounterVec
 	OpRetriesTotal          *prometheus.CounterVec
 	QueueRateLimitedTotal   *prometheus.CounterVec
+	QueueWaitDuration       *prometheus.HistogramVec
 	OpDuration              *prometheus.HistogramVec
 	HTTPRunnerRequestsTotal *prometheus.CounterVec
 	HTTPRunnerDuration      *prometheus.HistogramVec
@@ -117,6 +140,12 @@ func NewRegistry() (*Registry, error) {
 			Name:      "queue_rate_limited_total",
 			Help:      "Total queue rate-limit events by site and queue.",
 		}, []string{"site", "queue"}),
+		QueueWaitDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: namespace,
+			Name:      "queue_wait_seconds",
+			Help:      "Time spent waiting after an op became leaseable, by site, queue, and runner kind.",
+			Buckets:   queueWaitBuckets,
+		}, []string{"site", "queue", "runner"}),
 		OpDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Namespace: namespace,
 			Name:      "op_duration_seconds",
@@ -153,6 +182,7 @@ func NewRegistry() (*Registry, error) {
 		ret.OpFailuresTotal,
 		ret.OpRetriesTotal,
 		ret.QueueRateLimitedTotal,
+		ret.QueueWaitDuration,
 		ret.OpDuration,
 		ret.HTTPRunnerRequestsTotal,
 		ret.HTTPRunnerDuration,

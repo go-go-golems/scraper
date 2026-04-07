@@ -45,6 +45,16 @@ func (r *Registry) ObserveQueueRateLimited(site model.SiteName, queue model.Queu
 	r.QueueRateLimitedTotal.WithLabelValues(string(site), string(queue)).Inc()
 }
 
+func (r *Registry) ObserveQueueWait(site model.SiteName, queue model.QueueKey, runnerKind string, duration time.Duration) {
+	if r == nil {
+		return
+	}
+	if duration < 0 {
+		duration = 0
+	}
+	r.QueueWaitDuration.WithLabelValues(string(site), string(queue), runnerKind).Observe(duration.Seconds())
+}
+
 func (r *Registry) ObserveOpCompleted(site model.SiteName, queue model.QueueKey, runnerKind string, status string, duration time.Duration) {
 	if r == nil {
 		return

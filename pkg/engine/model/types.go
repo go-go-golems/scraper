@@ -122,18 +122,44 @@ type Lease struct {
 }
 
 type OpSpec struct {
-	ID         OpID
-	WorkflowID WorkflowID
-	ParentID   *OpID
-	Site       SiteName
-	Kind       string
-	Queue      QueueKey
-	DedupKey   string
-	Input      json.RawMessage
-	DependsOn  []Dependency
-	Retry      RetryPolicy
-	RetryState RetryState
-	Metadata   map[string]string
+	ID          OpID
+	WorkflowID  WorkflowID
+	ParentID    *OpID
+	Site        SiteName
+	Kind        string
+	Queue       QueueKey
+	DedupKey    string
+	Input       json.RawMessage
+	DependsOn   []Dependency
+	Retry       RetryPolicy
+	RetryState  RetryState
+	Metadata    map[string]string
+	CreatedAt   time.Time  `json:"-"`
+	UpdatedAt   time.Time  `json:"-"`
+	NextReadyAt *time.Time `json:"-"`
+}
+
+func (o OpSpec) ReadyAt() time.Time {
+	readyAt := o.UpdatedAt.UTC()
+	if o.NextReadyAt != nil && o.NextReadyAt.UTC().After(readyAt) {
+		readyAt = o.NextReadyAt.UTC()
+	}
+	if readyAt.IsZero() {
+		readyAt = o.CreatedAt.UTC()
+	}
+	return readyAt
+}
+
+func (o OpSpec) QueueWaitDuration(now time.Time) time.Duration {
+	readyAt := o.ReadyAt()
+	if readyAt.IsZero() {
+		return 0
+	}
+	wait := now.UTC().Sub(readyAt)
+	if wait < 0 {
+		return 0
+	}
+	return wait
 }
 
 type RecordWrite struct {
