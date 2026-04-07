@@ -196,3 +196,51 @@ go test ./pkg/api/server ./pkg/cmd -count=1
 ```
 
 The focused packages passed again after the move.
+
+## Sixth cleanup slice: worker runtime setup
+
+The final worker-side extraction moved the large operational `RunE` body out of `worker.go`.
+
+File added:
+
+- `pkg/cmd/worker_runtime.go`
+
+What moved:
+
+- the full worker runtime flow into `runWorkerCommand(...)`
+
+That runtime flow still does the same work as before:
+
+- build and validate config
+- open engine and scraper databases
+- open runtime-event publisher resources
+- create the metrics registry
+- build runner registry and site DB provider
+- construct the scheduler
+- boot optional worker metrics HTTP listener
+- execute scheduler cycles
+- print the final loop summary
+
+What `worker.go` became after this move:
+
+- worker option struct
+- Cobra command construction
+- flag registration
+- a one-line `RunE` that delegates to `runWorkerCommand(...)`
+
+This satisfies the intended layout from the design:
+
+- `worker.go` for Cobra and flags
+- `worker_runtime.go` for the operational flow
+- `worker_metrics.go` for metrics listener boot
+- `worker_observers.go` for observer composition
+
+Validation for this final slice:
+
+```bash
+gofmt -w pkg/cmd/worker.go pkg/cmd/worker_runtime.go
+go test ./pkg/api/server ./pkg/cmd -count=1
+go test ./... -count=1
+```
+
+The focused packages and the full repository both passed after the move.

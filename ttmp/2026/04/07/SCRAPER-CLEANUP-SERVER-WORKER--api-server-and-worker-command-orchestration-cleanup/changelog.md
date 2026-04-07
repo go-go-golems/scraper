@@ -9,3 +9,4 @@
 - Split runtime-event router startup into `runtime_event_router.go`, leaving `server.New(...)` as the clear API composition root.
 - Split worker observer composition into `worker_observers.go`.
 - Split worker metrics listener boot into `worker_metrics.go`.
+- Split the worker runtime setup into `worker_runtime.go`, leaving `worker.go` focused on Cobra command construction and flags.
