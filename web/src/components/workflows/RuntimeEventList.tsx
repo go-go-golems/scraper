@@ -123,6 +123,7 @@ export function RuntimeEventList({
         <Box key={event.id || `${event.kind}-${index}`}>
           <ListItem alignItems="flex-start" sx={{ px: 0, py: 1.25 }}>
             <ListItemText
+              disableTypography
               primary={
                 <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                   <Chip label={RuntimeEventSource[event.source]} size="small" variant="outlined" />
@@ -134,7 +135,8 @@ export function RuntimeEventList({
                 </Stack>
               }
               secondary={
-                <Stack spacing={0.5} sx={{ mt: 0.75 }}>
+                <Box sx={{ mt: 0.75 }}>
+                  <Stack spacing={0.5}>
                   <Typography variant="body2" color="text.primary">
                     {event.message || 'Runtime event'}
                   </Typography>
@@ -189,7 +191,8 @@ export function RuntimeEventList({
                       </Typography>
                     ))}
                   </Stack>
-                </Stack>
+                  </Stack>
+                </Box>
               }
             />
           </ListItem>

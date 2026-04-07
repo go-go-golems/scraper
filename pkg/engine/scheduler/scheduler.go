@@ -544,6 +544,16 @@ func classifyRunError(err error, now time.Time) model.OpError {
 
 func (s *Scheduler) emit(ctx context.Context, event Event) {
 	switch event.Kind {
+	case EventIdle:
+		log.Trace().
+			Str("event", string(event.Kind)).
+			Str("workflow_id", string(event.WorkflowID)).
+			Str("op_id", string(event.OpID)).
+			Str("site", string(event.Site)).
+			Str("queue", string(event.Queue)).
+			Str("workflow_status", string(event.Status)).
+			Int("attempt", event.Attempt).
+			Msg(event.Message)
 	case EventOpFailed:
 		logger := log.Warn()
 		if event.Error != nil {

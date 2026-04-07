@@ -7,6 +7,7 @@ import {
 import {
   decodeRuntimeEvent,
   useGetRecentRuntimeEventsQuery,
+  type RuntimeEventJson,
   type RuntimeEventsParams,
 } from '../../api/runtimeEventsApi';
 
@@ -39,6 +40,10 @@ export function mergeRuntimeEvents(current: RuntimeEventV1[], incoming: RuntimeE
   }
 
   return Array.from(byId.values()).sort((left, right) => runtimeEventOccurredAtMillis(right) - runtimeEventOccurredAtMillis(left));
+}
+
+function decodeRuntimeEvents(events: RuntimeEventJson[]): RuntimeEventV1[] {
+  return events.map((event) => decodeRuntimeEvent(event));
 }
 
 export function filterRuntimeEvents(
@@ -89,7 +94,7 @@ export function useRuntimeEventFeed({
   }, [search, stream]);
 
   useEffect(() => {
-    setAllEvents((current) => mergeRuntimeEvents(current, recentRuntimeEvents));
+    setAllEvents((current) => mergeRuntimeEvents(current, decodeRuntimeEvents(recentRuntimeEvents)));
   }, [recentRuntimeEvents]);
 
   useEffect(() => {

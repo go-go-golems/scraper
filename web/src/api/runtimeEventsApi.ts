@@ -15,8 +15,20 @@ export interface RuntimeEventsParams {
   limit?: number;
 }
 
+export type RuntimeEventJson = JsonValue;
+
 export function decodeRuntimeEvent(json: JsonValue): RuntimeEventV1 {
   return fromJson(RuntimeEventV1Schema, json);
+}
+
+function buildRuntimeEventQuery(params: RuntimeEventsParams): string {
+  const searchParams = new URLSearchParams();
+  if (params.workflowId) searchParams.set('workflowId', params.workflowId);
+  if (params.opId) searchParams.set('opId', params.opId);
+  if (params.site) searchParams.set('site', params.site);
+  if (params.workerId) searchParams.set('workerId', params.workerId);
+  if (params.limit) searchParams.set('limit', String(params.limit));
+  return `/runtime-events?${searchParams.toString()}`;
 }
 
 export const runtimeEventsApi = createApi({
@@ -24,18 +36,9 @@ export const runtimeEventsApi = createApi({
   baseQuery: fetchBaseQuery({ baseUrl: '/api/v1' }),
   tagTypes: ['RuntimeEvents'],
   endpoints: (builder) => ({
-    getRecentRuntimeEvents: builder.query<RuntimeEventV1[], RuntimeEventsParams>({
-      query: (params) => {
-        const searchParams = new URLSearchParams();
-        if (params.workflowId) searchParams.set('workflowId', params.workflowId);
-        if (params.opId) searchParams.set('opId', params.opId);
-        if (params.site) searchParams.set('site', params.site);
-        if (params.workerId) searchParams.set('workerId', params.workerId);
-        if (params.limit) searchParams.set('limit', String(params.limit));
-        return `/runtime-events?${searchParams.toString()}`;
-      },
-      transformResponse: (response: RuntimeEventsResponse) =>
-        response.events.map((event) => decodeRuntimeEvent(event)),
+    getRecentRuntimeEvents: builder.query<RuntimeEventJson[], RuntimeEventsParams>({
+      query: (params) => buildRuntimeEventQuery(params),
+      transformResponse: (response: RuntimeEventsResponse) => response.events,
       providesTags: ['RuntimeEvents'],
     }),
   }),
