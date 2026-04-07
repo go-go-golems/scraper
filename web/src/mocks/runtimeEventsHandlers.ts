@@ -2,7 +2,9 @@
  * MSW handlers for runtime events API.
  * Returns mock data for Storybook and tests.
  */
+import { create, toJson } from '@bufbuild/protobuf';
 import { http, HttpResponse } from 'msw';
+import { RuntimeEventV1Schema } from '../pb/proto/scraper/runtime/v1/events_pb';
 import { generateMockEvents } from '../test-utils/mockRuntimeEvents';
 
 let cachedEvents = generateMockEvents(20);
@@ -22,24 +24,11 @@ export const runtimeEventsHandlers = [
       filtered = filtered.filter((e) => e.opId === opId);
     }
 
-    // Return as JsonValue[] (serialized protobuf JSON)
+    // Serialize with Buf so protobuf JSON matches what fromJson() expects.
     return HttpResponse.json({
-      events: filtered.slice(0, limit).map((event) => ({
-        id: event.id,
-        occurredAt: {
-          seconds: String(event.occurredAt?.seconds ?? '0'),
-          nanos: event.occurredAt?.nanos ?? 0,
-        },
-        source: event.source,
-        severity: event.severity,
-        kind: event.kind,
-        message: event.message,
-        workflowId: event.workflowId,
-        opId: event.opId,
-        site: event.site,
-        workerId: event.workerId,
-        payload: event.payload ?? {},
-      })),
+      events: filtered
+        .slice(0, limit)
+        .map((event) => toJson(RuntimeEventV1Schema, create(RuntimeEventV1Schema, event))),
     });
   }),
 ];

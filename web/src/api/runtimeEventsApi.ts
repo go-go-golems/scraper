@@ -62,6 +62,13 @@ function buildSSEUrl(params: RuntimeEventsParams): string {
 
 const MAX_CACHED_EVENTS = 500;
 
+function isStorybookEnvironment(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    '__STORYBOOK_PREVIEW__' in window
+  );
+}
+
 // ── API ──────────────────────────────────────────────────────────────
 
 export const runtimeEventsApi = createApi({
@@ -86,6 +93,13 @@ export const runtimeEventsApi = createApi({
         try {
           await cacheDataLoaded;
         } catch {
+          return;
+        }
+
+        // Storybook only needs the mocked REST payload. Skip live SSE there to
+        // avoid noisy 404s from the unmocked stream endpoint.
+        if (isStorybookEnvironment()) {
+          await cacheEntryRemoved;
           return;
         }
 

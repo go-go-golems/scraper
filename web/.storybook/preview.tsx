@@ -3,9 +3,12 @@ import React from 'react';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
+import { initialize, mswLoader } from 'msw-storybook-addon';
 import { theme } from '../src/theme';
 import { uiSlice } from '../src/store/uiSlice';
 import { runtimeEventsApi } from '../src/api/runtimeEventsApi';
+
+initialize({ onUnhandledRequest: 'bypass' });
 
 function createMockStore() {
   return configureStore({
@@ -14,7 +17,7 @@ function createMockStore() {
       [runtimeEventsApi.reducerPath]: runtimeEventsApi.reducer,
     },
     middleware: (getDefault) =>
-      getDefault().concat(runtimeEventsApi.middleware),
+      getDefault({ serializableCheck: false }).concat(runtimeEventsApi.middleware),
   });
 }
 
@@ -40,6 +43,7 @@ const preview: Preview = {
       test: 'todo',
     },
   },
+  loaders: [mswLoader],
 };
 
 export default preview;

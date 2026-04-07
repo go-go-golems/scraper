@@ -15,7 +15,7 @@ function createStoryStore() {
       [runtimeEventsApi.reducerPath]: runtimeEventsApi.reducer,
     },
     middleware: (getDefault) =>
-      getDefault().concat(runtimeEventsApi.middleware),
+      getDefault({ serializableCheck: false }).concat(runtimeEventsApi.middleware),
   });
 }
 
