@@ -167,3 +167,118 @@ Deep pages like Workflow Detail only had a "← Back to Workflows" text link. No
 - `Crumb` type: `{ label: string; path?: string }` — last crumb has no path (current page)
 - Uses MUI `<Breadcrumbs>` with `<NavigateNextIcon>` separator
 - Wrapped in `<Box sx={{ px: 3, py: 0.75, bgcolor: 'grey.100' }}>` for visual separation from AppBar
+
+---
+
+## Step 4: RuntimeEventTable + Hook Updates + Page Replacements (Phase 2)
+
+The core of the UI redesign: replace the bloated RuntimeEventList (100px per event, no sort, no expand) with a dense expandable table (32px per row). This is the highest-impact change in the whole ticket.
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok, continue"
+
+**Commit (code):** edc8d94 (table), 57872d4 (hook), de5aed4 (RuntimeEventsPage), 2945cab (WorkflowDetail+Drawer)
+
+### What I did
+- Created `SeverityDotIndicator.tsx` — tiny 10px colored dot + label
+- Created `RuntimeEventTable.tsx` — MUI Table with sortable columns, expandable detail rows, optional pagination
+- Updated `runtimeEventsApi.ts` — added `since`, `until`, `offset` to `RuntimeEventsParams`
+- Updated `runtimeEventFeed.ts` — added `paused` state, `pause()`/`resume()` return values, propagated time params
+- Rewrote `RuntimeEventsPage.tsx` — multi-select severity/source chips, TimeRangeSelector, collapsed advanced filters, pause/resume button, paginated table
+- Replaced RuntimeEventList with RuntimeEventTable in `WorkflowDetailPage.tsx` and `OpDetailDrawer.tsx`
+
+### Why
+The old RuntimeEventList used a vertical `<List>` layout — each event was ~100px tall with 3 Chips + multiline text. 50 events = 4000px of scrolling. The new table is ~32px per row, fits 30 rows in a viewport, and expands on click for details.
+
+### What worked
+- The RuntimeEventTable's `Box component="tbody"` pattern for expandable rows — MUI Table doesn't natively support expandable rows, but wrapping each row + its detail in a `<Box component="tbody">` works perfectly
+- The `useMemo` for client-side filtering in RuntimeEventsPage — clean separation between server filters (query params) and client filters (multi-select chips)
+- The `paused` state in the hook — simple boolean that the SSE effect checks before opening EventSource
+
+### What didn't work
+- Nothing failed — all four commits compiled clean on first try
+
+### What I learned
+- `DateRangePicker` is Pro-only in @mui/x-date-pickers v8 — caught in Storybook, fixed by using two `DateTimePicker` components instead
+- The RuntimeEventList is now unused in all 3 locations but not yet deleted (Phase 6 cleanup)
+
+### What was tricky to build
+- The sort function needed to handle all 4 fields correctly — timestamp (numeric from protobuf seconds), severity (enum numeric), source/kind (string comparison on enum labels)
+- Client-side vs server-side filtering boundary: severity/source are client-side (multi-select chips filter the merged event array), while time range is server-side (added as query params to both REST and SSE endpoints)
+
+### What warrants a second pair of eyes
+- The `since` computation in RuntimeEventsPage: uses `dayjs().subtract(...)` for relative ranges. Verify the backend accepts ISO timestamps in the `since` param.
+- The SSE stream URL now includes `since`/`until` — verify the backend SSE endpoint supports these params, or they'll be silently ignored.
+
+### What should be done in the future
+- Delete `RuntimeEventList.tsx` and its stories in Phase 6
+- Add virtualization (react-window) if events scale to 1000s
+- Backend: return `total` count for proper pagination
+
+### Code review instructions
+- File: `web/src/components/workflows/RuntimeEventTable.tsx` — review sort logic, expandable row pattern, pagination
+- File: `web/src/pages/RuntimeEventsPage.tsx` — review multi-select filter integration, time range → serverSince computation
+- File: `web/src/features/runtime-events/runtimeEventFeed.ts` — review pause/resume, since/until propagation
+
+---
+
+## Step 5: Bug Discovery and Handover
+
+Discovered an infinite render loop in `useRuntimeEventFeed` that manifests whenever the backend is unavailable (Storybook, offline dev, network errors). Wrote detailed analysis and design exploration for a Redux-based rewrite.
+
+### Prompt Context
+
+**User prompt (verbatim):** "can we use redux to good effect here?"
+
+**Assistant interpretation:** User recognized the setState/useEffect chain in the hook is the architectural root cause and suggested exploring a Redux approach.
+
+**Inferred user intent:** Write up the analysis as a handover document so the next developer can pick up the Redux rewrite without re-investigating.
+
+**Commits:** bug fixes: `49cc0be`, `7bce7f1`, `75e3a5f`, `68a690c`
+
+### What I did
+- Fixed SSE auto-reconnect loop (close EventSource on error)
+- Fixed table column alignment (Fragment instead of Box tbody)
+- Fixed icon import (from @mui/icons-material)
+- Fixed missing TableContainer import
+- Wrote detailed bug analysis document in ticket
+
+### Why
+The hook's 4 useState + 4 useEffect pattern creates cascading re-renders when RTK Query retries failed fetches. Each retry changes the `recentRuntimeEvents` reference, triggering the merge effect, which triggers a re-render, which triggers another RTK Query evaluation.
+
+### What worked
+- The EventSource close fix eliminated the SSE loop
+- The Fragment fix eliminated the column misalignment
+
+### What didn't work
+- Guarding the merge effect with `if (!recentRuntimeEvents || recentRuntimeEvents.length === 0) return` didn't fix the loop because RTK Query still retries, and the reference still changes even when empty
+
+### What I learned
+- EventSource auto-reconnects by browser spec — must call `.close()` on error to stop
+- `<Box component="tbody">` creates a separate tbody element per group, breaking MUI Table column alignment
+- RTK Query's default retry behavior (3 retries with backoff) is hostile to Storybook/no-backend environments
+
+### What was tricky to build
+- Tracing the exact re-render chain: RTK Query retry → reference change → useEffect → setState → re-render → RTK re-evaluation → retry
+
+### What warrants a second pair of eyes
+- The Redux slice + listener middleware design in the analysis doc — is this the right architecture?
+- Should we use `createListenerMiddleware` or a custom middleware?
+- Memory management: max events in store? Trim strategy?
+
+### What should be done in the future
+- Implement the Redux-based rewrite as described in the analysis doc
+- Pre-seed Storybook stores to avoid all network calls
+- Add unit tests for the new slice
+
+### Code review instructions
+- Read the analysis doc: `ttmp/.../analysis/01-bug-analysis-runtimeeventfeed-infinite-loop.md`
+- Review the 4 bug-fix commits for correctness
+- The runtimeEventFeed.ts is in a partially-fixed state — the RTK Query loop is NOT fixed, only the SSE loop is fixed
+
+### Technical details
+- The `useRuntimeEventFeed` hook is at `web/src/features/runtime-events/runtimeEventFeed.ts`
+- It has a test file at `web/src/features/runtime-events/runtimeEventFeed.test.ts`
+- 3 consumers: RuntimeEventsPage, WorkflowDetailPage, OpDetailDrawer
+- Each consumer creates its own SSE connection (3 connections for the same data)
