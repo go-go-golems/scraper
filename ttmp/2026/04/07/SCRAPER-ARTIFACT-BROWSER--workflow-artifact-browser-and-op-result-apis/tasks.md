@@ -51,8 +51,8 @@
 - [ ] Create `BinaryFallbackView` component (icon + size + download for non-previewable).
 - [x] Wire filter bar → query params → `refetch()`.
 - [x] Add pagination controls to artifact table.
-- [ ] Add "→ Op detail" bridge link from preview panel.
-- [ ] Add reverse bridge link in `OpResultTab` to open artifact browser filtered to current op.
+- [x] Add "→ Op detail" bridge link from preview panel.
+- [x] Add reverse bridge link in `OpResultTab` to open artifact browser filtered to current op.
 - [ ] Add Storybook stories for all new components.
 - [ ] Uploaded to reMarkable: `design/02-artifact-browser-frontend-ui-design.md` → `/ai/2026/04/07/SCRAPER-ARTIFACT-BROWSER`
 

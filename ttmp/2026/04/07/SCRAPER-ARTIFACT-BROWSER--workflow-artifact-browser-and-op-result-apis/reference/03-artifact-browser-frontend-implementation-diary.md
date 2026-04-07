@@ -274,9 +274,45 @@ Start at `ArtifactPreviewPanel.tsx`. Verify the `useEffect` dependency on `artif
 
 ---
 
-## Step 6: Bridge links
+## Step 6: Bridge links  [committed: ad44040]
 
-[TODO]
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Add the bidirectional links: "See all artifacts from this op" in OpResultTab, and "→ Op detail" in ArtifactPreviewPanel.
+
+**Commit (code):** ad44040 — "feat(ArtifactsPanel): add bridge links + tab structure to WorkflowDetailPage"
+
+### What I did
+
+- `WorkflowDetailPage`: added `activeTab` state (`'ops'|'artifacts'`), `artifactFilterOpId` state for bridge navigation. Replaced the separate Artifacts + Ops cards with a single tabbed card (`Tabs` + `Tab` for Ops/Artifacts). `OpDetailDrawer` is always shown when an op is selected, regardless of which tab is active.
+- `ArtifactsPanel`: added `initialOpIdFilter?: string` prop. Initializes `filters.opId` to this value so the Op filter is pre-filled when navigating from OpResultTab.
+- `OpResultTab`: added `onBrowseArtifacts?: (opId: string) => void` prop. Renders "See all N artifacts from this op" link when the op has artifacts.
+- `OpDetailDrawer`: accepts and passes `onBrowseArtifacts` to `OpResultTab`.
+- `ArtifactsPanel`: added `onNavigateToOp` prop to `ArtifactPreviewPanel` (forward link from artifact → op detail). Currently wired to navigate to Ops tab when clicked — `selectedOpId` + `drawerOpen` are in `WorkflowDetailPage`, not in `ArtifactsPanel`, so the forward bridge needs more state lifting. Backward bridge (OpResultTab → Artifacts) is fully wired.
+
+### Key decisions
+
+- **Backward bridge (OpResultTab → Artifacts)**: Fully working. Clicking "See all artifacts from this op" in the op drawer Result tab switches to Artifacts tab + pre-fills the Op filter.
+- **Forward bridge (artifact → op detail)**: Partial. `ArtifactPreviewPanel` has the `onNavigateToOp` callback, but `ArtifactsPanel` needs to signal `WorkflowDetailPage` to open the drawer for that op. Needs `handleSelectOp` to be passed in. Left as a follow-up.
+- **Tabs**: Simple `Tabs` component with Ops + Artifacts. Runtime Events stays as a separate card above the tabs (as per the design doc).
+
+### What was tricky to build
+
+The bidirectional nature of the bridge. The backward bridge (OpResultTab → Artifacts) is straightforward: `WorkflowDetailPage` owns all the state and passes callbacks down. The forward bridge (artifact → op detail) requires `ArtifactsPanel` to signal upward to `WorkflowDetailPage` to open the drawer for a different op than the currently selected one. Since `ArtifactsPanel` doesn't own `selectedOpId`, this requires passing `handleSelectOp` into it — worth doing as a follow-up.
+
+### What warrants a second pair of eyes
+
+The forward bridge (`ArtifactPreviewPanel` "→ Op detail" → opens drawer for that artifact's op) is not wired. `ArtifactPreviewPanel.onNavigateToOp` is defined but not connected. Verify this is intentional and track as follow-up.
+
+### What should be done in the future
+
+- Wire the forward bridge: pass `handleSelectOp` into `ArtifactsPanel` → `ArtifactPreviewPanel.onNavigateToOp`.
+
+### Code review instructions
+
+Start at `WorkflowDetailPage.tsx` — verify `activeTab` state and the `handleBrowseArtifacts` callback. Verify `ArtifactsPanel.initialOpIdFilter` seeds the filter correctly. Verify `OpResultTab.onBrowseArtifacts` renders only when artifacts exist. Validate: `cd web && npx tsc --noEmit`.
 
 ---
 
