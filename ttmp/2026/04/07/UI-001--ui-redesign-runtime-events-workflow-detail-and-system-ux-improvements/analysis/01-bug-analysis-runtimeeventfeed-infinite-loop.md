@@ -124,7 +124,235 @@ The bug is masked in production because the query succeeds on the first try.
 
 ---
 
-## 4. Design Exploration: Redux-Based Rewrite
+## 4. Design Exploration
+
+### Design A: RTK Query `onCacheEntryAdded` (✅ RECOMMENDED)
+
+RTK Query has a **built-in streaming lifecycle** via `onCacheEntryAdded` designed exactly for SSE/WebSocket use cases. This is the official Redux Toolkit pattern and requires **no new files** — just rewriting the existing `runtimeEventsApi.ts` endpoint.
+
+See: https://redux-toolkit.js.org/rtk-query/usage/streaming-updates
+
+#### How It Works
+
+The SSE connection lifecycle is managed inside the endpoint definition, not in a hook. RTK Query handles:
+- Opening the SSE connection after the initial REST fetch resolves
+- Pushing SSE messages into the cache via Immer `updateCachedData`
+- Auto-closing the SSE connection when no subscribers remain (`cacheEntryRemoved`)
+- Deduplication — same endpoint+params = one shared SSE connection
+
+#### Implementation
+
+```typescript
+// web/src/api/runtimeEventsApi.ts
+import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { fromJson } from '@bufbuild/protobuf';
+import type { JsonValue } from '@bufbuild/protobuf';
+import {
+  RuntimeEventV1Schema,
+  type RuntimeEventV1,
+} from '../pb/proto/scraper/runtime/v1/events_pb';
+
+interface RuntimeEventsResponse {
+  events: JsonValue[];
+}
+
+export interface RuntimeEventsParams {
+  workflowId?: string;
+  opId?: string;
+  site?: string;
+  workerId?: string;
+  limit?: number;
+  since?: string;
+  until?: string;
+  offset?: number;
+}
+
+const MAX_CACHED_EVENTS = 500;
+
+function decodeRuntimeEvent(json: JsonValue): RuntimeEventV1 {
+  return fromJson(RuntimeEventV1Schema, json);
+}
+
+function eventMillis(event: RuntimeEventV1): number {
+  return Number(event.occurredAt?.seconds ?? 0n) * 1000
+    + Math.floor((event.occurredAt?.nanos ?? 0) / 1_000_000);
+}
+
+function buildRuntimeEventQuery(params: RuntimeEventsParams): string {
+  const sp = new URLSearchParams();
+  if (params.workflowId) sp.set('workflowId', params.workflowId);
+  if (params.opId)      sp.set('opId', params.opId);
+  if (params.site)      sp.set('site', params.site);
+  if (params.workerId)  sp.set('workerId', params.workerId);
+  if (params.limit)     sp.set('limit', String(params.limit));
+  if (params.since)     sp.set('since', params.since);
+  if (params.until)     sp.set('until', params.until);
+  if (params.offset)    sp.set('offset', String(params.offset));
+  return `/runtime-events?${sp.toString()}`;
+}
+
+function buildSSEUrl(params: RuntimeEventsParams): string {
+  const sp = new URLSearchParams();
+  if (params.workflowId) sp.set('workflowId', params.workflowId);
+  if (params.opId)      sp.set('opId', params.opId);
+  if (params.site)      sp.set('site', params.site);
+  if (params.workerId)  sp.set('workerId', params.workerId);
+  const search = sp.toString();
+  return search
+    ? `/api/v1/runtime-events/stream?${search}`
+    : '/api/v1/runtime-events/stream';
+}
+
+export const runtimeEventsApi = createApi({
+  reducerPath: 'runtimeEventsApi',
+  baseQuery: fetchBaseQuery({ baseUrl: '/api/v1' }),
+  tagTypes: ['RuntimeEvents'],
+  endpoints: (builder) => ({
+    getRecentRuntimeEvents: builder.query<RuntimeEventV1[], RuntimeEventsParams>({
+      query: (params) => buildRuntimeEventQuery(params),
+      transformResponse: (response: RuntimeEventsResponse) =>
+        response.events.map(decodeRuntimeEvent),
+      keepUnusedDataFor: 30, // keep cache for 30s after last subscriber unmounts
+
+      async onCacheEntryAdded(
+        arg,
+        { updateCachedData, cacheDataLoaded, cacheEntryRemoved },
+      ) {
+        // --- SSE lifecycle managed by RTK Query ---
+
+        // 1. Wait for the initial REST fetch to resolve before opening SSE
+        try {
+          await cacheDataLoaded;
+        } catch {
+          // cacheEntryRemoved resolved before cacheDataLoaded (no backend)
+          return;
+        }
+
+        // 2. Open SSE stream
+        const sseUrl = buildSSEUrl(arg);
+        const eventSource = new EventSource(sseUrl);
+
+        const onMessage = (event: MessageEvent<string>) => {
+          try {
+            const decoded = decodeRuntimeEvent(JSON.parse(event.data));
+            updateCachedData((draft) => {
+              // Dedupe
+              const exists = draft.some((e) => e.id === decoded.id);
+              if (!exists) draft.unshift(decoded);
+              // Sort newest-first
+              draft.sort((a, b) => eventMillis(b) - eventMillis(a));
+              // Trim to max
+              if (draft.length > MAX_CACHED_EVENTS) draft.length = MAX_CACHED_EVENTS;
+            });
+          } catch {
+            // ignore malformed event payloads
+          }
+        };
+
+        eventSource.addEventListener('runtime-event', onMessage as EventListener);
+
+        // 3. Auto-cleanup when no subscribers remain
+        await cacheEntryRemoved;
+        eventSource.close();
+      },
+    }),
+  }),
+});
+
+export const { useGetRecentRuntimeEventsQuery } = runtimeEventsApi;
+```
+
+#### Consumer API (Before vs After)
+
+```typescript
+// ── BEFORE (custom hook with useState + useEffect chain) ──
+const { events, connectionState, pause, resume, clearEvents } = useRuntimeEventFeed({
+  serverFilters: { workflowId, limit: 100 },
+  clientFilters: { severity, source },
+});
+
+// ── AFTER (RTK Query — no custom hook) ──
+const { data: events = [], isLoading, isError, isSuccess } =
+  useGetRecentRuntimeEventsQuery({
+    workflowId: workflowId || undefined,
+    limit: 100,
+    since: serverSince,
+    until: serverUntil,
+  });
+
+// Connection state derived from query status:
+const connectionState =
+  isLoading ? 'connecting' :
+  isError  ? 'error' :
+  isSuccess ? 'live' : 'closed';
+
+// Client-side filtering stays the same (useMemo)
+const filteredEvents = useMemo(
+  () => events.filter(e => /* severity/source checks */),
+  [events, selectedSeverities, selectedSources]
+);
+
+// Pause/resume: skip the query to close SSE, re-enable to reopen
+const [paused, setPaused] = useState(false);
+useGetRecentRuntimeEventsQuery(params, { skip: paused });
+```
+
+#### Why This Fixes Everything
+
+| Problem | How `onCacheEntryAdded` solves it |
+|---------|-----------------------------------|
+| Infinite re-render loop | No `useState` + `useEffect` chain. Cache is managed by RTK Query. `updateCachedData` is Immer-powered, no setState. |
+| SSE reconnect loop | `cacheEntryRemoved` resolves only on unsubscribe — clean lifecycle. No auto-reconnect. |
+| Duplicate SSE connections | RTK Query deduplicates by endpoint+params. Same `workflowId` → one connection, shared cache. |
+| Storybook | Pre-seed cache with `store.dispatch(api.util.updateQueryData(...))` — `onCacheEntryAdded` only fires on real fetches. |
+| Memory leak | Cache auto-evicts after `keepUnusedDataFor: 30` seconds with no subscribers. |
+| Pause/resume | Use `{ skip: paused }` option. Skipping unsubscribes → `cacheEntryRemoved` fires → SSE closes. |
+| No backend | `cacheDataLoaded` rejects → catch block returns early. No SSE opened, no retry loop. |
+
+#### Storybook Fix
+
+```typescript
+// In story: pre-seed the cache, never fetch
+function createStoryStore() {
+  const store = configureStore({
+    reducer: {
+      [runtimeEventsApi.reducerPath]: runtimeEventsApi.reducer,
+    },
+    middleware: (getDefault) => getDefault().concat(runtimeEventsApi.middleware),
+  });
+
+  // Pre-seed cache with mock events — no network call, no SSE
+  store.dispatch(
+    runtimeEventsApi.util.updateQueryData(
+      'getRecentRuntimeEvents',
+      { limit: 100 },
+      (draft) => {
+        draft.push(...generateMockEvents(20));
+      },
+    )
+  );
+
+  return store;
+}
+```
+
+#### Files Changed
+
+```
+MODIFY  web/src/api/runtimeEventsApi.ts     ← add onCacheEntryAdded + SSE logic
+DELETE  web/src/features/runtime-events/runtimeEventFeed.ts
+DELETE  web/src/features/runtime-events/runtimeEventFeed.test.ts
+MODIFY  web/src/pages/RuntimeEventsPage.tsx  ← use useGetRecentRuntimeEventsQuery directly
+MODIFY  web/src/pages/WorkflowDetailPage.tsx ← same
+MODIFY  web/src/components/workflows/OpDetailDrawer.tsx ← same
+```
+
+---
+
+### Design B: Redux Slice + Listener Middleware (alternative)
+
+> This was the original proposal before discovering `onCacheEntryAdded`.
+> It would work but adds more boilerplate. Kept for reference.
 
 ### 4.1 Current Architecture (Problems)
 
@@ -290,12 +518,13 @@ const storyStore = configureStore({
 
 ## 5. Recommended Next Steps
 
-1. **Create `runtimeEventsSlice.ts`** — state, reducers, selectors (no SSE yet)
-2. **Wire consumers** — update RuntimeEventsPage to use selectors/dispatch instead of hook
-3. **Create `runtimeEventsListener.ts`** — move SSE + fetch logic out of the hook into listener
-4. **Delete `runtimeEventFeed.ts`** — or keep as a thin compat wrapper if needed
-5. **Fix Storybook** — pre-seed state, no network calls needed
-6. **Add tests** — test reducers (pure functions), test selectors, test listener with mock SSE
+1. **Rewrite `runtimeEventsApi.ts`** — add `onCacheEntryAdded` with SSE lifecycle (see Design A above)
+2. **Update consumers** — replace `useRuntimeEventFeed()` calls with `useGetRecentRuntimeEventsQuery()`
+3. **Delete `runtimeEventFeed.ts`** and its test file
+4. **Fix Storybook** — pre-seed RTK Query cache in story decorators
+5. **Add pause/resume** — use `{ skip: paused }` query option
+6. **Add tests** — test `onCacheEntryAdded` with mock EventSource
+7. Then continue with **Phase 3** (WorkflowDetailPage tabs + OpTable upgrade)
 
 ---
 
