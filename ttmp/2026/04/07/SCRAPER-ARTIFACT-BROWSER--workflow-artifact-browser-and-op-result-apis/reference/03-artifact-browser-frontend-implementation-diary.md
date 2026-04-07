@@ -16,8 +16,12 @@ RelatedFiles:
       Note: Added WorkflowArtifactListResponse type (commit 7834370)
     - Path: web/src/api/workflowApi.ts
       Note: Added getWorkflowArtifacts endpoint (commit 7834370)
+    - Path: web/src/components/artifacts/ActiveFilterChips.tsx
+      Note: ActiveFilterChips (commit 633bbb1)
     - Path: web/src/components/artifacts/ArtifactsPanel.tsx
       Note: Created ArtifactsPanel skeleton (commit e0410e4)
+    - Path: web/src/components/artifacts/FilterBar.tsx
+      Note: FilterBar + debounced search (commit 633bbb1)
     - Path: web/src/pages/WorkflowDetailPage.tsx
 ExternalSources: []
 Summary: Step-by-step implementation diary for the artifact browser frontend (Phase 2 of SCRAPER-ARTIFACT-BROWSER).
@@ -25,6 +29,8 @@ LastUpdated: 2026-04-07T21:10:00-04:00
 WhatFor: Track frontend implementation progress, decisions, failures, and review notes.
 WhenToUse: Resume frontend work without rediscovery. Reference when reviewing or handing off.
 ---
+
+
 
 
 
@@ -148,9 +154,44 @@ Start at `ArtifactsPanel.tsx`. Verify the query params (`limit=20, offset=0`) ma
 
 ---
 
-## Step 3: FilterBar
+## Step 3: FilterBar + ActiveFilterChips  [committed: 633bbb1]
 
-[TODO]
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Add the filter bar with Op dropdown, Kind, Content-Type, and debounced search.
+
+**Commit (code):** 633bbb1 — "feat(FilterBar): add FilterBar + ActiveFilterChips with debounced search"
+
+### What I did
+
+- Created `FilterBar.tsx`: Op dropdown (from `useGetWorkflowOpsQuery`), Kind dropdown (static list), Content-Type dropdown (static list), debounced search via separate `onSearchChange` + `searchInputValue` props.
+- Created `ActiveFilterChips.tsx`: dismissible chips for each active filter + "Clear all" button.
+- Wired both into `ArtifactsPanel` — query params now include `opId`, `kind`, `contentType`, `search`.
+- Created stories for `FilterBar`, `ActiveFilterChips`, and updated `ArtifactsPanel` story.
+
+### Key decisions
+
+- **Debounce split**: `searchInputValue` (live, tracks what the user is typing) and `filters.search` (debounced, applied after 300ms). This avoids a controlled-input freeze — without it, the TextField would freeze at the last debounced value while the user is still typing.
+- **Op name map**: Built a `Record<opId, "Kind:shortId">` map so the Op filter shows readable names like `js:frontpage-extract` instead of raw IDs.
+- **Static dropdown lists**: Kind and Content-Type are hard-coded based on known artifact kinds in the codebase (`http-response-body`, `json-output`, etc.). A future ticket could make these dynamic from the API.
+
+### What was tricky to build
+
+The controlled input + debounce conflict. `FilterBar` takes `filters.search` as the `value` of the TextField (controlled). If `onSearchChange` fires immediately and updates `filters.search`, the TextField value would update on every keystroke — defeating the purpose of debouncing. The fix: `searchInputValue` tracks live typing separately, and only `filters.search` (updated after 300ms debounce) goes to the query.
+
+### What warrants a second pair of eyes
+
+The debounce lives in `ArtifactsPanel` but the search input is in `FilterBar`. This split means `FilterBar` needs two props (`searchInputValue` + `onSearchChange`) which slightly increases coupling. An alternative would be to move debounce logic into `FilterBar` itself. Fine for now but worth revisiting if the pattern grows.
+
+### What should be done in the future
+
+- N/A
+
+### Code review instructions
+
+Start at `FilterBar.tsx`. Verify the `searchInputValue` / `onSearchChange` split matches the comment. Verify `ArtifactsPanel` passes all four filter fields to `useGetWorkflowArtifactsQuery`. Validate: `cd web && npx tsc --noEmit`.
 
 ---
 

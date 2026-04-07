@@ -44,10 +44,10 @@
 - [x] Write full frontend UI design doc with ASCII screenshots and YAML component DSL.
 - [x] Add `getWorkflowArtifacts` RTK Query endpoint to `workflowApi.ts`.
 - [x] Create `ArtifactsPanel` component (two-panel split layout).
-- [ ] Create `FilterBar` component (op dropdown + kind + type + search).
+- [x] Create `FilterBar` component (op dropdown + kind + type + search).
 - [ ] Create `ArtifactTable` component (full-width table replacing list layout).
 - [ ] Create `ArtifactPreviewPanel` component (right-half preview).
-- [ ] Create `ActiveFilterChips` component (dismissible filter chips).
+- [x] Create `ActiveFilterChips` component (dismissible filter chips).
 - [ ] Create `BinaryFallbackView` component (icon + size + download for non-previewable).
 - [ ] Wire filter bar → query params → `refetch()`.
 - [ ] Add pagination controls to artifact table.

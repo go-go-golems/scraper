@@ -28,3 +28,12 @@ Step 2 (frontend): Add ArtifactsPanel skeleton + stories + wire into WorkflowDet
 
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/components/artifacts/ArtifactsPanel.tsx — Step 2 skeleton
 
+
+## 2026-04-07
+
+Step 3 (frontend): FilterBar with op/kind/type dropdowns + debounced search + ActiveFilterChips (commit 633bbb1)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/components/artifacts/FilterBar.tsx — Step 3 FilterBar
+
