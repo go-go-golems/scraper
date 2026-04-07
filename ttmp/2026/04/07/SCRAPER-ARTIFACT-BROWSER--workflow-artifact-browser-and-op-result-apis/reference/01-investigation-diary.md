@@ -214,6 +214,30 @@ I extended both service and server tests to verify:
 - preview hints are populated for HTML and JSON artifacts
 - query filtering by `opId` and `search` works as expected
 
+## Phase 2: Frontend UI design
+
+### What happened
+
+After the backend slice landed, I wrote the full frontend UI design as `design/02-artifact-browser-frontend-ui-design.md`.
+
+### What the design doc covers
+
+- 5 annotated ASCII screen screenshots (full browser view, HTML preview, image preview, binary fallback, empty state)
+- YAML DSL component hierarchy (`ArtifactsPanel` → `FilterBar` → `ArtifactTable` → `ArtifactPreviewPanel`)
+- Complete API mapping (endpoint → component → query param → state)
+- New RTK Query endpoint definition (`getWorkflowArtifacts`)
+- Implementation order: wire query → skeleton → filter bar → pagination → preview panel → bridge → stories
+- Component inventory: 7 new components, 4 existing components to reuse
+
+### Backend is done, frontend is not
+
+Confirmed by grep:
+- `GET /api/v1/workflows/{workflowID}/artifacts` — registered in `routes_engine.go`, handler in `engine.go`, service method in `service.go` ✅
+- `GET /api/v1/workflows/{workflowID}/ops/{opID}/result` — same ✅
+- `useGetWorkflowArtifactsQuery` in `workflowApi.ts` — **not present** ❌
+
+Frontend work is the remaining Phase 2. See `design/02-artifact-browser-frontend-ui-design.md` for the full spec.
+
 ## Bug: nil slice crash in OpResultTab
 
 ### What happened

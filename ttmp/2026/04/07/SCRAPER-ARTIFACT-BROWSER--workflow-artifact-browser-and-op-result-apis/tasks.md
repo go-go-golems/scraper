@@ -39,12 +39,22 @@
 - [x] Decide whether filtering is server-side, client-side, or hybrid for v1.
 - [x] Add pagination and filtering support if the browser needs it immediately.
 
-## Phase 3: UI Integration Preparation
+## Phase 3: Frontend UI Design
 
-- [ ] Add frontend API queries for workflow-level artifacts.
-- [ ] Keep artifact download by ID as the canonical body retrieval path.
-- [ ] Prepare the workflow page for a browser tab or drawer panel.
-- [ ] Add links from artifact rows back to the owning op.
+- [x] Write full frontend UI design doc with ASCII screenshots and YAML component DSL.
+- [ ] Add `getWorkflowArtifacts` RTK Query endpoint to `workflowApi.ts`.
+- [ ] Create `ArtifactsPanel` component (two-panel split layout).
+- [ ] Create `FilterBar` component (op dropdown + kind + type + search).
+- [ ] Create `ArtifactTable` component (full-width table replacing list layout).
+- [ ] Create `ArtifactPreviewPanel` component (right-half preview).
+- [ ] Create `ActiveFilterChips` component (dismissible filter chips).
+- [ ] Create `BinaryFallbackView` component (icon + size + download for non-previewable).
+- [ ] Wire filter bar → query params → `refetch()`.
+- [ ] Add pagination controls to artifact table.
+- [ ] Add "→ Op detail" bridge link from preview panel.
+- [ ] Add reverse bridge link in `OpResultTab` to open artifact browser filtered to current op.
+- [ ] Add Storybook stories for all new components.
+- [ ] Uploaded to reMarkable: `design/02-artifact-browser-frontend-ui-design.md` → `/ai/2026/04/07/SCRAPER-ARTIFACT-BROWSER`
 
 ## Phase 4: Validation And Docs
 
