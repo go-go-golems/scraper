@@ -13,6 +13,9 @@ export interface RuntimeEventsParams {
   site?: string;
   workerId?: string;
   limit?: number;
+  since?: string;
+  until?: string;
+  offset?: number;
 }
 
 export type RuntimeEventJson = JsonValue;
@@ -28,6 +31,9 @@ function buildRuntimeEventQuery(params: RuntimeEventsParams): string {
   if (params.site) searchParams.set('site', params.site);
   if (params.workerId) searchParams.set('workerId', params.workerId);
   if (params.limit) searchParams.set('limit', String(params.limit));
+  if (params.since) searchParams.set('since', params.since);
+  if (params.until) searchParams.set('until', params.until);
+  if (params.offset) searchParams.set('offset', String(params.offset));
   return `/runtime-events?${searchParams.toString()}`;
 }
 

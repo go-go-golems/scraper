@@ -11,7 +11,7 @@ import {
   type RuntimeEventsParams,
 } from '../../api/runtimeEventsApi';
 
-export type RuntimeEventConnectionState = 'connecting' | 'live' | 'error' | 'closed';
+export type RuntimeEventConnectionState = 'connecting' | 'live' | 'error' | 'closed' | 'paused';
 
 export interface RuntimeEventClientFilters {
   severity?: RuntimeEventSeverity | 'all';
@@ -71,6 +71,9 @@ export function buildRuntimeEventSearchParams(filters: RuntimeEventsParams): str
   if (filters.site) searchParams.set('site', filters.site);
   if (filters.workerId) searchParams.set('workerId', filters.workerId);
   if (filters.limit) searchParams.set('limit', String(filters.limit));
+  if (filters.since) searchParams.set('since', filters.since);
+  if (filters.until) searchParams.set('until', filters.until);
+  if (filters.offset) searchParams.set('offset', String(filters.offset));
 
   return searchParams.toString();
 }
@@ -83,6 +86,7 @@ export function useRuntimeEventFeed({
   const [allEvents, setAllEvents] = useState<RuntimeEventV1[]>([]);
   const [connectionState, setConnectionState] = useState<RuntimeEventConnectionState>(stream ? 'connecting' : 'closed');
   const [lastEventAt, setLastEventAt] = useState<number | null>(null);
+  const [paused, setPaused] = useState(false);
   const search = buildRuntimeEventSearchParams(serverFilters);
 
   const { data: recentRuntimeEvents = [], isLoading } = useGetRecentRuntimeEventsQuery(serverFilters);
@@ -90,6 +94,16 @@ export function useRuntimeEventFeed({
   const clearEvents = useCallback(() => {
     setAllEvents([]);
     setLastEventAt(null);
+  }, []);
+
+  const pause = useCallback(() => {
+    setPaused(true);
+    setConnectionState('paused');
+  }, []);
+
+  const resume = useCallback(() => {
+    setPaused(false);
+    setConnectionState('connecting');
   }, []);
 
   useEffect(() => {
@@ -112,8 +126,9 @@ export function useRuntimeEventFeed({
   }, [allEvents]);
 
   useEffect(() => {
-    if (!stream) {
-      setConnectionState('closed');
+    if (!stream || paused) {
+      if (paused) setConnectionState('paused');
+      else setConnectionState('closed');
       return undefined;
     }
 
@@ -160,5 +175,7 @@ export function useRuntimeEventFeed({
     connectionState,
     lastEventAt,
     clearEvents,
+    pause,
+    resume,
   };
 }
