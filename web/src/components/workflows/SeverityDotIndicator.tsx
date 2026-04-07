@@ -10,7 +10,12 @@ const severityColors: Record<string, string> = {
 };
 
 function severityLabel(level: SeverityLevel): string {
-  const map: Record<number, string> = { 0: 'DEBUG', 1: 'INFO', 2: 'WARN', 3: 'ERROR' };
+  const map: Record<number, string> = {
+    1: 'DEBUG',
+    2: 'INFO',
+    3: 'WARN',
+    4: 'ERROR',
+  };
   return map[level] ?? 'UNKNOWN';
 }
 

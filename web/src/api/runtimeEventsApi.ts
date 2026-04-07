@@ -76,10 +76,9 @@ export const runtimeEventsApi = createApi({
   baseQuery: fetchBaseQuery({ baseUrl: '/api/v1' }),
   tagTypes: ['RuntimeEvents'],
   endpoints: (builder) => ({
-    getRecentRuntimeEvents: builder.query<RuntimeEventV1[], RuntimeEventsParams>({
+    getRecentRuntimeEvents: builder.query<RuntimeEventJson[], RuntimeEventsParams>({
       query: (params) => buildRuntimeEventQuery(params),
-      transformResponse: (response: RuntimeEventsResponse) =>
-        response.events.map((json) => decodeRuntimeEvent(json)),
+      transformResponse: (response: RuntimeEventsResponse) => response.events,
       providesTags: ['RuntimeEvents'],
       keepUnusedDataFor: 30,
 
@@ -109,16 +108,16 @@ export const runtimeEventsApi = createApi({
 
         const onMessage = (event: MessageEvent<string>) => {
           try {
-            const decoded = decodeRuntimeEvent(JSON.parse(event.data));
+            const decoded = JSON.parse(event.data) as RuntimeEventJson;
             updateCachedData((draft) => {
               // Dedupe
-              const exists = draft.some((e) => e.id === decoded.id);
+              const exists = draft.some((e) => {
+                if (!e || typeof e !== 'object' || !decoded || typeof decoded !== 'object') {
+                  return false;
+                }
+                return 'id' in e && 'id' in decoded && e.id === decoded.id;
+              });
               if (!exists) draft.unshift(decoded);
-              // Sort newest-first
-              draft.sort(
-                (a, b) =>
-                  runtimeEventOccurredAtMillis(b) - runtimeEventOccurredAtMillis(a),
-              );
               // Trim to max
               if (draft.length > MAX_CACHED_EVENTS) {
                 draft.length = MAX_CACHED_EVENTS;

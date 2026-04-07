@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Card, CardContent, IconButton, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -17,7 +17,7 @@ import {
   useCancelWorkflowMutation,
 } from '../api/workflowApi';
 import { useGetScriptQuery } from '../api/catalogApi';
-import { useGetRecentRuntimeEventsQuery } from '../api/runtimeEventsApi';
+import { decodeRuntimeEvent, useGetRecentRuntimeEventsQuery } from '../api/runtimeEventsApi';
 import { useToast } from '../components/common/ToastProvider';
 
 export function WorkflowDetailPage() {
@@ -55,9 +55,22 @@ export function WorkflowDetailPage() {
     { site: siteName ?? '', path: scriptPath ?? '' },
     { skip: !siteName || !scriptPath },
   );
-  const { data: runtimeEvents = [], isLoading: runtimeEventsLoading } = useGetRecentRuntimeEventsQuery(
+  const { data: rawRuntimeEvents = [], isLoading: runtimeEventsLoading } = useGetRecentRuntimeEventsQuery(
     { workflowId, limit: 50 },
     { skip: !workflowId },
+  );
+  const runtimeEvents = useMemo(
+    () =>
+      rawRuntimeEvents
+        .map((event) => {
+          try {
+            return decodeRuntimeEvent(event);
+          } catch {
+            return null;
+          }
+        })
+        .filter((event): event is NonNullable<typeof event> => event !== null),
+    [rawRuntimeEvents],
   );
 
   const [retryOp, { isLoading: retryLoading }] = useRetryOpMutation();

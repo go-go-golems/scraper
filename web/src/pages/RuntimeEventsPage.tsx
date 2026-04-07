@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
-  Button,
   Card,
   CardContent,
   Chip,
@@ -18,7 +17,7 @@ import FilterListIcon from '@mui/icons-material/FilterList';
 import { RuntimeEventTable } from '../components/workflows/RuntimeEventTable';
 import { MultiSelectChipFilter, type MultiSelectOption } from '../components/common/MultiSelectChipFilter';
 import { TimeRangeSelector, type TimeRange } from '../components/common/TimeRangeSelector';
-import { useGetRecentRuntimeEventsQuery } from '../api/runtimeEventsApi';
+import { decodeRuntimeEvent, useGetRecentRuntimeEventsQuery } from '../api/runtimeEventsApi';
 import { runtimeEventOccurredAtMillis } from '../api/runtimeEventsApi';
 import {
   RuntimeEventSeverity,
@@ -95,7 +94,7 @@ export function RuntimeEventsPage() {
   const serverUntil = timeRange.mode === 'absolute' ? timeRange.to : undefined;
 
   // RTK Query — SSE managed by onCacheEntryAdded, pause via skip
-  const { data: events = [], isLoading, isError, isSuccess } = useGetRecentRuntimeEventsQuery(
+  const { data: rawEvents = [], isLoading, isError, isSuccess } = useGetRecentRuntimeEventsQuery(
     {
       workflowId: workflowId || undefined,
       opId: opId || undefined,
@@ -106,6 +105,21 @@ export function RuntimeEventsPage() {
       until: serverUntil,
     },
     { skip: paused },
+  );
+
+  const events = useMemo(
+    () =>
+      rawEvents
+        .map((event) => {
+          try {
+            return decodeRuntimeEvent(event);
+          } catch {
+            return null;
+          }
+        })
+        .filter((event): event is NonNullable<typeof event> => event !== null)
+        .sort((a, b) => runtimeEventOccurredAtMillis(b) - runtimeEventOccurredAtMillis(a)),
+    [rawEvents],
   );
 
   const connectionState: ConnectionState =

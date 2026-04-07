@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   Badge,
   Box,
@@ -27,7 +27,7 @@ import { OpExecutionLog } from '../logs/OpExecutionLog';
 import { ScriptTab } from '../scripts/ScriptTab';
 import { RetryOpButton } from './RetryOpButton';
 import { RuntimeEventTable } from './RuntimeEventTable';
-import { useGetRecentRuntimeEventsQuery } from '../../api/runtimeEventsApi';
+import { decodeRuntimeEvent, useGetRecentRuntimeEventsQuery } from '../../api/runtimeEventsApi';
 
 interface OpDetailDrawerProps {
   op: WorkflowOp | null;
@@ -94,7 +94,7 @@ export function OpDetailDrawer({
   const selectedSpec = op?.op;
   const runtimeTabActive = open && activeTab === 'runtime' && Boolean(selectedSpec);
   const {
-    data: opRuntimeEvents = [],
+    data: rawOpRuntimeEvents = [],
     isLoading: opRuntimeEventsLoading,
     isError: opRuntimeEventsError,
     isSuccess: opRuntimeEventsSuccess,
@@ -105,6 +105,19 @@ export function OpDetailDrawer({
       limit: 40,
     },
     { skip: !runtimeTabActive },
+  );
+  const opRuntimeEvents = useMemo(
+    () =>
+      rawOpRuntimeEvents
+        .map((event) => {
+          try {
+            return decodeRuntimeEvent(event);
+          } catch {
+            return null;
+          }
+        })
+        .filter((event): event is NonNullable<typeof event> => event !== null),
+    [rawOpRuntimeEvents],
   );
 
   const runtimeConnectionState: ConnectionState =

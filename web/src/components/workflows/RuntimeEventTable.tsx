@@ -15,7 +15,6 @@ import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import type { RuntimeEventV1 } from '../../pb/proto/scraper/runtime/v1/events_pb';
 import {
   RuntimeEventKind,
-  RuntimeEventSeverity,
   RuntimeEventSource,
 } from '../../pb/proto/scraper/runtime/v1/events_pb';
 import { SeverityDotIndicator } from './SeverityDotIndicator';
