@@ -222,6 +222,11 @@ export function WorkflowDetailPage() {
             <ArtifactsPanel
               workflowId={workflowId}
               initialOpIdFilter={artifactFilterOpId ?? undefined}
+              onOpClick={(opId) => {
+                setSelectedOpId(opId);
+                setDrawerOpen(true);
+                setArtifactBodies({});
+              }}
             />
           </CardContent>
         )}

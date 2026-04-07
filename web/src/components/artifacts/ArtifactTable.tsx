@@ -1,6 +1,7 @@
 import {
   Box,
   IconButton,
+  Link,
   Table,
   TableBody,
   TableCell,
@@ -23,6 +24,8 @@ interface ArtifactTableProps {
   artifacts: ArtifactSummary[];
   selectedId: string | null;
   onSelectArtifact: (id: string) => void;
+  /** Navigate to the Ops tab and open OpDetailDrawer for this op */
+  onOpClick?: (opId: string) => void;
   opNameMap: Record<string, string>; // opId → display name
 }
 
@@ -61,7 +64,7 @@ function KindChip({ kind }: { kind: string }) {
   );
 }
 
-export function ArtifactTable({ artifacts, selectedId, onSelectArtifact, opNameMap }: ArtifactTableProps) {
+export function ArtifactTable({ artifacts, selectedId, onSelectArtifact, onOpClick, opNameMap }: ArtifactTableProps) {
   return (
     <TableContainer>
       <Table size="small" sx={{ minWidth: 600 }}>
@@ -108,23 +111,47 @@ export function ArtifactTable({ artifacts, selectedId, onSelectArtifact, opNameM
                 </Box>
               </TableCell>
 
-              {/* Op */}
+              {/* Op — click to open OpDetailDrawer */}
               <TableCell>
                 <Tooltip title={artifact.opID} placement="top-start">
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      fontFamily: 'monospace',
-                      color: 'primary.main',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      display: 'block',
-                      maxWidth: '100%',
-                    }}
-                  >
-                    {opNameMap[artifact.opID] ?? artifact.opID}
-                  </Typography>
+                  {onOpClick ? (
+                    <Link
+                      component="button"
+                      variant="caption"
+                      sx={{
+                        fontFamily: 'monospace',
+                        color: 'primary.main',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        display: 'block',
+                        maxWidth: '100%',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpClick(artifact.opID);
+                      }}
+                    >
+                      {opNameMap[artifact.opID] ?? artifact.opID}
+                    </Link>
+                  ) : (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontFamily: 'monospace',
+                        color: 'primary.main',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        display: 'block',
+                        maxWidth: '100%',
+                      }}
+                    >
+                      {opNameMap[artifact.opID] ?? artifact.opID}
+                    </Typography>
+                  )}
                 </Tooltip>
               </TableCell>
 

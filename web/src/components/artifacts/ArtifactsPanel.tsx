@@ -15,6 +15,8 @@ interface ArtifactsPanelProps {
   /** When set (from OpResultTab bridge), pre-fill the Op filter and show only
    *  artifacts from this op. Cleared when the user switches back to the Ops tab. */
   initialOpIdFilter?: string;
+  /** Navigate to the Ops tab and open OpDetailDrawer for this op */
+  onOpClick?: (opId: string) => void;
 }
 
 // NOTE: Step 4 complete. ArtifactTable + pagination wired.
@@ -37,7 +39,7 @@ function buildOpNameMap(ops: WorkflowOp[]): Record<string, string> {
   return result;
 }
 
-export function ArtifactsPanel({ workflowId, initialOpIdFilter }: ArtifactsPanelProps) {
+export function ArtifactsPanel({ workflowId, initialOpIdFilter, onOpClick }: ArtifactsPanelProps) {
   const [page, setPage] = useState(0);
   const [previewVisible, setPreviewVisible] = useState(true); // Step 5: preview panel visible
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
@@ -202,6 +204,7 @@ export function ArtifactsPanel({ workflowId, initialOpIdFilter }: ArtifactsPanel
               setSelectedArtifactId(id);
               if (!previewVisible) setPreviewVisible(true);
             }}
+            onOpClick={onOpClick}
             opNameMap={opNameMap}
           />
         ) : !hasActiveFilters ? (
