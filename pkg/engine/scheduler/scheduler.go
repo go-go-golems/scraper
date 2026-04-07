@@ -550,7 +550,7 @@ func classifyRunError(err error, now time.Time) model.OpError {
 
 func (s *Scheduler) emit(ctx context.Context, event Event) {
 	switch event.Kind {
-	case EventIdle:
+	case EventIdle, EventQueueRateLimited:
 		log.Trace().
 			Str("event", string(event.Kind)).
 			Str("workflow_id", string(event.WorkflowID)).
