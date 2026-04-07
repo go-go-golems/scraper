@@ -1,5 +1,9 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { WorkflowRun } from './types';
+import { engineApi } from './engineApi';
+import { queueApi } from './queueApi';
+import { runtimeEventsApi } from './runtimeEventsApi';
+import { workflowApi } from './workflowApi';
 
 interface SubmitRequest {
   site: string;
@@ -26,6 +30,25 @@ export const submissionApi = createApi({
         method: 'POST',
         body: { workflowID: workflowId, values },
       }),
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled;
+          const submittedWorkflowId = data.workflow.ID;
+
+          dispatch(engineApi.util.invalidateTags(['EngineStatus']));
+          dispatch(queueApi.util.invalidateTags(['QueueStatus']));
+          dispatch(runtimeEventsApi.util.invalidateTags(['RuntimeEvents']));
+          dispatch(
+            workflowApi.util.invalidateTags([
+              { type: 'WorkflowList', id: 'LIST' },
+              { type: 'Workflow', id: submittedWorkflowId },
+              { type: 'WorkflowOps', id: submittedWorkflowId },
+            ]),
+          );
+        } catch {
+          // no cache invalidation on failed submission
+        }
+      },
     }),
   }),
 });

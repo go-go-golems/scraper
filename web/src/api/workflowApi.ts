@@ -1,5 +1,8 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { WorkflowListItem, WorkflowSummary, WorkflowOp, OpResult, ArtifactSummary } from './types';
+import { engineApi } from './engineApi';
+import { queueApi } from './queueApi';
+import { runtimeEventsApi } from './runtimeEventsApi';
 
 interface ListWorkflowsParams {
   site?: string;
@@ -16,7 +19,7 @@ interface ListWorkflowsResponse {
 export const workflowApi = createApi({
   reducerPath: 'workflowApi',
   baseQuery: fetchBaseQuery({ baseUrl: '/api/v1' }),
-  tagTypes: ['WorkflowList', 'Workflow', 'WorkflowOps'],
+  tagTypes: ['WorkflowList', 'Workflow', 'WorkflowOps', 'OpResult', 'OpArtifacts'],
   endpoints: (builder) => ({
     listWorkflows: builder.query<ListWorkflowsResponse, ListWorkflowsParams>({
       query: (params) => {
@@ -27,7 +30,10 @@ export const workflowApi = createApi({
         if (params.offset) searchParams.set('offset', String(params.offset));
         return `/workflows?${searchParams.toString()}`;
       },
-      providesTags: ['WorkflowList'],
+      providesTags: (result) => [
+        { type: 'WorkflowList', id: 'LIST' },
+        ...(result?.workflows.map(({ workflow }) => ({ type: 'Workflow' as const, id: workflow.ID })) ?? []),
+      ],
     }),
     getWorkflow: builder.query<WorkflowSummary, string>({
       query: (id) => `/workflows/${id}`,
@@ -41,24 +47,56 @@ export const workflowApi = createApi({
     }),
     getOpResult: builder.query<OpResult | null, { workflowId: string; opId: string }>({
       query: ({ workflowId, opId }) => `/workflows/${workflowId}/ops/${opId}/result`,
+      providesTags: (_result, _error, { workflowId, opId }) => [{ type: 'OpResult', id: `${workflowId}:${opId}` }],
     }),
     getOpArtifacts: builder.query<ArtifactSummary[], { wfId: string; opId: string }>({
       query: ({ wfId, opId }) => `/workflows/${wfId}/ops/${opId}/artifacts`,
       transformResponse: (response: { artifacts: ArtifactSummary[] }) => response.artifacts,
+      providesTags: (_result, _error, { wfId, opId }) => [{ type: 'OpArtifacts', id: `${wfId}:${opId}` }],
     }),
     retryOp: builder.mutation<void, { wfId: string; opId: string }>({
       query: ({ wfId, opId }) => ({
         url: `/workflows/${wfId}/ops/${opId}:retry`,
         method: 'POST',
       }),
-      invalidatesTags: ['WorkflowOps'],
+      invalidatesTags: (_result, _error, { wfId, opId }) => [
+        { type: 'WorkflowList', id: 'LIST' },
+        { type: 'Workflow', id: wfId },
+        { type: 'WorkflowOps', id: wfId },
+        { type: 'OpResult', id: `${wfId}:${opId}` },
+        { type: 'OpArtifacts', id: `${wfId}:${opId}` },
+      ],
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(engineApi.util.invalidateTags(['EngineStatus']));
+          dispatch(queueApi.util.invalidateTags(['QueueStatus']));
+          dispatch(runtimeEventsApi.util.invalidateTags(['RuntimeEvents']));
+        } catch {
+          // no cache invalidation on failed retry
+        }
+      },
     }),
     cancelWorkflow: builder.mutation<void, string>({
       query: (wfId) => ({
         url: `/workflows/${wfId}:cancel`,
         method: 'POST',
       }),
-      invalidatesTags: ['Workflow', 'WorkflowList'],
+      invalidatesTags: (_result, _error, wfId) => [
+        { type: 'WorkflowList', id: 'LIST' },
+        { type: 'Workflow', id: wfId },
+        { type: 'WorkflowOps', id: wfId },
+      ],
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(engineApi.util.invalidateTags(['EngineStatus']));
+          dispatch(queueApi.util.invalidateTags(['QueueStatus']));
+          dispatch(runtimeEventsApi.util.invalidateTags(['RuntimeEvents']));
+        } catch {
+          // no cache invalidation on failed cancellation
+        }
+      },
     }),
   }),
 });
