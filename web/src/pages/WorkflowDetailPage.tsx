@@ -9,6 +9,7 @@ import { OpDetailDrawer } from '../components/workflows/OpDetailDrawer';
 import { RuntimeEventTable } from '../components/workflows/RuntimeEventTable';
 import { CancelWorkflowButton } from '../components/workflows/CancelWorkflowButton';
 import { ArtifactsPanel } from '../components/artifacts/ArtifactsPanel';
+import { ResultsPanel } from '../components/results/ResultsPanel';
 import {
   useGetWorkflowQuery,
   useGetWorkflowOpsQuery,
@@ -27,10 +28,10 @@ export function WorkflowDetailPage() {
   const [selectedOpId, setSelectedOpId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [artifactBodies, setArtifactBodies] = useState<Record<string, string>>({});
-  // Bridge: activeTab controls whether Ops table or Artifacts panel is shown.
-  const [activeTab, setActiveTab] = useState<'ops' | 'artifacts'>('ops');
-  // Bridge: when navigating from OpResultTab → artifact browser, pre-fill the opId filter.
+  const [activeTab, setActiveTab] = useState<'ops' | 'artifacts' | 'results'>('ops');
+  // Bridge: when navigating from OpResultTab → artifact/results browser, pre-fill the opId filter.
   const [artifactFilterOpId, setArtifactFilterOpId] = useState<string | null>(null);
+  const [resultFilterOpId, setResultFilterOpId] = useState<string | null>(null);
 
   const { data: workflow, isLoading: workflowLoading } = useGetWorkflowQuery(workflowId!, {
     skip: !workflowId,
@@ -191,18 +192,19 @@ export function WorkflowDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Ops / Artifacts tab — Step 6 bridge */}
+      {/* Ops / Results / Artifacts tab */}
       <Card>
         <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 1 }}>
           <Tabs
             value={activeTab}
             onChange={(_e, v) => {
               setActiveTab(v);
-              if (v === 'ops') setArtifactFilterOpId(null);
+              if (v === 'ops') { setArtifactFilterOpId(null); setResultFilterOpId(null); }
             }}
             sx={{ minHeight: 40 }}
           >
             <Tab value="ops" label="Ops" sx={{ minHeight: 40 }} />
+            <Tab value="results" label="Results" sx={{ minHeight: 40 }} />
             <Tab value="artifacts" label="Artifacts" sx={{ minHeight: 40 }} />
           </Tabs>
         </Box>
@@ -213,6 +215,19 @@ export function WorkflowDetailPage() {
               ops={ops ?? []}
               selectedOpId={selectedOpId}
               onSelectOp={handleSelectOp}
+            />
+          </CardContent>
+        )}
+
+        {activeTab === 'results' && (
+          <CardContent>
+            <ResultsPanel
+              workflowId={workflowId}
+              initialOpIdFilter={resultFilterOpId ?? undefined}
+              onOpClick={(opId) => {
+                setSelectedOpId(opId);
+                setDrawerOpen(true);
+              }}
             />
           </CardContent>
         )}
