@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AppErrorBoundary } from './components/common/AppErrorBoundary';
 import { AppShell } from './components/layout/AppShell';
 import { EngineOverviewPage } from './pages/EngineOverviewPage';
 import { WorkflowsPage } from './pages/WorkflowsPage';
@@ -12,7 +13,8 @@ import { RuntimeEventsPage } from './pages/RuntimeEventsPage';
 function App() {
   return (
     <BrowserRouter>
-      <AppShell>
+      <AppErrorBoundary>
+        <AppShell>
         <Routes>
           <Route path="/" element={<EngineOverviewPage />} />
           <Route path="/workflows" element={<WorkflowsPage />} />
@@ -23,7 +25,8 @@ function App() {
           <Route path="/sites/:siteName" element={<SiteDetailPage />} />
           <Route path="/submit" element={<SubmitWorkflowPage />} />
         </Routes>
-      </AppShell>
+        </AppShell>
+      </AppErrorBoundary>
     </BrowserRouter>
   );
 }
