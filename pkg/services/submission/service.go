@@ -2,10 +2,12 @@ package submission
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	runtimev1 "github.com/go-go-golems/scraper/gen/proto/scraper/runtime/v1"
 	"github.com/go-go-golems/scraper/pkg/engine/model"
+	"github.com/go-go-golems/scraper/pkg/metrics"
 	"github.com/go-go-golems/scraper/pkg/runtimeevents"
 	"github.com/go-go-golems/scraper/pkg/services/catalog"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
@@ -33,13 +35,15 @@ type Service struct {
 	siteRegistry *siteregistry.Registry
 	catalog      *catalog.Service
 	events       *runtimeevents.Publisher
+	metrics      *metrics.Registry
 }
 
-func NewService(siteRegistry *siteregistry.Registry, events *runtimeevents.Publisher) *Service {
+func NewService(siteRegistry *siteregistry.Registry, events *runtimeevents.Publisher, metricsRegistry *metrics.Registry) *Service {
 	return &Service{
 		siteRegistry: siteRegistry,
 		catalog:      catalog.NewService(siteRegistry),
 		events:       events,
+		metrics:      metricsRegistry,
 	}
 }
 
@@ -49,15 +53,18 @@ func (s *Service) Submit(ctx context.Context, request Request) (*Response, error
 	}
 	verbSummary, verb, command, def, err := s.catalog.GetVerb(request.Site, request.Verb)
 	if err != nil {
+		s.observeFailure(request.Site, request.Verb, err)
 		return nil, err
 	}
 	parsedValues, err := ValuesFromRequest(command.Description(), request.Values, request.Sections)
 	if err != nil {
+		s.observeFailure(request.Site, request.Verb, err)
 		return nil, err
 	}
 
 	siteVerbs, err := submitverbs.LoadSiteVerbs(def)
 	if err != nil {
+		s.observeFailure(request.Site, request.Verb, err)
 		return nil, err
 	}
 	host := submitverbs.NewHost(s.siteRegistry, def, siteVerbs.Registry, s.events)
@@ -67,9 +74,11 @@ func (s *Service) Submit(ctx context.Context, request Request) (*Response, error
 		WorkflowID: request.WorkflowID,
 	})
 	if err != nil {
+		s.observeFailure(request.Site, request.Verb, err)
 		return nil, err
 	}
 	result.CommandPath = verbSummary.CommandPath
+	s.metrics.ObserveSubmissionAccepted(string(request.Site), request.Verb)
 	_ = runtimeevents.EmitSimpleEvent(s.events, &runtimev1.RuntimeEventV1{
 		Source:     runtimev1.RuntimeEventSource_RUNTIME_EVENT_SOURCE_SUBMISSION,
 		Component:  "submission-service",
@@ -94,4 +103,20 @@ func (s *Service) Submit(ctx context.Context, request Request) (*Response, error
 		CommandPath: verbSummary.CommandPath,
 		Result:      result,
 	}, nil
+}
+
+func (s *Service) observeFailure(site model.SiteName, verb string, err error) {
+	if s == nil || s.metrics == nil {
+		return
+	}
+	errorCode := "internal_error"
+	var notFound *catalog.NotFoundError
+	var validation *ValidationError
+	switch {
+	case errors.As(err, &notFound):
+		errorCode = "not_found"
+	case errors.As(err, &validation):
+		errorCode = "validation_error"
+	}
+	s.metrics.ObserveSubmissionFailure(string(site), verb, errorCode)
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	runtimev1 "github.com/go-go-golems/scraper/gen/proto/scraper/runtime/v1"
 	"github.com/go-go-golems/scraper/pkg/api/handlers"
+	"github.com/go-go-golems/scraper/pkg/metrics"
 	"github.com/go-go-golems/scraper/pkg/runtimeevents"
 	"github.com/go-go-golems/scraper/pkg/services/catalog"
 	"github.com/go-go-golems/scraper/pkg/services/engineview"
@@ -44,8 +45,17 @@ func New(cfg Config, siteRegistry *siteregistry.Registry) (*http.Server, error) 
 	}
 
 	catalogService := catalog.NewService(siteRegistry)
-	submissionService := submission.NewService(siteRegistry, eventPublisher)
 	engineService := engineview.NewService(cfg.EngineDB)
+	metricsRegistry, err := metrics.NewRegistry()
+	if err != nil {
+		_ = eventResources.Close()
+		return nil, err
+	}
+	if err := metricsRegistry.RegisterCollector(metrics.NewSnapshotCollector(engineService, 2*time.Second)); err != nil {
+		_ = eventResources.Close()
+		return nil, err
+	}
+	submissionService := submission.NewService(siteRegistry, eventPublisher, metricsRegistry)
 
 	catalogHandler := handlers.NewCatalogHandler(catalogService, cfg.Version, cfg.Address, cfg.EngineDB, cfg.SitesDir)
 	submissionHandler := handlers.NewSubmissionHandler(submissionService, cfg.EngineDB, cfg.SitesDir, eventPublisher)
@@ -54,6 +64,7 @@ func New(cfg Config, siteRegistry *siteregistry.Registry) (*http.Server, error) 
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", catalogHandler.Healthz)
+	mux.Handle("GET /metrics", metricsRegistry.Handler())
 	mux.HandleFunc("GET /api/v1/info", catalogHandler.Info)
 	mux.HandleFunc("GET /api/v1/sites", catalogHandler.Sites)
 	mux.HandleFunc("GET /api/v1/sites/{site}", catalogHandler.Site)
@@ -107,7 +118,7 @@ func New(cfg Config, siteRegistry *siteregistry.Registry) (*http.Server, error) 
 
 	server := &http.Server{
 		Addr:         cfg.Address,
-		Handler:      requestLogger(mux, eventPublisher),
+		Handler:      requestLogger(mux, eventPublisher, metricsRegistry),
 		ReadTimeout:  cfg.ReadTimeout,
 		WriteTimeout: cfg.WriteTimeout,
 	}
@@ -120,7 +131,7 @@ func New(cfg Config, siteRegistry *siteregistry.Registry) (*http.Server, error) 
 	return server, nil
 }
 
-func requestLogger(next http.Handler, eventPublisher *runtimeevents.Publisher) http.Handler {
+func requestLogger(next http.Handler, eventPublisher *runtimeevents.Publisher, metricsRegistry *metrics.Registry) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := r.Header.Get("X-Request-Id")
 		if requestID == "" {
@@ -145,6 +156,11 @@ func requestLogger(next http.Handler, eventPublisher *runtimeevents.Publisher) h
 		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
 		duration := time.Since(started)
+		route := r.Pattern
+		if route == "" {
+			route = r.URL.Path
+		}
+		metricsRegistry.ObserveHTTPRequest(r.Method, route, recorder.status, duration)
 
 		_ = runtimeevents.EmitSimpleEvent(eventPublisher, &runtimev1.RuntimeEventV1{
 			Source:    runtimev1.RuntimeEventSource_RUNTIME_EVENT_SOURCE_REQUEST,

@@ -66,6 +66,8 @@ func TestRootWorkerRunHelpIncludesHTTPProxyFlag(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, stdout.String(), "--http-proxy")
 	require.Contains(t, stdout.String(), "--http-timeout")
+	require.Contains(t, stdout.String(), "--metrics-address")
+	require.Contains(t, stdout.String(), "--metrics-path")
 }
 
 func TestRootHelpLoadsEmbeddedHTTPAPIDoc(t *testing.T) {

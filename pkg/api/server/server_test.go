@@ -76,6 +76,18 @@ func TestServerHealthAndCatalogEndpoints(t *testing.T) {
 		require.NotEmpty(t, payload.Sites)
 	})
 
+	t.Run("metrics", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/metrics")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Contains(t, string(body), "scraper_http_requests_total")
+		require.Contains(t, string(body), "scraper_engine_workflows_total")
+	})
+
 	t.Run("verb details", func(t *testing.T) {
 		resp, err := http.Get(ts.URL + "/api/v1/sites/js-demo/verbs/seed")
 		require.NoError(t, err)

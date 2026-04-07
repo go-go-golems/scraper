@@ -14,6 +14,7 @@ import (
 	"github.com/go-go-golems/scraper/pkg/engine/runner"
 	"github.com/go-go-golems/scraper/pkg/engine/scheduler"
 	sqlitestore "github.com/go-go-golems/scraper/pkg/engine/store/sqlite"
+	"github.com/go-go-golems/scraper/pkg/metrics"
 	"github.com/go-go-golems/scraper/pkg/runtimeevents"
 	sitemigrate "github.com/go-go-golems/scraper/pkg/sites/migrate"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
@@ -53,6 +54,7 @@ func newDefaultRunnerRegistry(
 	siteRegistry *siteregistry.Registry,
 	httpConfig config.HTTP,
 	eventPublisher *runtimeevents.Publisher,
+	metricsRegistry *metrics.Registry,
 	component string,
 	workerID string,
 ) (*runner.Registry, error) {
@@ -61,10 +63,10 @@ func newDefaultRunnerRegistry(
 	if err != nil {
 		return nil, err
 	}
-	if err := runners.Register(runtimeevents.WrapRunner(httpRunner, eventPublisher, component, workerID)); err != nil {
+	if err := runners.Register(runtimeevents.WrapRunner(metrics.WrapRunner(httpRunner, metricsRegistry), eventPublisher, component, workerID)); err != nil {
 		return nil, err
 	}
-	if err := runners.Register(runtimeevents.WrapRunner(runner.NewJSRunner(siteRegistry), eventPublisher, component, workerID)); err != nil {
+	if err := runners.Register(runtimeevents.WrapRunner(metrics.WrapRunner(runner.NewJSRunner(siteRegistry), metricsRegistry), eventPublisher, component, workerID)); err != nil {
 		return nil, err
 	}
 	return runners, nil
@@ -126,17 +128,19 @@ type schedulerRunner interface {
 	RunOnce(ctx context.Context) (*scheduler.CycleResult, error)
 }
 
-func runSchedulerCycles(ctx context.Context, s schedulerRunner, pollInterval time.Duration, maxCycles int) (*workerLoopResult, error) {
+func runSchedulerCycles(ctx context.Context, s schedulerRunner, pollInterval time.Duration, maxCycles int, metricsRegistry *metrics.Registry, workerID string) (*workerLoopResult, error) {
 	ret := &workerLoopResult{}
 	for {
 		if maxCycles > 0 && ret.Cycles >= maxCycles {
 			return ret, nil
 		}
 
+		cycleStarted := time.Now()
 		result, err := s.RunOnce(ctx)
 		if err != nil {
 			return nil, err
 		}
+		metricsRegistry.ObserveSchedulerCycle(workerID, time.Since(cycleStarted))
 
 		ret.Cycles++
 		ret.Refreshed += result.Refreshed

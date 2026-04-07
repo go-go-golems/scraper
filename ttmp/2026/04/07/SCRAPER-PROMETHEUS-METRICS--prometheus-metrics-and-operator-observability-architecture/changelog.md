@@ -10,3 +10,10 @@
 - Related the design doc to the main server, worker, engine, runner, and queue UI files.
 - Ran `docmgr doctor --ticket SCRAPER-PROMETHEUS-METRICS --stale-after 30` successfully.
 - Uploaded the bundled report to reMarkable at `/ai/2026/04/07/SCRAPER-PROMETHEUS-METRICS`.
+- Implemented the first backend metrics slice:
+  - added `pkg/metrics` with an explicit Prometheus registry, request/submission/scheduler/runner metrics, and snapshot collectors,
+  - exposed `/metrics` on the API server,
+  - added worker `--metrics-address` and `--metrics-path` flags plus a scrapeable worker metrics listener,
+  - instrumented submission, scheduler, and runner paths,
+  - added focused metrics tests and `/metrics` handler coverage.
+- Deferred queue wait histograms, failure counters by stable error code, and compose/Grafana wiring to the next slice.

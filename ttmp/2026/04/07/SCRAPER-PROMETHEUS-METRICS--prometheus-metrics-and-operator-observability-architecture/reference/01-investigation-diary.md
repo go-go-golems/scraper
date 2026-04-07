@@ -118,3 +118,74 @@ remarquee cloud ls '/ai/2026/04/07/SCRAPER-PROMETHEUS-METRICS/' --long --non-int
 ### Related
 
 - Main design guide: [../design-doc/01-prometheus-metrics-architecture-and-implementation-guide-for-operator-observability.md](../design-doc/01-prometheus-metrics-architecture-and-implementation-guide-for-operator-observability.md)
+
+## 2026-04-07 Implementation Slice 1
+
+### Goal
+
+Land the first usable Prometheus implementation slice without touching the frontend: create a reusable metrics package, expose API-server metrics, expose worker metrics, and instrument the main request/submission/scheduler/runner paths.
+
+### What I changed
+
+I added a new `pkg/metrics` package with:
+
+- an explicit custom Prometheus registry,
+- request counters and duration histograms,
+- submission counters,
+- scheduler counters and duration histograms,
+- generic op-duration metrics,
+- HTTP-runner-specific counters and duration histograms,
+- worker liveness gauge,
+- a scrape-time snapshot collector that exports engine and queue gauges from `engineview.Service`.
+
+I then wired that into:
+
+- the API server in `pkg/api/server/server.go`,
+- the submission service in `pkg/services/submission/service.go`,
+- the runner registry setup in `pkg/cmd/runtime_helpers.go`,
+- the worker command in `pkg/cmd/worker.go`,
+- the scheduler event model in `pkg/engine/scheduler/scheduler.go`.
+
+### Why I chose this shape
+
+I used an explicit custom registry instead of the default global Prometheus registry because:
+
+- it keeps tests cleaner,
+- it avoids accidental duplicate registrations across repeated server construction in tests,
+- it makes it easier to reason about which collectors belong to which process.
+
+I used a scrape-time snapshot collector for engine and queue gauges because the application already has trustworthy read paths for that data. That is simpler and less drift-prone than trying to manually increment and decrement many gauges throughout the code.
+
+### Tricky parts
+
+- The worker is not already an HTTP service, so metrics exposure needed a small sidecar HTTP server inside the worker command rather than just adding a handler.
+- Scheduler event metrics needed runner kind for leased/retried ops, so I extended `scheduler.Event` with `RunnerKind` and set it from the leased op’s kind.
+- HTTP runner metrics could not be added directly in the runner package via a metrics dependency because that would create an import cycle. I solved that by instrumenting through the generic metrics runner wrapper and extracting HTTP status-class information from the op result envelope.
+- Queue wait histograms are not cleanly available from the current store interface, so I explicitly left that for a follow-up slice instead of guessing.
+
+### Validation performed
+
+Commands run:
+
+```bash
+cd /home/manuel/workspaces/2026-03-23/js-scraper/scraper
+gofmt -w pkg/metrics/*.go pkg/api/server/server.go pkg/services/submission/service.go pkg/cmd/runtime_helpers.go pkg/cmd/worker.go pkg/engine/scheduler/scheduler.go pkg/api/server/server_test.go pkg/cmd/root_test.go
+go test ./pkg/metrics ./pkg/api/server ./pkg/services/submission ./pkg/cmd ./pkg/engine/scheduler ./pkg/engine/runner -count=1
+go test ./pkg/metrics ./pkg/api/server ./pkg/cmd -count=1
+```
+
+Results:
+
+- all targeted package tests passed,
+- `/metrics` endpoint coverage was added in `pkg/api/server/server_test.go`,
+- worker help coverage was updated in `pkg/cmd/root_test.go`.
+
+### What is still pending after this slice
+
+- queue wait histogram design and implementation,
+- stable failure counters by error code/category in scheduler-level metrics,
+- worker metrics smoke test,
+- full `go test ./... -count=1`,
+- Prometheus and Grafana compose wiring,
+- local scrape-health runbook,
+- any frontend integration.

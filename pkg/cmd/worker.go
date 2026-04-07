@@ -1,13 +1,18 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"net"
+	"net/http"
 	"time"
 
 	"github.com/go-go-golems/scraper/pkg/engine/config"
 	"github.com/go-go-golems/scraper/pkg/engine/scheduler"
+	"github.com/go-go-golems/scraper/pkg/metrics"
 	"github.com/go-go-golems/scraper/pkg/runtimeevents"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
@@ -21,6 +26,8 @@ type workerCommandOptions struct {
 	httpTimeout   time.Duration
 	httpProxy     string
 	maxCycles     int
+	metricsAddr   string
+	metricsPath   string
 	runtimeEvents runtimeEventOptions
 }
 
@@ -81,8 +88,14 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 			defer func() { _ = eventResources.Close() }()
 
 			eventPublisher := eventResources.EventPublisher()
+			metricsRegistry, err := metrics.NewRegistry()
+			if err != nil {
+				return err
+			}
+			metricsRegistry.SetWorkerUp(options.workerID, true)
+			defer metricsRegistry.SetWorkerUp(options.workerID, false)
 
-			runners, err := newDefaultRunnerRegistry(siteRegistry, cfg.HTTP, eventPublisher, "worker-runner", options.workerID)
+			runners, err := newDefaultRunnerRegistry(siteRegistry, cfg.HTTP, eventPublisher, metricsRegistry, "worker-runner", options.workerID)
 			if err != nil {
 				return err
 			}
@@ -90,17 +103,34 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 			siteDBs := newSiteDBProvider(siteRegistry, options.sitesDir)
 			defer func() { _ = siteDBs.Close() }()
 
+			observer := composeSchedulerObservers(
+				runtimeevents.NewSchedulerObserver(eventPublisher, "worker-scheduler", options.workerID),
+				metrics.NewSchedulerObserver(metricsRegistry),
+			)
+
 			s, err := scheduler.New(store, runners, scheduler.Config{
 				MaxWorkers:           options.maxWorkers,
 				PollInterval:         options.pollInterval,
 				DefaultLeaseDuration: options.leaseDuration,
-			}, options.workerID, runtimeevents.NewSchedulerObserver(eventPublisher, "worker-scheduler", options.workerID))
+			}, options.workerID, observer)
 			if err != nil {
 				return err
 			}
 			setSchedulerSiteRuntime(s, siteRegistry, scraperDB, siteDBs.QueryExecer)
 
-			result, err := runSchedulerCycles(ctx, s, options.pollInterval, options.maxCycles)
+			metricsServer, err := maybeStartWorkerMetricsServer(ctx, options.metricsAddr, options.metricsPath, metricsRegistry)
+			if err != nil {
+				return err
+			}
+			if metricsServer != nil {
+				defer func() {
+					shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					defer cancel()
+					_ = metricsServer.Shutdown(shutdownCtx)
+				}()
+			}
+
+			result, err := runSchedulerCycles(ctx, s, options.pollInterval, options.maxCycles, metricsRegistry, options.workerID)
 			if err != nil {
 				return err
 			}
@@ -127,8 +157,58 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 	runCmd.Flags().DurationVar(&options.httpTimeout, "http-timeout", 15*time.Second, "HTTP timeout used by worker-side http/fetch ops")
 	runCmd.Flags().StringVar(&options.httpProxy, "http-proxy", "", "Explicit HTTP proxy URL used by worker-side http/fetch ops")
 	runCmd.Flags().IntVar(&options.maxCycles, "max-cycles", 0, "Maximum scheduler cycles to execute before exiting (0 means keep polling)")
+	runCmd.Flags().StringVar(&options.metricsAddr, "metrics-address", "", "Optional address for exposing worker Prometheus metrics, for example 127.0.0.1:9091")
+	runCmd.Flags().StringVar(&options.metricsPath, "metrics-path", "/metrics", "HTTP path used by the worker Prometheus metrics listener")
 	addRuntimeEventFlags(runCmd, &options.runtimeEvents, false, false)
 
 	cmd.AddCommand(runCmd)
 	return cmd
+}
+
+func composeSchedulerObservers(observers ...scheduler.Observer) scheduler.Observer {
+	filtered := make([]scheduler.Observer, 0, len(observers))
+	for _, observer := range observers {
+		if observer != nil {
+			filtered = append(filtered, observer)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return scheduler.ObserverFunc(func(ctx context.Context, event scheduler.Event) {
+		for _, observer := range filtered {
+			observer.OnSchedulerEvent(ctx, event)
+		}
+	})
+}
+
+func maybeStartWorkerMetricsServer(ctx context.Context, addr string, path string, metricsRegistry *metrics.Registry) (*http.Server, error) {
+	if addr == "" || metricsRegistry == nil {
+		return nil, nil
+	}
+	if path == "" {
+		path = "/metrics"
+	}
+	mux := http.NewServeMux()
+	mux.Handle(path, metricsRegistry.Handler())
+	server := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+	}()
+	go func() {
+		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+			log.Warn().Err(err).Str("component", "worker-metrics").Str("address", addr).Msg("worker metrics server stopped")
+		}
+	}()
+	return server, nil
 }

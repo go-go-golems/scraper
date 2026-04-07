@@ -9,89 +9,89 @@
 
 ## Architecture Decisions To Confirm
 
-- [ ] Confirm that Prometheus will be used for numeric time-series and alerting rather than building a custom in-app metrics store.
-- [ ] Confirm that scraper remains the source of truth for workflows, ops, dependencies, artifacts, and runtime-event detail.
-- [ ] Confirm that the worker process should expose its own `/metrics` endpoint through a configurable metrics HTTP listener.
-- [ ] Confirm whether Grafana is the first-class historical operator UI, with scraper frontend staying focused on current state and debugging detail.
+- [x] Confirm that Prometheus will be used for numeric time-series and alerting rather than building a custom in-app metrics store.
+- [x] Confirm that scraper remains the source of truth for workflows, ops, dependencies, artifacts, and runtime-event detail.
+- [x] Confirm that the worker process should expose its own `/metrics` endpoint through a configurable metrics HTTP listener.
+- [x] Confirm whether Grafana is the first-class historical operator UI, with scraper frontend staying focused on current state and debugging detail.
 
 ## Implementation Backlog
 
 ### Phase 1: Shared Metrics Package
 
-- [ ] Add Prometheus client dependencies to the top-level Go module.
-- [ ] Create `pkg/metrics/` with a central registry/bootstrap API.
-- [ ] Define shared metric names, label names, and helper functions for status-class mapping.
+- [x] Add Prometheus client dependencies to the top-level Go module.
+- [x] Create `pkg/metrics/` with a central registry/bootstrap API.
+- [x] Define shared metric names, label names, and helper functions for status-class mapping.
 - [ ] Split metrics into logical groups:
-  - [ ] API server metrics
-  - [ ] submission metrics
-  - [ ] scheduler metrics
-  - [ ] runner metrics
-  - [ ] snapshot/export gauges
-- [ ] Decide whether to use the default Prometheus registry or an explicit custom registry.
-- [ ] Add unit tests for registry creation and duplicate registration safety.
+  - [x] API server metrics
+  - [x] submission metrics
+  - [x] scheduler metrics
+  - [x] runner metrics
+  - [x] snapshot/export gauges
+- [x] Decide whether to use the default Prometheus registry or an explicit custom registry.
+- [x] Add unit tests for registry creation and duplicate registration safety.
 
 ### Phase 2: API Server `/metrics`
 
-- [ ] Add a Prometheus handler to the server mux in `pkg/api/server/server.go`.
-- [ ] Add HTTP request counter instrumentation in the existing request wrapper.
-- [ ] Add HTTP request duration histograms in the existing request wrapper.
-- [ ] Use route-pattern labels rather than raw URL paths.
-- [ ] Confirm `/healthz` and `/metrics` are both accessible without interfering with current API routes.
+- [x] Add a Prometheus handler to the server mux in `pkg/api/server/server.go`.
+- [x] Add HTTP request counter instrumentation in the existing request wrapper.
+- [x] Add HTTP request duration histograms in the existing request wrapper.
+- [x] Use route-pattern labels rather than raw URL paths.
+- [x] Confirm `/healthz` and `/metrics` are both accessible without interfering with current API routes.
 - [ ] Add server tests covering:
-  - [ ] `/metrics` returns `200`
-  - [ ] scraper metric families are present
+  - [x] `/metrics` returns `200`
+  - [x] scraper metric families are present
   - [ ] request metrics increment after serving API requests
 
 ### Phase 3: Snapshot Collectors
 
-- [ ] Implement a collector that exports engine snapshot gauges from `engineview.Service` and/or SQLite inspection helpers.
+- [x] Implement a collector that exports engine snapshot gauges from `engineview.Service` and/or SQLite inspection helpers.
 - [ ] Export workflow counts by status.
 - [ ] Export queue gauges:
-  - [ ] pending
-  - [ ] ready
-  - [ ] running
-  - [ ] in-flight
-  - [ ] tokens
-- [ ] Export artifact/result/lease gauges where useful.
-- [ ] Decide whether snapshot gauges live only on the API server or also on workers.
+  - [x] pending
+  - [x] ready
+  - [x] running
+  - [x] in-flight
+  - [x] tokens
+- [x] Export artifact/result/lease gauges where useful.
+- [x] Decide whether snapshot gauges live only on the API server or also on workers.
 - [ ] Add tests for scrape-time collection behavior.
 
 ### Phase 4: Worker Metrics Listener
 
-- [ ] Add worker flags for metrics exposure:
-  - [ ] `--metrics-address`
-  - [ ] optional `--metrics-path`
-- [ ] Start a small HTTP server from the worker process when metrics are enabled.
-- [ ] Ensure worker shutdown also closes the metrics listener cleanly.
-- [ ] Export worker liveness/process metrics.
+- [x] Add worker flags for metrics exposure:
+  - [x] `--metrics-address`
+  - [x] optional `--metrics-path`
+- [x] Start a small HTTP server from the worker process when metrics are enabled.
+- [x] Ensure worker shutdown also closes the metrics listener cleanly.
+- [x] Export worker liveness/process metrics.
 - [ ] Add integration or smoke tests showing the worker exposes `/metrics`.
 
 ### Phase 5: Submission Metrics
 
-- [ ] Instrument successful workflow submissions in `pkg/services/submission/service.go`.
-- [ ] Instrument submission failures by stable error code/category.
+- [x] Instrument successful workflow submissions in `pkg/services/submission/service.go`.
+- [x] Instrument submission failures by stable error code/category.
 - [ ] Add optional submission duration histograms if the path is expensive enough to justify them.
 - [ ] Add tests proving submission counters move after accepted and rejected submissions.
 
 ### Phase 6: Scheduler Metrics
 
-- [ ] Instrument scheduler cycle counters.
-- [ ] Instrument scheduler cycle duration histograms.
-- [ ] Instrument leased-op counters by site, queue, and runner kind where available.
-- [ ] Instrument retry counters.
+- [x] Instrument scheduler cycle counters.
+- [x] Instrument scheduler cycle duration histograms.
+- [x] Instrument leased-op counters by site, queue, and runner kind where available.
+- [x] Instrument retry counters.
 - [ ] Instrument failure counters by stable error code/category.
-- [ ] Instrument queue-rate-limited counters.
+- [x] Instrument queue-rate-limited counters.
 - [ ] Decide how queue wait time should be measured, then add a queue-wait histogram.
-- [ ] Keep idle/no-work polling out of high-volume metrics noise.
+- [x] Keep idle/no-work polling out of high-volume metrics noise.
 - [ ] Add tests or focused package-level assertions for scheduler metric updates.
 
 ### Phase 7: Runner Metrics
 
-- [ ] Instrument generic op execution duration by site, queue, runner, and terminal status.
-- [ ] Instrument HTTP runner request counts in `pkg/engine/runner/http.go`.
-- [ ] Instrument HTTP runner duration histograms in `pkg/engine/runner/http.go`.
-- [ ] Classify HTTP statuses by stable status classes rather than raw URLs or messages.
-- [ ] Classify transport errors separately from HTTP response errors.
+- [x] Instrument generic op execution duration by site, queue, runner, and terminal status.
+- [x] Instrument HTTP runner request counts in `pkg/engine/runner/http.go`.
+- [x] Instrument HTTP runner duration histograms in `pkg/engine/runner/http.go`.
+- [x] Classify HTTP statuses by stable status classes rather than raw URLs or messages.
+- [x] Classify transport errors separately from HTTP response errors.
 - [ ] Add tests for HTTP runner metric emission on:
   - [ ] success
   - [ ] transport error
@@ -144,8 +144,8 @@
 ## Validation Plan
 
 - [ ] `go test ./... -count=1`
-- [ ] Add focused package tests under `pkg/metrics/...`
-- [ ] Add API/server metrics tests
+- [x] Add focused package tests under `pkg/metrics/...`
+- [x] Add API/server metrics tests
 - [ ] Add worker metrics smoke test
 - [ ] Add local compose smoke test for Prometheus scrape health
 - [ ] Add local Grafana smoke test for dashboard visibility

@@ -53,6 +53,7 @@ type Event struct {
 	OpID       model.OpID
 	Site       model.SiteName
 	Queue      model.QueueKey
+	RunnerKind string
 	Status     model.WorkflowStatus
 	Attempt    int
 	Message    string
@@ -269,6 +270,7 @@ func (s *Scheduler) RunOnce(ctx context.Context) (*CycleResult, error) {
 				OpID:       op.ID,
 				Site:       op.Site,
 				Queue:      op.Queue,
+				RunnerKind: op.Kind,
 				Attempt:    op.RetryState.Attempt + 1,
 				Message:    "leased op",
 			})
@@ -367,6 +369,7 @@ func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease 
 		OpID:       op.ID,
 		Site:       op.Site,
 		Queue:      op.Queue,
+		RunnerKind: op.Kind,
 		Attempt:    op.RetryState.Attempt + 1,
 		Message:    "op succeeded",
 	})
@@ -402,6 +405,7 @@ func (s *Scheduler) failLeasedOp(ctx context.Context, op model.OpSpec, lease mod
 		OpID:       op.ID,
 		Site:       op.Site,
 		Queue:      op.Queue,
+		RunnerKind: op.Kind,
 		Attempt:    retryState.Attempt,
 		Message:    message,
 		Error:      &opErr,
