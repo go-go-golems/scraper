@@ -347,3 +347,30 @@ cd web && npm run build
 ```
 
 The Go test passed. The frontend build still fails, but the failures are pre-existing unrelated TypeScript issues in Storybook and other UI files, not in the provenance slice. The errors include unused imports, broken stories, and older type mismatches in files such as `src/components/common/AlertBanner.stories.tsx`, `src/components/results/*`, and `src/test-utils/mockRuntimeEvents.ts`.
+
+## 2026-04-08 no-Go tutorial slice
+
+The last requested follow-on was documentation, but it needed to be real product documentation rather than just ticket notes. I added:
+
+- [pkg/doc/tutorials/scraper-adding-a-declarative-site.md](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/tutorials/scraper-adding-a-declarative-site.md)
+
+and updated:
+
+- [pkg/doc/tutorials/scraper-adding-a-site.md](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/tutorials/scraper-adding-a-site.md)
+
+The new tutorial explains the current preferred path for sites that do not need native Go extensions:
+
+- create `site.yaml`
+- keep behavior in JS
+- use a tiny wrapper for embedded built-in sites
+- keep registration explicit in `pkg/sites/defaults/defaults.go` for now
+- validate through the existing scheduler/worker path
+
+I validated both help pages through the actual embedded help system with:
+
+```bash
+go run ./cmd/scraper help scraper-adding-a-declarative-site
+go run ./cmd/scraper help scraper-adding-a-site
+```
+
+Both rendered correctly.

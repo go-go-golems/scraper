@@ -22,7 +22,11 @@ SectionType: Tutorial
 
 Adding a site means fitting your scraper into the existing engine shape rather than inventing a new execution path. The durable engine is already responsible for scheduling, retries, HTTP execution, DB lifecycle, and queue policy. Your job is to describe the site's behavior in a site package with submit verbs, scripts, migrations, fixtures, and tests.
 
-This tutorial shows the path that the current built-in sites follow. Use it as a checklist when creating a new site package.
+This tutorial shows the path that the current built-in Go-defined sites follow. Use it when the site truly needs Go-native extensions.
+
+If your site can be expressed with `site.yaml` plus JavaScript, start with:
+
+- `scraper help scraper-adding-a-declarative-site`
 
 ## Prerequisites
 

@@ -16,3 +16,4 @@
 - Approved the follow-on scope to expose provenance in the catalog API, show it in the frontend, and add a no-Go site authoring tutorial.
 - Added catalog/API provenance metadata so sites now report whether they are manifest-backed or Go-native, including manifest path for declarative sites.
 - Added frontend provenance badges and detail text on the sites list and site detail pages.
+- Added a new `scraper-adding-a-declarative-site` help/tutorial page and linked the older Go-native site tutorial to it.

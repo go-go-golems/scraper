@@ -51,9 +51,9 @@
 - [x] Show provenance on the sites list cards.
 - [x] Show provenance and manifest path details on the site detail page.
 - [x] Decide to add a no-Go site authoring tutorial.
-- [ ] Add a new help/tutorial page for creating a declarative site without Go.
-- [ ] Update the older “adding a site” tutorial to reference the new declarative path.
-- [ ] Validate the new help pages through the embedded help system if practical.
+- [x] Add a new help/tutorial page for creating a declarative site without Go.
+- [x] Update the older “adding a site” tutorial to reference the new declarative path.
+- [x] Validate the new help pages through the embedded help system if practical.
 
 ## Validation
 
