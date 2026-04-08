@@ -74,6 +74,19 @@
 - [x] Fix tests that used `ReadFixture()` — use `testfixtures.ReadFixture()`.
 - [x] Verify `go test ./... -count=1` passes (16 packages, all green).
 
+## Phase 3: Bootstrap config and early command loading
+
+- [ ] Add a detailed implementation/design document for bootstrap config and early site command loading.
+- [ ] Add `pkg/cmd/app_config.go` with scraper-owned app config loading from config file + env.
+- [ ] Add `pkg/cmd/app_config_test.go` for YAML loading, env parsing, and merge behavior.
+- [ ] Add `pkg/cmd/bootstrap.go` with bootstrap flag pre-parsing for repeated `--sites-manifest-dir` values.
+- [ ] Add `pkg/cmd/bootstrap_test.go` for bootstrap arg parsing and normalization.
+- [ ] Add `NewRootCommandFromBootstrap(version, args)` that resolves dirs before building the command tree.
+- [ ] Update `cmd/scraper/main.go` to use bootstrap-aware construction.
+- [ ] Decide whether late `LoadSitesFromFlag(...)` in `api`/`worker` is still needed; remove it if redundant.
+- [ ] Add an end-to-end test proving dynamic `site js-demo run seed` commands exist when manifests are provided only through bootstrap sources.
+- [ ] Re-run `go test ./... -count=1`.
+
 ## Validation
 
 - [x] Run `docmgr doctor --ticket SCRAPER-DECLARATIVE-SITES --stale-after 30`.

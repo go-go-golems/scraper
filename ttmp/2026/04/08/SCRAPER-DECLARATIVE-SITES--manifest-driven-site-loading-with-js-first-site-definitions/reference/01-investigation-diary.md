@@ -449,3 +449,83 @@ New helpers:
 - `defaults.NewRegistryFromDirs(dirs ...string)` — loads sites from one or more manifest directories
 
 The `--sites-manifest-dir` persistent flag on the root command still allows loading additional sites at runtime (for production use where `main()` calls `NewRootCommand()` with no dirs).
+
+## Step 1: Design bootstrap config and early site command loading
+
+After making all sites external, one architectural gap remained: the real `main()` path still called `NewRootCommand(version)` with no manifest dirs. That meant the registry was empty at construction time, but scraper's dynamic site verbs are built when `newSiteCommand(...)` iterates the loaded registry. The user explicitly wanted to support multiple site directories from flags, env, and config, so I stopped and wrote down the bootstrap pattern before changing code.
+
+The key insight came from sqleton: repository-backed commands are not loaded inside `RunE`; they are discovered during an app-owned bootstrap phase before Cobra execution begins. Scraper now has the same shape. Site manifests are not ordinary runtime data — they are command-definition sources — so they must be resolved before the command tree exists.
+
+### Prompt Context
+
+**User prompt (verbatim):** "i do want to put it at a variety of sites directories based on need, so I think we might need to parse the flag / env / config before building the command tree. We have similar setups in ~/code/wesen/corporate-headquarters/sqleton I think with a document on how to do it (or maybe \"/home/manuel/code/wesen/obsidian-vault/Projects/2026/04/02/PROJ - Sqleton SQL Command Cleanup - Technical Project Report.md\") 
+
+Do you find info on how we can load the commands as verbs after parsing the fconfig stuff"
+
+**Assistant interpretation:** The user wants scraper to adopt a sqleton-style bootstrap flow where app config, environment variables, and selected CLI flags are resolved before dynamic site verbs are constructed.
+
+**Inferred user intent:** Make site-directory selection flexible and reliable in real CLI usage, without depending on CWD tricks or late-loading that occurs after the Cobra command tree is already frozen.
+
+### What I did
+- Inspected sqleton's startup/config flow in:
+  - `/home/manuel/code/wesen/corporate-headquarters/sqleton/cmd/sqleton/main.go`
+  - `/home/manuel/code/wesen/corporate-headquarters/sqleton/cmd/sqleton/config.go`
+  - `/home/manuel/code/wesen/corporate-headquarters/sqleton/ttmp/2026/04/02/SQLETON-02-VIPER-APP-CONFIG-CLEANUP--remove-viper-and-separate-sqleton-app-config-from-command-config/design/01-sqleton-viper-removal-and-app-config-cleanup-design.md`
+  - `/home/manuel/code/wesen/obsidian-vault/Projects/2026/04/02/PROJ - Sqleton SQL Command Cleanup - Technical Project Report.md`
+- Wrote a dedicated implementation/design doc:
+  - `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/04/08/SCRAPER-DECLARATIVE-SITES--manifest-driven-site-loading-with-js-first-site-definitions/design/02-bootstrap-config-and-early-site-command-loading.md`
+- Expanded the ticket task list with a concrete Phase 3 implementation plan.
+
+### Why
+- Scraper now depends on manifest directories to build dynamic `site <name> run <verb>` commands.
+- A normal Cobra runtime flag is too late because command discovery happens before `Execute()`.
+- The sqleton pattern provides a proven architecture for separating app-owned bootstrap config from runtime command parsing.
+
+### What worked
+- The sqleton references were directly relevant.
+- The architecture maps closely: sqleton repository directories and scraper site-manifest directories are both command-definition sources.
+- The right model became clear quickly: bootstrap config first, command tree second, Cobra execution third.
+
+### What didn't work
+- The previously-added late `LoadSitesFromFlag(...)` model was sufficient only for execution-time consumers. It is not sufficient for site verb discovery because those commands must exist before Cobra parsing begins.
+- No code failure occurred in this planning step, but the architectural mismatch was already visible in `cmd/scraper/main.go` and `pkg/cmd/site.go`.
+
+### What I learned
+- The right distinction is not “flag vs config”; it is **bootstrap config vs runtime config**.
+- Site manifests are command-definition inputs, not normal runtime data.
+- Sqleton's app-owned config loader plus early repository loading is the right precedent for scraper.
+
+### What was tricky to build
+- The tricky part is not reading YAML or env vars. The tricky part is timing: Cobra wants the command tree fully built before parsing, but scraper wants parsed site manifests to define parts of that tree.
+- That means the implementation must include a very small pre-parser for bootstrap flags, not a normal `RunE`-time flag read.
+
+### What warrants a second pair of eyes
+- Merge order for config/env/bootstrap CLI dirs.
+- Whether `--sites-manifest-dir` should remain declared as a normal persistent Cobra flag purely for UX/help, even though bootstrap parsing happens before Cobra.
+- Whether we want a config-path override in the first cut or only the default app config path.
+
+### What should be done in the future
+- Implement `pkg/cmd/app_config.go`.
+- Implement bootstrap arg pre-parsing.
+- Add `NewRootCommandFromBootstrap(...)`.
+- Update `main()` and add focused tests.
+
+### Code review instructions
+- Start with the new design doc in `design/02-bootstrap-config-and-early-site-command-loading.md`.
+- Compare the proposed flow with sqleton's `collectRepositoryPaths(...)` and `initAllCommands(...)` pattern.
+- After implementation lands, validate with `go test ./pkg/cmd/... -count=1` and `go test ./... -count=1`.
+
+### Technical details
+- Proposed env var: `SCRAPER_SITES_MANIFEST_DIRS`
+- Proposed config shape:
+
+```yaml
+sitesManifestDirs:
+  - /path/to/sites-a
+  - /path/to/sites-b
+```
+
+- Proposed bootstrap merge order:
+  1. config file
+  2. environment variable
+  3. bootstrap CLI flags
