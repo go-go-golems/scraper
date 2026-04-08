@@ -22,7 +22,7 @@ func TestParseBootstrapArgsRepeatedSitesManifestDir(t *testing.T) {
 	require.Equal(t, []string{first, second}, options.SitesManifestDirs)
 }
 
-func TestParseBootstrapArgsIgnoresUnknownFlags(t *testing.T) {
+func TestParseBootstrapArgsIgnoresUnknownFlagsAndHelp(t *testing.T) {
 	sitesDir := filepath.Join(t.TempDir(), "sites")
 
 	options, err := ParseBootstrapArgs([]string{
@@ -30,6 +30,7 @@ func TestParseBootstrapArgsIgnoresUnknownFlags(t *testing.T) {
 		"site", "js-demo", "run", "seed",
 		"--engine-db", "state/engine.db",
 		"--count", "3",
+		"--help",
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{sitesDir}, options.SitesManifestDirs)
@@ -41,6 +42,7 @@ func TestNewRootCommandFromBootstrapBuildsSiteVerbCommandsFromFlag(t *testing.T)
 	rootCmd, err := NewRootCommandFromBootstrap("test-version", []string{
 		"--sites-manifest-dir", sitesDir,
 		"site", "js-demo", "run", "seed",
+		"--help",
 	})
 	require.NoError(t, err)
 

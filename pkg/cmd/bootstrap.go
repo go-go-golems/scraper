@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	"io"
+	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 type BootstrapOptions struct {
@@ -13,13 +13,21 @@ type BootstrapOptions struct {
 
 func ParseBootstrapArgs(args []string) (BootstrapOptions, error) {
 	options := BootstrapOptions{}
-	fs := pflag.NewFlagSet("scraper-bootstrap", pflag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	fs.ParseErrorsWhitelist.UnknownFlags = true
-	fs.StringSliceVar(&options.SitesManifestDirs, SitesManifestDirFlag, nil, "Directory containing site manifests (site.yaml per subdirectory)")
+	flagName := "--" + SitesManifestDirFlag
+	flagWithEquals := flagName + "="
 
-	if err := fs.Parse(args); err != nil {
-		return BootstrapOptions{}, err
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == flagName:
+			if i+1 >= len(args) {
+				return BootstrapOptions{}, fmt.Errorf("%s requires a value", flagName)
+			}
+			i++
+			options.SitesManifestDirs = append(options.SitesManifestDirs, args[i])
+		case strings.HasPrefix(arg, flagWithEquals):
+			options.SitesManifestDirs = append(options.SitesManifestDirs, strings.TrimPrefix(arg, flagWithEquals))
+		}
 	}
 
 	options.SitesManifestDirs = normalizeManifestDirs(options.SitesManifestDirs)
