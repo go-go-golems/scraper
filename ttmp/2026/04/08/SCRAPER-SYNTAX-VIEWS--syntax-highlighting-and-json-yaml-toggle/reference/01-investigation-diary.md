@@ -74,3 +74,23 @@ LastUpdated: 2026-04-08T00:35:00-04:00
 
 - **SCRAPER-ARTIFACT-BROWSER** — closed (Status: done)
 - **SCRAPER-RESULTS-BROWSER** — closed (Status: done)
+- **SCRAPER-SYNTAX-VIEWS** — closed (Status: done)
+
+## Session 2: 2026-04-08 (continued)
+
+### Commits
+
+**`a2ff78a`** — feat: remove JsonViewer, add HTML highlighting
+
+- `JsonViewer.tsx` deleted (zero remaining references)
+- All callers migrated to `CodeViewPanel`:
+  - `OpInputTab` → `CodeViewPanel`
+  - `RuntimeEventTable` → `CodeViewPanel`
+  - `ArtifactPreview` → `CodeViewPanel` with per-content-type format selection
+- `CodeViewPanel` now supports `'html'` format with `@codemirror/lang-html`
+- `dataAsString()` helper: passes through strings (HTML/text content) as-is, JSON-serializes objects
+- `FORMAT_LABELS` map for readable toggle button labels
+- `ArtifactPreview`: HTML → `['html','json','yaml']` (HTML default); text → `['yaml','json']`; JSON → `['json','yaml']`
+
+
+**`ac8ecf0`** — test: HTML artifact story added to CodeViewPanel stories
