@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-04-08 (session 3) — bootstrap config and early site command loading
+
+- Researched sqleton's app-owned bootstrap config pattern (`config.go` + `main.go`) and translated it into a scraper-specific design for early site command loading.
+- Added a dedicated design/implementation doc for bootstrap config and early site command loading.
+- Added `pkg/cmd/app_config.go` + `app_config_test.go` for scraper-owned app config loading from `~/.scraper/config.yaml` and `SCRAPER_SITES_MANIFEST_DIRS`.
+- Added `pkg/cmd/bootstrap.go` + `bootstrap_test.go` for pre-parsing repeated `--sites-manifest-dir` flags before building the command tree.
+- Added `NewRootCommandFromBootstrap(version, args)` and updated `cmd/scraper/main.go` to use it.
+- Changed the root `--sites-manifest-dir` flag to `StringSlice` and seeded it with bootstrap-resolved dirs for help/UX consistency.
+- Removed late `LoadSitesFromFlag(...)` registry mutation from `worker` and `api`; site registries are now built before the tree exists.
+- Added bootstrap-aware tests proving `site js-demo run seed` is present when manifests come only from bootstrap sources.
+- Re-ran `go test ./pkg/cmd/... -count=1` and `go test ./... -count=1` successfully.
+
 ## 2026-04-08 (session 2) — site manifest loading cleanup
 
 - Diagnosed the root cause of the "site not registered" test failures: `defaults.NewRegistry()` used CWD-dependent `sites/` directory lookup which broke in tests.

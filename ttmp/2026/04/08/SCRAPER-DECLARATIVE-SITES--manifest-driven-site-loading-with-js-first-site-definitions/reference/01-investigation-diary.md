@@ -529,3 +529,243 @@ sitesManifestDirs:
   1. config file
   2. environment variable
   3. bootstrap CLI flags
+
+## Step 2: Add scraper-owned app config loading
+
+I implemented the first code slice for the bootstrap architecture by adding an app-owned config loader in `pkg/cmd/app_config.go`. This mirrors the sqleton pattern directly: application startup config is decoded by scraper itself instead of being inferred from generic parser middleware or late Cobra callbacks. The goal of this slice was to make config-file and environment-driven site-directory discovery deterministic before introducing any bootstrap CLI pre-parser.
+
+I kept the scope intentionally small. This slice does not build commands yet and it does not parse raw CLI args. It only establishes the authoritative config/env merge path for site manifest directories so the later bootstrap parser can feed one more input source into the same normalized pipeline.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 1)
+
+**Assistant interpretation:** Implement the first part of the bootstrap pattern by giving scraper an app-owned config loader, similar to sqleton's repository config loader.
+
+**Inferred user intent:** Separate app/bootstrap config from runtime command parsing so dynamic site commands can eventually be built from a pre-resolved set of manifest directories.
+
+**Commit (code):** `57ae66e` — "Add scraper app-owned manifest-dir config loader"
+
+### What I did
+- Added `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/app_config.go`.
+- Added `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/app_config_test.go`.
+- Implemented:
+  - `AppConfig`
+  - `loadAppConfig(appName string)`
+  - `loadAppConfigFromPath(configPath string)`
+  - `collectSitesManifestDirs(appName string, bootstrapDirs []string)`
+  - `sitesManifestDirsFromEnv()`
+  - `normalizeManifestDirs(...)`
+- Used `glazed/pkg/config.ResolveAppConfigPath` to locate the standard app config.
+- Used `SCRAPER_SITES_MANIFEST_DIRS` as the environment override.
+- Added tests for:
+  - empty config path
+  - YAML config decoding
+  - env parsing via `filepath.SplitList`
+  - config + env + bootstrap merge order
+- Ran:
+
+```bash
+go test ./pkg/cmd/... -run 'TestLoadAppConfigFromPath|TestSitesManifestDirsFromEnv|TestCollectSitesManifestDirsMergesConfigEnvAndBootstrap' -count=1
+```
+
+### Why
+- The bootstrap architecture needs one central place to resolve manifest directories from app-owned sources.
+- If config/env normalization is spread across `main.go`, `root.go`, and tests, the later flag pre-parser would become harder to reason about.
+- This slice establishes one reusable merge function that later code can call before building the Cobra tree.
+
+### What worked
+- The sqleton pattern translated cleanly.
+- `glazed/pkg/config.ResolveAppConfigPath` is enough for the first cut; no extra config-path override was needed.
+- The config/env merge tests were straightforward and gave a stable contract for later bootstrap work.
+
+### What didn't work
+- My first test run failed because I left `t.Parallel()` in tests that also used `t.Setenv(...)`.
+- Exact failure:
+
+```text
+panic: testing: test using t.Setenv, t.Chdir, or cryptotest.SetGlobalRandom can not use t.Parallel
+```
+
+- Command that failed:
+
+```bash
+go test ./pkg/cmd/... -count=1
+```
+
+- I fixed this by removing `t.Parallel()` from the env-mutating tests in `pkg/cmd/app_config_test.go`.
+
+### What I learned
+- The normalization behavior is worth centralizing early because the later bootstrap parser should not need to care about trimming, env expansion, or de-duplication.
+- `filepath.SplitList(...)` is the right portable choice for the env var because it keeps macOS/Linux path-list behavior aligned.
+
+### What was tricky to build
+- The subtle part was deciding whether config/env merging should be implemented in the future bootstrap parser or in an app-config module. Keeping it in `app_config.go` is cleaner because the bootstrap parser only contributes one source of directories; it should not own app config semantics.
+- The test isolation issue with `t.Setenv(...)` and `t.Parallel()` was also easy to miss because the tests are tiny but still mutate process-global state.
+
+### What warrants a second pair of eyes
+- Whether path normalization should remain `filepath.Clean(os.ExpandEnv(...))` only, or eventually also support rebasing relative config-file paths against the config directory.
+- Whether the env var name should stay plural (`SCRAPER_SITES_MANIFEST_DIRS`) or whether we also want a single-dir compatibility alias.
+
+### What should be done in the future
+- Add bootstrap CLI pre-parsing for repeated `--sites-manifest-dir` values.
+- Add a bootstrap-aware root command constructor.
+- Update `main()` to call that constructor before building the command tree.
+
+### Code review instructions
+- Start with `pkg/cmd/app_config.go`.
+- Then read `pkg/cmd/app_config_test.go` to confirm the merge contract.
+- Re-run:
+
+```bash
+go test ./pkg/cmd/... -run 'TestLoadAppConfigFromPath|TestSitesManifestDirsFromEnv|TestCollectSitesManifestDirsMergesConfigEnvAndBootstrap' -count=1
+```
+
+### Technical details
+- Config YAML shape:
+
+```yaml
+sitesManifestDirs:
+  - /path/to/sites-a
+  - /path/to/sites-b
+```
+
+- Environment shape:
+
+```text
+SCRAPER_SITES_MANIFEST_DIRS=/path/a:/path/b
+```
+
+- Merge order implemented in this slice:
+  1. config file
+  2. env var
+  3. bootstrap dirs (passed in by future code)
+
+## Step 3: Add bootstrap pre-parsing and bootstrap-aware root construction
+
+With the app-config layer in place, I implemented the actual bootstrap path that scraper's real binary needs. The important behavior change is that `cmd/scraper/main.go` no longer constructs the root command directly from `NewRootCommand(version)`. It now resolves manifest directories first — from config, environment, and bootstrap CLI flags — and only then builds the Cobra tree. That finally aligns scraper with the sqleton pattern that inspired this work.
+
+This slice also let me remove the late-loading `LoadSitesFromFlag(...)` behavior from `api` and `worker`. Once the registry is built before command construction, late loading becomes redundant and conceptually misleading. The persistent flag remains declared on root for help/UX consistency, but the actual registry population now happens during bootstrap.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 1)
+
+**Assistant interpretation:** Implement the pre-parse/bootstrap phase so scraper can discover site manifest directories before dynamic site verbs are built.
+
+**Inferred user intent:** Make the real CLI behave like the test harness: site verbs should exist because manifests were resolved before the Cobra tree was constructed, not because later code happened to mutate the registry.
+
+**Commit (code):** `10ee143` — "Bootstrap site manifest dirs before building scraper command tree"
+
+### What I did
+- Added `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/bootstrap.go`.
+- Added `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/bootstrap_test.go`.
+- Implemented:
+  - `BootstrapOptions`
+  - `ParseBootstrapArgs(args []string)`
+  - `CollectSitesManifestDirs(appName string, args []string)`
+  - `NewRootCommandFromBootstrap(version, args []string)`
+- Updated `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/root.go`:
+  - root still declares `--sites-manifest-dir`
+  - flag type changed to `StringSlice`
+  - root construction now receives manifest dirs explicitly and bakes them into the pre-built registry
+- Updated `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/cmd/scraper/main.go` to call `NewRootCommandFromBootstrap(version, os.Args[1:])`
+- Removed late `LoadSitesFromFlag(...)` calls from:
+  - `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/api.go`
+  - `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/worker.go`
+- Added tests proving:
+  - repeated bootstrap flags are parsed
+  - unknown runtime flags do not break bootstrap parsing
+  - `NewRootCommandFromBootstrap(...)` builds `site js-demo run seed`
+  - config + env + bootstrap flag sources merge correctly
+- Ran:
+
+```bash
+go test ./pkg/cmd/... -count=1
+go test ./... -count=1
+```
+
+### Why
+- Dynamic site verbs are part of the command-definition phase, not the execution phase.
+- If `main()` waits until after normal Cobra parsing, `site js-demo run seed` may not exist yet.
+- Pre-parsing a tiny bootstrap flag set solves this without forcing the whole app into a custom parser.
+
+### What worked
+- `pflag.FlagSet` with `ParseErrorsWhitelist.UnknownFlags = true` worked well for a minimal bootstrap parser.
+- Keeping `NewRootCommand(version, dirs...)` as the deterministic constructor preserved the clean test seam.
+- Removing late loading from `api`/`worker` simplified the mental model: one registry, built once, before the tree exists.
+
+### What didn't work
+- The first compile/test pass broke `pkg/cmd/site_test.go` because I changed `newRootCommand(...)` to take an extra `[]string` parameter.
+- Exact build error:
+
+```text
+pkg/cmd/site_test.go:33:49: not enough arguments in call to newRootCommand
+	have (string, *registry.Registry)
+	want (string, *registry.Registry, []string)
+```
+
+- Command that failed:
+
+```bash
+go test ./pkg/cmd/... -count=1
+```
+
+- I fixed this by making `newRootCommand(...)` variadic again:
+
+```go
+func newRootCommand(version string, siteRegistry *siteregistry.Registry, manifestDirs ...string)
+```
+
+That restored test compatibility while still letting root construction seed the persistent flag with bootstrap-resolved dirs.
+
+### What I learned
+- The smallest viable bootstrap parser is enough. We do not need to pre-parse the whole CLI, only the app-owned flags that define command sources.
+- Keeping the persistent Cobra flag even after bootstrap parsing is useful for help and operator discoverability, as long as the code comments make it clear that the real work happened earlier.
+
+### What was tricky to build
+- The trickiest part was deciding whether to keep late-loading in `worker`/`api` as a fallback. It looked harmless, but it created two competing registry-population models: bootstrap-time and run-time. That is exactly the ambiguity we were trying to remove.
+- Another subtle point was making pre-parsing tolerate the rest of the real CLI args. A normal `pflag` parse would fail on unknown flags like `--engine-db` or `--count`; using `UnknownFlags` was necessary so bootstrap parsing could coexist with the later full Cobra parse.
+
+### What warrants a second pair of eyes
+- Whether we want to keep the root persistent flag purely as declarative/help UX, or whether that dual-role flag could confuse future maintainers.
+- Whether bootstrap parsing should eventually also support an explicit config-path override, not just the default app config path.
+
+### What should be done in the future
+- Consider a small comment in `main.go` explaining the bootstrap-before-Cobra requirement.
+- Decide whether a config-path override belongs in the first public CLI contract or in a later follow-up.
+
+### Code review instructions
+- Start with:
+  - `pkg/cmd/bootstrap.go`
+  - `pkg/cmd/bootstrap_test.go`
+  - `pkg/cmd/root.go`
+  - `cmd/scraper/main.go`
+- Then verify that `pkg/cmd/api.go` and `pkg/cmd/worker.go` no longer mutate the registry at `RunE` time.
+- Validate with:
+
+```bash
+go test ./pkg/cmd/... -count=1
+go test ./... -count=1
+```
+
+### Technical details
+- Bootstrap parser flag shape:
+
+```text
+--sites-manifest-dir /path/a --sites-manifest-dir /path/b
+```
+
+- Root persistent flag type is now `StringSlice` so Cobra accepts repeated values after the tree already exists.
+- Effective bootstrap pipeline is now:
+
+```text
+raw args
+-> ParseBootstrapArgs
+-> load app config
+-> load env dirs
+-> merge + normalize
+-> NewRootCommand(version, dirs...)
+-> build dynamic site verbs
+-> normal Cobra Execute()
+```
