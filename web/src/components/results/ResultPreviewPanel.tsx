@@ -11,7 +11,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import type { OpResult, WorkflowResultSummary } from '../../api/types';
-import { JsonViewer } from '../common/JsonViewer';
+import { CodeViewPanel } from '../common/CodeViewPanel';
 
 interface ResultPreviewPanelProps {
   result: WorkflowResultSummary | null;
@@ -174,18 +174,24 @@ export function ResultPreviewPanel({ result, workflowId, onClose, onOpClick }: R
         )}
 
         {!loading && !error && body && (
-          <Box>
-            <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-              Op Result — {body.Data ? 'has data payload' : 'no data payload'}, {body.Records?.length ?? 0} records, {body.Artifacts?.length ?? 0} artifacts
-            </Typography>
-            {body.Data && <JsonViewer data={body.Data} maxHeight={500} />}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {body.Data && (
+              <CodeViewPanel
+                data={body.Data}
+                label="Data"
+                defaultFormat="yaml"
+                formats={['json', 'yaml']}
+                maxHeight={400}
+              />
+            )}
             {body.Records && body.Records.length > 0 && (
-              <>
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                  Records ({body.Records.length})
-                </Typography>
-                <JsonViewer data={body.Records} maxHeight={300} />
-              </>
+              <CodeViewPanel
+                data={body.Records}
+                label={`Records (${body.Records.length})`}
+                defaultFormat="yaml"
+                formats={['json', 'yaml']}
+                maxHeight={300}
+              />
             )}
           </Box>
         )}

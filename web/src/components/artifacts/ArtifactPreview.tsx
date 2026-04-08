@@ -1,5 +1,5 @@
 import { Box, Typography } from '@mui/material';
-import { JsonViewer } from '../common/JsonViewer';
+import { CodeViewPanel } from '../common/CodeViewPanel';
 
 interface ArtifactPreviewProps {
   content: string;
@@ -35,7 +35,13 @@ export function ArtifactPreview({ content, contentType, name }: ArtifactPreviewP
         }}
       >
         {contentType === 'application/json' ? (
-          <JsonViewer data={JSON.parse(content)} maxHeight={360} />
+          <CodeViewPanel
+            data={JSON.parse(content)}
+            label={name}
+            defaultFormat="yaml"
+            formats={['json', 'yaml']}
+            maxHeight={360}
+          />
         ) : contentType === 'text/html' ? (
           <pre style={monoStyle}>
             <code>{content}</code>

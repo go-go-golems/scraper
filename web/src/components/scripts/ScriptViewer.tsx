@@ -1,4 +1,6 @@
-import { Box, Typography } from '@mui/material';
+import { Box, Chip, Typography } from '@mui/material';
+import CodeMirror from '@uiw/react-codemirror';
+import { javascript } from '@codemirror/lang-javascript';
 
 interface ScriptViewerProps {
   source: string;
@@ -6,61 +8,49 @@ interface ScriptViewerProps {
 }
 
 export function ScriptViewer({ source, filename }: ScriptViewerProps) {
-  const lines = source.split('\n');
-
   return (
     <Box>
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ mb: 0.5, display: 'block' }}
-      >
-        {filename}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ fontFamily: 'monospace' }}
+        >
+          {filename}
+        </Typography>
+        <Chip label="read only" size="small" sx={{ fontSize: '0.65rem', height: 18 }} />
+      </Box>
       <Box
         sx={{
           maxHeight: 500,
-          overflow: 'auto',
-          backgroundColor: '#f5f5f5',
+          overflow: 'hidden',
           borderRadius: 1,
           border: '1px solid',
           borderColor: 'divider',
         }}
       >
-        <Box
-          component="pre"
-          sx={{
-            m: 0,
-            p: 1.5,
-            fontFamily: 'monospace',
-            fontSize: '0.8rem',
-            lineHeight: 1.6,
-            display: 'flex',
+        <CodeMirror
+          value={source}
+          extensions={[javascript({ jsx: false, typescript: false })]}
+          editable={() => false}
+          theme="light"
+          style={{ height: 500 }}
+          basicSetup={{
+            lineNumbers: true,
+            foldGutter: true,
+            highlightActiveLine: false,
+            highlightSelectionMatches: false,
+            dropCursor: false,
+            allowMultipleSelections: false,
+            indentOnInput: false,
+            autocompletion: false,
+            bracketMatching: false,
+            closeBrackets: false,
+            rectangularSelection: false,
+            crosshairCursor: false,
+            highlightActiveLineGutter: false,
           }}
-        >
-          <Box
-            component="code"
-            sx={{
-              color: '#999',
-              textAlign: 'right',
-              pr: 2,
-              mr: 2,
-              borderRight: '1px solid',
-              borderColor: 'divider',
-              userSelect: 'none',
-              flexShrink: 0,
-            }}
-          >
-            {lines.map((_, i) => (
-              <Box key={i} component="span" sx={{ display: 'block' }}>
-                {i + 1}
-              </Box>
-            ))}
-          </Box>
-          <Box component="code" sx={{ whiteSpace: 'pre', flexGrow: 1 }}>
-            {source}
-          </Box>
-        </Box>
+        />
       </Box>
     </Box>
   );

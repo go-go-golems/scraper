@@ -1,6 +1,6 @@
 import { Box, Chip, Link, Typography } from '@mui/material';
 import type { OpResult, WorkflowOp } from '../../../api/types';
-import { JsonViewer } from '../../common/JsonViewer';
+import { CodeViewPanel } from '../../common/CodeViewPanel';
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -38,7 +38,12 @@ export function OpResultTab({ result, op, onBrowseArtifacts }: OpResultTabProps)
       {result.Data !== undefined && result.Data !== null && (
         <Box sx={{ mb: 1.5 }}>
           <SectionTitle>Data</SectionTitle>
-          <JsonViewer data={result.Data} maxHeight={250} />
+          <CodeViewPanel
+            data={result.Data}
+            defaultFormat="yaml"
+            formats={['json', 'yaml']}
+            maxHeight={250}
+          />
         </Box>
       )}
       {result.Error && (
