@@ -15,3 +15,4 @@
 - Re-ran `go test ./... -count=1`, re-ran `docmgr doctor`, and refreshed the reMarkable bundle with `--force`.
 - Approved the follow-on scope to expose provenance in the catalog API, show it in the frontend, and add a no-Go site authoring tutorial.
 - Added catalog/API provenance metadata so sites now report whether they are manifest-backed or Go-native, including manifest path for declarative sites.
+- Added frontend provenance badges and detail text on the sites list and site detail pages.

@@ -139,6 +139,8 @@ export interface QueueStatus {
 export interface SiteSummary {
   name: string;
   databaseFileName: string;
+  originKind: string;
+  manifestPath?: string;
   hasScripts: boolean;
   hasSubmitVerbs: boolean;
 }
@@ -172,6 +174,8 @@ export interface FieldSummary {
 export interface SiteDetail {
   name: string;
   databaseFileName: string;
+  originKind: string;
+  manifestPath?: string;
   hasScripts: boolean;
   hasSubmitVerbs: boolean;
   verbCount: number;

@@ -320,3 +320,30 @@ Validation for this slice was:
 gofmt -w pkg/sites/registry/registry.go pkg/sites/manifest/loader.go pkg/sites/manifest/loader_test.go pkg/services/catalog/service.go pkg/api/server/server_test.go
 go test ./pkg/sites/manifest ./pkg/api/server -count=1
 ```
+
+## 2026-04-08 frontend provenance slice
+
+With the catalog payload updated, the frontend changes were straightforward. I updated:
+
+- [web/src/api/types.ts](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/api/types.ts)
+- [web/src/components/sites/SiteOriginChip.tsx](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/components/sites/SiteOriginChip.tsx)
+- [web/src/components/sites/SiteCard.tsx](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/components/sites/SiteCard.tsx)
+- [web/src/pages/SiteDetailPage.tsx](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/pages/SiteDetailPage.tsx)
+- [web/src/stories/__fixtures__/factories.ts](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/stories/__fixtures__/factories.ts)
+
+The UI decision was intentionally conservative:
+
+- use one shared `SiteOriginChip`
+- show it on both the site cards and the site detail header
+- show the manifest path only on the detail page and card metadata, not everywhere
+
+That gives operators immediate context without turning provenance into a noisy first-class workflow dimension.
+
+I ran:
+
+```bash
+go test ./pkg/api/server -count=1
+cd web && npm run build
+```
+
+The Go test passed. The frontend build still fails, but the failures are pre-existing unrelated TypeScript issues in Storybook and other UI files, not in the provenance slice. The errors include unused imports, broken stories, and older type mismatches in files such as `src/components/common/AlertBanner.stories.tsx`, `src/components/results/*`, and `src/test-utils/mockRuntimeEvents.ts`.

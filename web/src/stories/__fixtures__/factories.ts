@@ -148,6 +148,8 @@ export function createSiteSummary(name: string = 'hackernews'): SiteSummary {
   return {
     name,
     databaseFileName: `${name}.db`,
+    originKind: 'manifest',
+    manifestPath: 'site.yaml',
     hasScripts: true,
     hasSubmitVerbs: true,
   };
@@ -160,6 +162,8 @@ export function createSiteDetail(
   return {
     name,
     databaseFileName: `${name}.db`,
+    originKind: 'manifest',
+    manifestPath: 'site.yaml',
     hasScripts: true,
     hasSubmitVerbs: true,
     verbCount: 2,

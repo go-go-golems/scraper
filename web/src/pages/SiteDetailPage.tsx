@@ -20,6 +20,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useGetSiteDetailQuery, useListVerbsQuery } from '../api/catalogApi';
 import { SiteVerbList } from '../components/sites/SiteVerbList';
 import { SiteScriptBrowser } from '../components/sites/SiteScriptBrowser';
+import { SiteOriginChip } from '../components/sites/SiteOriginChip';
 
 export function SiteDetailPage() {
   const { siteName } = useParams<{ siteName: string }>();
@@ -66,7 +67,8 @@ export function SiteDetailPage() {
         <Typography variant="body2" color="text.secondary">
           {detail.databaseFileName}
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <SiteOriginChip originKind={detail.originKind} />
           <Chip label={`${detail.verbCount} verbs`} size="small" color="primary" variant="outlined" />
           <Chip label={`${detail.scriptCount} scripts`} size="small" color="secondary" variant="outlined" />
         </Box>
@@ -85,6 +87,21 @@ export function SiteDetailPage() {
           {tabIndex === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Typography variant="subtitle2">Queue Policies</Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                <Typography variant="body2">
+                  Definition source: <strong>{detail.originKind === 'manifest' ? 'Declarative manifest' : 'Go native'}</strong>
+                </Typography>
+                {detail.manifestPath ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Manifest path: <code>{detail.manifestPath}</code>
+                  </Typography>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    This site is registered directly in Go and does not currently use a site manifest.
+                  </Typography>
+                )}
+              </Box>
+
               {(detail.queuePolicies ?? []).length > 0 ? (
                 <TableContainer>
                   <Table size="small">
