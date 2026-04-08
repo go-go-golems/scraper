@@ -62,19 +62,17 @@
 - [x] Add `NewRootCommandWithRegistry()` for tests.
 - [x] All `go test ./... -count=1` passing.
 
-## Phase 2: Make all sites external
+## Phase 2: Make all sites external (done)
 
-- [ ] Copy site content to `sites/` at repo root (YAML, JS, SQL, fixtures).
-- [ ] Add `testfixtures` helper package for reading HTML fixtures from `sites/`.
-- [ ] Rewrite `defaults.NewRegistry()` → `NewRegistryFromDirs(dirs ...string)` (no Go site imports).
-- [ ] Update `NewRootCommand()` to accept `manifestDirs ...string` and load from them.
-- [ ] Update `main()` to pass a default manifest dir (or empty for pure-CLI usage).
-- [ ] Delete Go site packages from `pkg/sites/`.
-- [ ] Update all tests: use `NewRegistryFromDirs("../../sites")` or `NewRootCommandWithRegistry()`.
-- [ ] Fix tests that used `jsdemo.Definition()` / `hackernews.Definition()` — load from manifest + modify.
-- [ ] Fix tests that used `ReadFixture()` — use `testfixtures` package.
-- [ ] Remove deprecated code (`LoadExternalSites`, dead constants).
-- [ ] Verify `go test ./... -count=1` passes.
+- [x] Copy site content to `sites/` at repo root (YAML, JS, SQL, fixtures).
+- [x] Add `testfixtures` helper package for reading HTML fixtures from `sites/`.
+- [x] Rewrite `defaults.NewRegistry()` → `NewRegistryFromDirs(dirs ...string)` (no Go site imports).
+- [x] Update `NewRootCommand()` to accept `manifestDirs ...string` and load from them.
+- [x] Delete Go site packages from `pkg/sites/`.
+- [x] Update all tests: use `NewRootCommand(version, testfixtures.SitesDir(t))`.
+- [x] Fix tests that used `jsdemo.Definition()` / `hackernews.Definition()` — load from manifest via `sitemanifest.LoadDefinition()`.
+- [x] Fix tests that used `ReadFixture()` — use `testfixtures.ReadFixture()`.
+- [x] Verify `go test ./... -count=1` passes (16 packages, all green).
 
 ## Validation
 

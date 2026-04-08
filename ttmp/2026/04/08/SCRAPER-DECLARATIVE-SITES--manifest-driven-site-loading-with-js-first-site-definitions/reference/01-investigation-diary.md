@@ -433,3 +433,19 @@ The final fix was:
 5. `NewRootCommandWithRegistry()` lets tests inject a pre-built registry
 6. Removed `NewRegistryWithSitesDir()`, `Register()`, `DefaultSitesManifestPath()`
 7. All `go test ./... -count=1` passing
+
+### The result
+
+All 4 sites are now pure filesystem manifests in `sites/` at the repo root:
+- `sites/hackernews/` — site.yaml + JS scripts + SQL migrations + HTML fixtures
+- `sites/jsdemo/` — site.yaml + JS scripts + SQL migrations
+- `sites/nereval/` — site.yaml + JS scripts + SQL migrations + HTML fixtures
+- `sites/slashdot/` — site.yaml + JS scripts + SQL migrations + HTML fixtures
+
+No Go site packages remain. The binary ships with zero embedded sites. All sites are loaded at runtime from `sites/` via `NewRootCommand(version, manifestDirs...)`.
+
+New helpers:
+- `pkg/testfixtures/helpers.go` — `SitesDir(t)` and `ReadFixture(t, site, name)` using `runtime.Caller(0)` for reliable path resolution
+- `defaults.NewRegistryFromDirs(dirs ...string)` — loads sites from one or more manifest directories
+
+The `--sites-manifest-dir` persistent flag on the root command still allows loading additional sites at runtime (for production use where `main()` calls `NewRootCommand()` with no dirs).
