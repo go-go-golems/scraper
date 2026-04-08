@@ -1,7 +1,7 @@
 ---
 Title: "Workflow Op Results Browser — Split Pane Fix + Results Tab"
 Ticket: SCRAPER-RESULTS-BROWSER
-Status: active
+Status: done
 Topics:
     - frontend
     - results
