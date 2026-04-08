@@ -374,3 +374,45 @@ go run ./cmd/scraper help scraper-adding-a-site
 ```
 
 Both rendered correctly.
+
+## 2026-04-08 sites extraction: move YAML manifests out of Go packages
+
+The next step was to physically move the four declarative sites (hackernews, jsdemo, slashdot, nereval) out of `pkg/sites/` into a top-level `sites/` directory. These packages no longer contain meaningful Go code — just `site.yaml` manifests and JavaScript/SQL files.
+
+### What happened
+
+1. Copied `pkg/sites/{hackernews,jsdemo,nereval,slashdot}` to `scraper/sites/` and deleted the Go site packages from `pkg/sites/`.
+2. Updated `pkg/sites/defaults/defaults.go` to load sites from a `sites/` directory on disk using `sitemanifest.RegisterDir` instead of Go `//go:embed`.
+3. Updated tests in `defaults_test.go`, `server_test.go`, and `service_test.go` to use explicit paths.
+
+### What went wrong
+
+This turned into a rabbit hole of CWD-relative path bugs:
+
+- `defaults.NewRegistry()` looks for `sites/` relative to CWD. When `go test` runs, CWD is the package directory (e.g., `pkg/api/server/`), NOT the repo root.
+- We spent multiple turns adjusting `filepath.Abs("../..")` vs `filepath.Abs("../../..")` etc., trying to get the right number of `..` levels for each test package.
+- Moved `sites/` from `js-scraper/sites/` to `js-scraper/scraper/sites/` (it was originally placed one level above the repo root by mistake).
+- The `TestServerSubmitThenWorkerAndInspectWorkflow` test used `sitesDir := t.TempDir()` for the SQLite storage dir but the **worker** got an empty site registry because `NewRootCommand()` → `defaults.NewRegistry()` → CWD lookup failed.
+
+### Root cause diagnosis
+
+The fundamental problem is **three overlapping ways to find manifests**:
+
+1. `defaults.NewRegistry()` — CWD-dependent auto-discovery (`sites/` relative to CWD)
+2. `--sites-manifest-dir` — explicit per-subcommand flag on `worker run` and `api serve`
+3. Implicit embedded sites (now removed)
+
+These overlap and conflict. The CWD-dependent path is the worst because it behaves differently in production vs tests vs development.
+
+### The fix plan
+
+Kill `defaults.NewRegistry()` CWD magic. Make manifest dir always explicit:
+
+1. Remove `defaults.NewRegistry()` and `NewRegistryWithSitesDir()`
+2. Add `--sites-manifest-dir` as a **persistent** root-level flag (not per-subcommand)
+3. `NewRootCommand()` reads the persistent flag and loads from there
+4. Tests pass explicit paths — no CWD gymnastics
+
+This leaves two clean concepts:
+- **Manifest dir** (site definitions) — always explicit
+- **Sites dir** (SQLite databases) — already explicit via `--sites-dir`

@@ -3,25 +3,23 @@ package cmd
 import (
 	"time"
 
-	sitemanifest "github.com/go-go-golems/scraper/pkg/sites/manifest"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	"github.com/spf13/cobra"
 )
 
 type workerCommandOptions struct {
-	engineDB          string
-	sitesDir          string
-	sitesManifestDir  string
-	workerID          string
-	maxWorkers        int
-	pollInterval      time.Duration
-	leaseDuration     time.Duration
-	httpTimeout       time.Duration
-	httpProxy         string
-	maxCycles         int
-	metricsAddr       string
-	metricsPath       string
-	runtimeEvents     runtimeEventOptions
+	engineDB      string
+	sitesDir      string
+	workerID      string
+	maxWorkers    int
+	pollInterval  time.Duration
+	leaseDuration time.Duration
+	httpTimeout   time.Duration
+	httpProxy     string
+	maxCycles     int
+	metricsAddr   string
+	metricsPath   string
+	runtimeEvents runtimeEventOptions
 }
 
 func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
@@ -36,11 +34,9 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 		Use:   "run",
 		Short: "Poll the engine DB and execute ready ops",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Load external site manifests if a directory is provided
-			if options.sitesManifestDir != "" {
-				if err := sitemanifest.RegisterDir(siteRegistry, options.sitesManifestDir); err != nil {
-					return err
-				}
+			// Load external sites from --sites-manifest-dir.
+			if err := LoadSitesFromFlag(cmd, siteRegistry); err != nil {
+				return err
 			}
 			return runWorkerCommand(cmd.Context(), cmd.OutOrStdout(), options, siteRegistry)
 		},
@@ -48,7 +44,6 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 
 	runCmd.Flags().StringVar(&options.engineDB, "engine-db", "state/engine.db", "Path to the durable engine SQLite database")
 	runCmd.Flags().StringVar(&options.sitesDir, "sites-dir", "state/sites", "Directory that stores per-site SQLite databases")
-	runCmd.Flags().StringVar(&options.sitesManifestDir, "sites-manifest-dir", "", "Directory containing site manifests (site.yaml per subdirectory). Loaded in addition to embedded sites.")
 	runCmd.Flags().StringVar(&options.workerID, "worker-id", "scraper-worker", "Stable worker identifier written into op leases")
 	runCmd.Flags().IntVar(&options.maxWorkers, "max-workers", 4, "Maximum number of queue domains processed per scheduler cycle")
 	runCmd.Flags().DurationVar(&options.pollInterval, "poll-interval", 250*time.Millisecond, "Delay between scheduler cycles")

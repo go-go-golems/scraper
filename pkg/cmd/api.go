@@ -6,19 +6,17 @@ import (
 	"time"
 
 	apiserver "github.com/go-go-golems/scraper/pkg/api/server"
-	sitemanifest "github.com/go-go-golems/scraper/pkg/sites/manifest"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	"github.com/spf13/cobra"
 )
 
 type apiCommandOptions struct {
-	address            string
-	engineDB          string
-	sitesDir          string
-	sitesManifestDir  string
-	readTimeout       time.Duration
-	writeTimeout      time.Duration
-	runtimeEvents     runtimeEventOptions
+	address       string
+	engineDB     string
+	sitesDir     string
+	readTimeout  time.Duration
+	writeTimeout time.Duration
+	runtimeEvents runtimeEventOptions
 }
 
 func newAPICommand(version string, siteRegistry *siteregistry.Registry) *cobra.Command {
@@ -33,11 +31,9 @@ func newAPICommand(version string, siteRegistry *siteregistry.Registry) *cobra.C
 		Use:   "serve",
 		Short: "Run the local HTTP API server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Load external site manifests if a directory is provided
-			if options.sitesManifestDir != "" {
-				if err := sitemanifest.RegisterDir(siteRegistry, options.sitesManifestDir); err != nil {
-					return err
-				}
+			// Load external sites from --sites-manifest-dir.
+			if err := LoadSitesFromFlag(cmd, siteRegistry); err != nil {
+				return err
 			}
 
 			eventConfig, err := options.runtimeEvents.pubSubConfig()
@@ -69,7 +65,6 @@ func newAPICommand(version string, siteRegistry *siteregistry.Registry) *cobra.C
 	serveCmd.Flags().StringVar(&options.address, "address", "127.0.0.1:8080", "Address to bind the HTTP API server to")
 	serveCmd.Flags().StringVar(&options.engineDB, "engine-db", "state/engine.db", "Path to the durable engine SQLite database")
 	serveCmd.Flags().StringVar(&options.sitesDir, "sites-dir", "state/sites", "Directory that stores per-site SQLite databases")
-	serveCmd.Flags().StringVar(&options.sitesManifestDir, "sites-manifest-dir", "", "Directory containing site manifests (site.yaml per subdirectory). Loaded in addition to embedded sites.")
 	serveCmd.Flags().DurationVar(&options.readTimeout, "read-timeout", 10*time.Second, "HTTP server read timeout")
 	serveCmd.Flags().DurationVar(&options.writeTimeout, "write-timeout", 30*time.Second, "HTTP server write timeout")
 	addRuntimeEventFlags(serveCmd, &options.runtimeEvents, true, true)

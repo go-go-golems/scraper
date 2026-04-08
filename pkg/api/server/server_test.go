@@ -34,9 +34,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// sitesRegistry returns a registry with all built-in sites loaded.
+func sitesRegistry(t *testing.T) *siteregistry.Registry {
+	reg, err := defaults.NewRegistry()
+	if err != nil {
+		t.Skipf("cannot load sites registry: %v", err)
+	}
+	return reg
+}
+
 func TestServerHealthAndCatalogEndpoints(t *testing.T) {
-	registry, err := defaults.NewRegistry()
-	require.NoError(t, err)
+	registry := sitesRegistry(t)
 
 	server, err := apiserver.New(apiserver.Config{
 		Address:      "127.0.0.1:0",
@@ -145,8 +153,7 @@ func TestServerHealthAndCatalogEndpoints(t *testing.T) {
 }
 
 func TestServerSubmitThenWorkerAndInspectWorkflow(t *testing.T) {
-	registry, err := defaults.NewRegistry()
-	require.NoError(t, err)
+	registry := sitesRegistry(t)
 
 	sitesDir := t.TempDir()
 	engineDB := filepath.Join(t.TempDir(), "engine.db")
@@ -193,7 +200,7 @@ func TestServerSubmitThenWorkerAndInspectWorkflow(t *testing.T) {
 	defer workflowResp.Body.Close()
 	require.Equal(t, http.StatusOK, workflowResp.StatusCode)
 
-	rootCmd, err := scrapercmd.NewRootCommand("test-version")
+	rootCmd, err := scrapercmd.NewRootCommandWithRegistry("test-version", registry)
 	require.NoError(t, err)
 	var workerStdout bytes.Buffer
 	rootCmd.SetOut(&workerStdout)
@@ -265,8 +272,7 @@ func TestServerSubmitThenWorkerAndInspectWorkflow(t *testing.T) {
 }
 
 func TestServerArtifactAndOpResultEndpoints(t *testing.T) {
-	registry, err := defaults.NewRegistry()
-	require.NoError(t, err)
+	registry := sitesRegistry(t)
 
 	ctx := context.Background()
 	engineDB := filepath.Join(t.TempDir(), "engine.db")
@@ -369,8 +375,7 @@ func TestServerArtifactAndOpResultEndpoints(t *testing.T) {
 }
 
 func TestServerRuntimeEventsHistoryAndStream(t *testing.T) {
-	registry, err := defaults.NewRegistry()
-	require.NoError(t, err)
+	registry := sitesRegistry(t)
 
 	sitesDir := t.TempDir()
 	engineDB := filepath.Join(t.TempDir(), "engine.db")

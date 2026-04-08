@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-04-08 (session 2) — site manifest loading cleanup
+
+- Diagnosed the root cause of the "site not registered" test failures: `defaults.NewRegistry()` used CWD-dependent `sites/` directory lookup which broke in tests.
+- Restored Go site packages (`pkg/sites/{hackernews,jsdemo,nereval,slashdot}`) from git — the `//go:embed` directives and `ReadFixture()` test helpers require them.
+- Removed the `sites/` top-level directory — built-in sites are embedded via Go packages; external sites use `--sites-manifest-dir`.
+- Simplified `defaults` package: `NewRegistry()` registers all built-in sites; `LoadExternalSites(r, dir)` loads external manifests into an existing registry.
+- Moved `--sites-manifest-dir` to a persistent root-level flag on `scraper` command (not per-subcommand).
+- Added `LoadSitesFromFlag()` shared helper used by `worker run` and `api serve` to load external sites from the root flag.
+- Added `NewRootCommandWithRegistry()` for tests that need a pre-populated registry.
+- Updated `server_test.go` to use `defaults.NewRegistry()` instead of CWD-dependent path resolution.
+- Updated `submission/service_test.go` to use `defaults.NewRegistry()` instead of `NewRegistryWithSitesDir()`.
+- Simplified `defaults_test.go` — no more CWD tricks, just calls `NewRegistry()`.
+- Removed `NewRegistryWithSitesDir()`, `Register()`, `DefaultSitesManifestPath()`, `DefaultSitesManifestDir` from defaults package.
+- All `go test ./... -count=1` passing.
+
 ## 2026-04-08
 
 - Initial workspace created.
