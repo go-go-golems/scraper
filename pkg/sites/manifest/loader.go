@@ -46,6 +46,8 @@ func LoadDefinition(siteFS fs.FS, manifestPath string) (siteregistry.Definition,
 	def := siteregistry.Definition{
 		Name:             site.Name,
 		DatabaseFileName: site.DatabaseFileName,
+		Origin:           siteregistry.DefinitionOriginManifest,
+		ManifestPath:     normalizeManifestPath(manifestPath),
 		Modules:          modules,
 		QueuePolicies:    buildQueuePolicies(site.QueuePolicies),
 	}

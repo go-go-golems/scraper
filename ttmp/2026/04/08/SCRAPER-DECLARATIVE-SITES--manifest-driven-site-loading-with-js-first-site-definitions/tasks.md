@@ -40,9 +40,20 @@
 
 ## API And Product Follow-On
 
-- [ ] Expose manifest-origin metadata in the catalog API if useful.
-- [ ] Decide whether the frontend should show whether a site is declarative or Go-native.
-- [ ] Decide whether operator docs should include a “create a site without Go” tutorial.
+- [x] Decide to expose manifest-origin metadata in the catalog API.
+- [x] Add provenance fields to `registry.Definition` with a safe default for legacy Go-defined sites.
+- [x] Populate manifest provenance in `pkg/sites/manifest/loader.go`.
+- [x] Extend `pkg/services/catalog/service.go` site summary/detail DTOs with provenance metadata.
+- [x] Add or update catalog/API tests proving `/api/v1/sites` and `/api/v1/sites/{site}/detail` return provenance.
+- [x] Decide that the frontend should show whether a site is declarative or Go-native.
+- [ ] Add provenance fields to `web/src/api/types.ts` and story fixtures.
+- [ ] Add a shared site-origin badge/chip component in the frontend.
+- [ ] Show provenance on the sites list cards.
+- [ ] Show provenance and manifest path details on the site detail page.
+- [x] Decide to add a no-Go site authoring tutorial.
+- [ ] Add a new help/tutorial page for creating a declarative site without Go.
+- [ ] Update the older “adding a site” tutorial to reference the new declarative path.
+- [ ] Validate the new help pages through the embedded help system if practical.
 
 ## Validation
 

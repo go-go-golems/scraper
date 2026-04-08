@@ -28,6 +28,8 @@ func (e *NotFoundError) Error() string {
 type SiteSummary struct {
 	Name             model.SiteName `json:"name"`
 	DatabaseFileName string         `json:"databaseFileName"`
+	OriginKind       string         `json:"originKind"`
+	ManifestPath     string         `json:"manifestPath,omitempty"`
 	HasScripts       bool           `json:"hasScripts"`
 	HasSubmitVerbs   bool           `json:"hasSubmitVerbs"`
 }
@@ -101,6 +103,8 @@ func (s *Service) ListSites() []SiteSummary {
 		ret = append(ret, SiteSummary{
 			Name:             def.Name,
 			DatabaseFileName: def.DatabaseFileName,
+			OriginKind:       string(def.Origin),
+			ManifestPath:     def.ManifestPath,
 			HasScripts:       def.ScriptsFS != nil && def.ScriptsRoot != "",
 			HasSubmitVerbs:   def.VerbsFS != nil && def.VerbsRoot != "",
 		})
@@ -119,6 +123,8 @@ func (s *Service) GetSite(site model.SiteName) (*SiteSummary, siteregistry.Defin
 	summary := &SiteSummary{
 		Name:             def.Name,
 		DatabaseFileName: def.DatabaseFileName,
+		OriginKind:       string(def.Origin),
+		ManifestPath:     def.ManifestPath,
 		HasScripts:       def.ScriptsFS != nil && def.ScriptsRoot != "",
 		HasSubmitVerbs:   def.VerbsFS != nil && def.VerbsRoot != "",
 	}

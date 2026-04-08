@@ -43,6 +43,12 @@ queuePolicies:
 	if def.DatabaseFileName != "js-demo.db" {
 		t.Fatalf("def.DatabaseFileName = %q", def.DatabaseFileName)
 	}
+	if def.Origin != siteregistry.DefinitionOriginManifest {
+		t.Fatalf("def.Origin = %q", def.Origin)
+	}
+	if def.ManifestPath != DefaultManifestPath {
+		t.Fatalf("def.ManifestPath = %q", def.ManifestPath)
+	}
 	if def.ScriptsFS == nil || def.ScriptsRoot != "scripts" {
 		t.Fatalf("scripts root not attached: %#v", def)
 	}
@@ -154,7 +160,11 @@ scriptsRoot: scripts
 	if _, ok := reg.Get(model.SiteName("go-site")); !ok {
 		t.Fatalf("go-site missing after manifest registration")
 	}
-	if _, ok := reg.Get(model.SiteName("manifest-site")); !ok {
+	manifestSite, ok := reg.Get(model.SiteName("manifest-site"))
+	if !ok {
 		t.Fatalf("manifest-site missing after manifest registration")
+	}
+	if manifestSite.Origin != siteregistry.DefinitionOriginManifest {
+		t.Fatalf("manifest-site origin = %q", manifestSite.Origin)
 	}
 }

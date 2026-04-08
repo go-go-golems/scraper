@@ -269,3 +269,54 @@ At this point the backend implementation portion of the ticket is complete. The 
 - expose manifest-origin metadata in the catalog API if we decide it is useful
 - decide whether the frontend should display declarative vs Go-native provenance
 - decide whether to add a “create a site without Go” onboarding tutorial
+
+## 2026-04-08 follow-on approval
+
+After the initial backend rollout, the next request was to do all three remaining follow-ons:
+
+- expose manifest-origin metadata in the catalog API
+- show declarative vs Go-native provenance in the frontend
+- add a no-Go site authoring tutorial
+
+I converted those into a second, more detailed task block in the ticket before touching code again. The intended execution order is:
+
+1. backend provenance fields and catalog API responses
+2. frontend provenance display
+3. help/tutorial authoring
+
+That order keeps the data model authoritative before the UI renders it.
+
+## 2026-04-08 catalog provenance slice
+
+The first follow-on slice extended the backend data model so provenance can travel through the catalog API. The touched files were:
+
+- [pkg/sites/registry/registry.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/registry/registry.go)
+- [pkg/sites/manifest/loader.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/manifest/loader.go)
+- [pkg/services/catalog/service.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/services/catalog/service.go)
+- [pkg/api/server/server_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/api/server/server_test.go)
+
+I modeled provenance directly on `registry.Definition` with:
+
+- `Origin`
+- `ManifestPath`
+
+The important design choice was to give `registry.Register(...)` a safe default. If a caller registers a definition without setting an origin, the registry now records it as `go`. That keeps older Go-defined sites backward compatible without forcing every existing site package to be edited immediately.
+
+Manifest-backed sites set:
+
+- `Origin = "manifest"`
+- `ManifestPath = "site.yaml"` (or whatever manifest path was loaded)
+
+The catalog service then exposes that metadata through both site summaries and site detail responses.
+
+I tightened the HTTP tests so they assert:
+
+- `GET /api/v1/sites` includes manifest provenance for `js-demo`
+- `GET /api/v1/sites/js-demo/detail` includes `originKind` and `manifestPath`
+
+Validation for this slice was:
+
+```bash
+gofmt -w pkg/sites/registry/registry.go pkg/sites/manifest/loader.go pkg/sites/manifest/loader_test.go pkg/services/catalog/service.go pkg/api/server/server_test.go
+go test ./pkg/sites/manifest ./pkg/api/server -count=1
+```

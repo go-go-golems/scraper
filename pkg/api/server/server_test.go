@@ -70,11 +70,46 @@ func TestServerHealthAndCatalogEndpoints(t *testing.T) {
 
 		payload := struct {
 			Sites []struct {
-				Name string `json:"name"`
+				Name         string `json:"name"`
+				OriginKind   string `json:"originKind"`
+				ManifestPath string `json:"manifestPath"`
 			} `json:"sites"`
 		}{}
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
 		require.NotEmpty(t, payload.Sites)
+		var jsDemo *struct {
+			Name         string `json:"name"`
+			OriginKind   string `json:"originKind"`
+			ManifestPath string `json:"manifestPath"`
+		}
+		for i := range payload.Sites {
+			if payload.Sites[i].Name == "js-demo" {
+				jsDemo = &payload.Sites[i]
+				break
+			}
+		}
+		require.NotNil(t, jsDemo)
+		require.Equal(t, "manifest", jsDemo.OriginKind)
+		require.Equal(t, "site.yaml", jsDemo.ManifestPath)
+	})
+
+	t.Run("site detail provenance", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/api/v1/sites/js-demo/detail")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		payload := struct {
+			Site struct {
+				Name         string `json:"name"`
+				OriginKind   string `json:"originKind"`
+				ManifestPath string `json:"manifestPath"`
+			} `json:"site"`
+		}{}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
+		require.Equal(t, "js-demo", payload.Site.Name)
+		require.Equal(t, "manifest", payload.Site.OriginKind)
+		require.Equal(t, "site.yaml", payload.Site.ManifestPath)
 	})
 
 	t.Run("metrics", func(t *testing.T) {

@@ -14,6 +14,8 @@ import (
 type Definition struct {
 	Name                    model.SiteName
 	DatabaseFileName        string
+	Origin                  DefinitionOrigin
+	ManifestPath            string
 	ScriptsFS               fs.FS
 	ScriptsRoot             string
 	VerbsFS                 fs.FS
@@ -30,6 +32,13 @@ type Definition struct {
 	RegisterCLI             func(root *cobra.Command) error
 }
 
+type DefinitionOrigin string
+
+const (
+	DefinitionOriginGo       DefinitionOrigin = "go"
+	DefinitionOriginManifest DefinitionOrigin = "manifest"
+)
+
 type Registry struct {
 	sites map[model.SiteName]Definition
 }
@@ -43,6 +52,9 @@ func New() *Registry {
 func (r *Registry) Register(def Definition) error {
 	if def.Name == "" {
 		return fmt.Errorf("site name is required")
+	}
+	if def.Origin == "" {
+		def.Origin = DefinitionOriginGo
 	}
 	if _, ok := r.sites[def.Name]; ok {
 		return fmt.Errorf("site already registered: %s", def.Name)
