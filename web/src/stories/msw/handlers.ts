@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import type { ArtifactSummary } from '../api/types';
 import type { WorkflowOp } from '../api/types';
+import type { WorkflowResultSummary } from '../api/types';
 
 // ─── Shared fixture data ─────────────────────────────────────────────────────
 
@@ -149,7 +150,146 @@ export const emptyArtifactHandlers = [
     });
   }),
 
+
   // Ops list (needed by FilterBar's op dropdown)
+  http.get('/api/v1/workflows/:workflowId/ops', ({ params }) => {
+    return HttpResponse.json({ ops: [] });
+  }),
+];
+
+// ─── Shared fixture data for results ─────────────────────────────────────────
+
+export const STORY_RESULTS: WorkflowResultSummary[] = [
+  {
+    opID: `${STORY_WORKFLOW_ID}:fetch`,
+    kind: 'http',
+    status: 'succeeded',
+    recordCount: 0,
+    artifactCount: 1,
+    dataSize: 48_320,
+    error: undefined,
+    completedAt: new Date(Date.now() - 7200_000).toISOString(),
+  },
+  {
+    opID: `${STORY_WORKFLOW_ID}:extract`,
+    kind: 'js',
+    status: 'succeeded',
+    recordCount: 30,
+    artifactCount: 0,
+    dataSize: 2048,
+    error: undefined,
+    completedAt: new Date(Date.now() - 3600_000).toISOString(),
+  },
+  {
+    opID: `${STORY_WORKFLOW_ID}:page-2-fetch`,
+    kind: 'http',
+    status: 'succeeded',
+    recordCount: 0,
+    artifactCount: 1,
+    dataSize: 52_800,
+    error: undefined,
+    completedAt: new Date(Date.now() - 1800_000).toISOString(),
+  },
+  {
+    opID: `${STORY_WORKFLOW_ID}:page-2-extract`,
+    kind: 'js',
+    status: 'failed',
+    recordCount: 0,
+    artifactCount: 0,
+    dataSize: 0,
+    error: {
+      Code: 'JSError',
+      Message: 'SyntaxError: Unexpected token at line 12',
+      Retryable: false,
+    },
+    completedAt: new Date(Date.now() - 900_000).toISOString(),
+  },
+];
+
+// ─── Default handler set for results stories ─────────────────────────────────
+
+export const defaultResultsHandlers = [
+  // Workflow results list
+  http.get('/api/v1/workflows/:workflowId/results', ({ params }) => {
+    return HttpResponse.json({
+      workflowID: String(params.workflowId),
+      total: STORY_RESULTS.length,
+      results: STORY_RESULTS,
+    });
+  }),
+
+  // Workflow ops (needed by ResultFilterBar's op dropdown)
+  http.get('/api/v1/workflows/:workflowId/ops', ({ params }) => {
+    return HttpResponse.json({
+      ops: STORY_RESULTS.map((r) => ({
+        op: makeWorkflowOp({ ID: r.opID, Kind: r.kind }),
+        status: r.status,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })),
+    });
+  }),
+
+  // Full op result body for ResultPreviewPanel (extract op — JSON records)
+  http.get(`/api/v1/workflows/${STORY_WORKFLOW_ID}/ops/${STORY_WORKFLOW_ID}:extract/result`, () => {
+    return HttpResponse.json({
+      result: {
+        OpID: `${STORY_WORKFLOW_ID}:extract`,
+        Data: {
+          stories: [
+            { id: 12345, url: 'https://example.com/1', title: 'Show HN: A cool project' },
+            { id: 12346, url: 'https://example.com/2', title: 'Another story' },
+            { id: 12347, url: 'https://example.com/3', title: 'Yet another story' },
+          ],
+          nextPage: '/news?p=2',
+          scrapedAt: new Date().toISOString(),
+        },
+        Records: [
+          { Collection: 'items', Key: '12345', Data: { id: 12345, title: 'A cool project' } },
+          { Collection: 'items', Key: '12346', Data: { id: 12346, title: 'Another story' } },
+        ],
+        Artifacts: [],
+        Emitted: [],
+        EmittedIDs: [],
+        Error: undefined,
+        CompletedAt: new Date().toISOString(),
+      },
+    });
+  }),
+
+  // Full op result body for failed op
+  http.get(`/api/v1/workflows/${STORY_WORKFLOW_ID}/ops/${STORY_WORKFLOW_ID}:page-2-extract/result`, () => {
+    return HttpResponse.json({
+      result: {
+        OpID: `${STORY_WORKFLOW_ID}:page-2-extract`,
+        Data: null,
+        Records: [],
+        Artifacts: [],
+        Emitted: [],
+        EmittedIDs: [],
+        Error: {
+          Code: 'JSError',
+          Message: 'SyntaxError: Unexpected token at line 12',
+          Retryable: false,
+          Details: null,
+          OccurredAt: new Date().toISOString(),
+        },
+        CompletedAt: new Date().toISOString(),
+      },
+    });
+  }),
+];
+
+// ─── Empty results list handler ──────────────────────────────────────────────
+
+export const emptyResultsHandlers = [
+  http.get('/api/v1/workflows/:workflowId/results', ({ params }) => {
+    return HttpResponse.json({
+      workflowID: String(params.workflowId),
+      total: 0,
+      results: [],
+    });
+  }),
   http.get('/api/v1/workflows/:workflowId/ops', ({ params }) => {
     return HttpResponse.json({ ops: [] });
   }),
