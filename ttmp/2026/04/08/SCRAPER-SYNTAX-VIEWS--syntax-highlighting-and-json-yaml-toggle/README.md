@@ -1,7 +1,7 @@
 ---
 Title: "Syntax Highlighting — Script + JSON/YAML Views"
 Ticket: SCRAPER-SYNTAX-VIEWS
-Status: active
+Status: done
 Topics:
     - frontend
     - ux
