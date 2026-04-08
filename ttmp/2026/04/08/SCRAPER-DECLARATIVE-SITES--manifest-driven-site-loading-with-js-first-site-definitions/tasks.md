@@ -23,11 +23,11 @@
 - [x] Add `pkg/sites/manifest/manifest.go` with the public manifest structs.
 - [x] Add `pkg/sites/manifest/validation.go` with path, module, and queue-policy validation helpers.
 - [x] Add `pkg/sites/manifest/manifest_test.go` covering valid manifests and validation failures.
-- [ ] Add `pkg/sites/manifest/loader.go` that loads `site.yaml` from an `fs.FS` and maps it into `registry.Definition`.
+- [x] Add `pkg/sites/manifest/loader.go` that loads `site.yaml` from an `fs.FS` and maps it into `registry.Definition`.
 - [x] Add `pkg/sites/manifest/modules.go` with the bounded mapping from manifest module IDs to `gggengine.ModuleSpec`.
-- [ ] Add `pkg/sites/manifest/loader_test.go` covering loader behavior, queue-policy normalization, and unknown module IDs.
+- [x] Add `pkg/sites/manifest/loader_test.go` covering loader behavior, queue-policy normalization, and unknown module IDs.
 - [ ] Add a `registry.RegisterDefinition(...)` helper if needed to keep registry call sites simple.
-- [ ] Add a `registry.RegisterManifestFS(...)` or equivalent helper so embedded and filesystem sites share one loading path.
+- [x] Add a `registry.RegisterManifestFS(...)` or equivalent helper so embedded and filesystem sites share one loading path.
 - [ ] Keep direct Go `registry.Definition` registration untouched as the fallback/escape hatch.
 - [ ] Migrate `pkg/sites/jsdemo` to embed and load `site.yaml` instead of hand-assembling `registry.Definition`.
 - [ ] Add a `pkg/sites/jsdemo/site.yaml` manifest containing roots, default modules, and database filename.

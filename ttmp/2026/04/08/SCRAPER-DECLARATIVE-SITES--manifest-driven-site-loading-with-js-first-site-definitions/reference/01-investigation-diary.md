@@ -140,3 +140,37 @@ go test ./pkg/sites/manifest -count=1
 ```
 
 The tests passed cleanly on the first run.
+
+## 2026-04-08 loader slice
+
+The next slice added the actual load path:
+
+- [pkg/sites/manifest/loader.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/manifest/loader.go)
+- [pkg/sites/manifest/loader_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/manifest/loader_test.go)
+
+I kept this logic inside `pkg/sites/manifest` instead of `pkg/sites/registry`. That choice avoids a package cycle and preserves a clean layering:
+
+- `registry` stays a dumb container for `Definition`
+- `manifest` becomes the translation layer from declarative YAML into `Definition`
+
+This slice now supports three steps:
+
+1. read `site.yaml` from any `fs.FS`
+2. decode it with `KnownFields(true)` so typos fail fast
+3. validate and map it into a normal `registry.Definition`
+
+I also added `RegisterFS(...)` in the manifest package so call sites can register embedded manifest-backed sites without each package having to repeat the load-and-register sequence.
+
+Validation for this slice was:
+
+```bash
+gofmt -w pkg/sites/manifest/*.go
+go test ./pkg/sites/manifest -count=1
+```
+
+The loader tests cover:
+
+- manifest-to-definition mapping
+- queue-policy normalization
+- strict YAML decoding for unknown keys
+- registration through a real `registry.Registry`
