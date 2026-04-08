@@ -416,3 +416,20 @@ Kill `defaults.NewRegistry()` CWD magic. Make manifest dir always explicit:
 This leaves two clean concepts:
 - **Manifest dir** (site definitions) — always explicit
 - **Sites dir** (SQLite databases) — already explicit via `--sites-dir`
+
+### What we actually did
+
+During the fix we discovered that the Go site packages (`pkg/sites/{hackernews,jsdemo,...}`) still need to exist because:
+- `//go:embed` embeds scripts/verbs/migrations/fixtures into the binary
+- Tests use `hackernews.Definition()`, `hackernews.ReadFixture()`, `jsdemo.Definition()`, etc.
+
+So the extraction into a bare `sites/` directory was wrong — built-in sites must stay as Go packages for embedding. The `--sites-manifest-dir` flag is correctly for **external** sites only.
+
+The final fix was:
+1. Restored Go site packages from git
+2. `defaults.NewRegistry()` explicitly registers built-in sites (no CWD dependency)
+3. `defaults.LoadExternalSites(r, dir)` loads additional external sites
+4. `--sites-manifest-dir` is a persistent root flag, read by `LoadSitesFromFlag()` helper
+5. `NewRootCommandWithRegistry()` lets tests inject a pre-built registry
+6. Removed `NewRegistryWithSitesDir()`, `Register()`, `DefaultSitesManifestPath()`
+7. All `go test ./... -count=1` passing
