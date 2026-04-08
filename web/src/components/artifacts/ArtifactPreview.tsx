@@ -7,15 +7,6 @@ interface ArtifactPreviewProps {
   name: string;
 }
 
-const monoStyle = {
-  margin: 0,
-  fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-  fontSize: '0.8rem',
-  lineHeight: 1.5,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-} as const;
-
 export function ArtifactPreview({ content, contentType, name }: ArtifactPreviewProps) {
   return (
     <Box>
@@ -23,37 +14,21 @@ export function ArtifactPreview({ content, contentType, name }: ArtifactPreviewP
         {name}
       </Typography>
 
-      <Box
-        sx={{
-          maxHeight: 400,
-          overflow: 'auto',
-          bgcolor: 'grey.50',
-          borderRadius: 1,
-          border: 1,
-          borderColor: 'divider',
-          p: 1.5,
-        }}
-      >
-        {contentType === 'application/json' ? (
-          <CodeViewPanel
-            data={JSON.parse(content)}
-            label={name}
-            defaultFormat="yaml"
-            formats={['json', 'yaml']}
-            maxHeight={360}
-          />
-        ) : contentType === 'text/html' ? (
-          <pre style={monoStyle}>
-            <code>{content}</code>
-          </pre>
-        ) : contentType === 'text/plain' ? (
-          <pre style={monoStyle}>{content}</pre>
-        ) : (
-          <Typography variant="body2" color="text.secondary">
-            Binary content &mdash; download the artifact to view.
-          </Typography>
-        )}
-      </Box>
+      <CodeViewPanel
+        data={contentType === 'text/html' || contentType === 'text/plain'
+          ? content
+          : JSON.parse(content)
+        }
+        label={name}
+        defaultFormat={contentType === 'text/html' || contentType === 'text/plain' ? 'html' : 'yaml'}
+        formats={contentType === 'text/html'
+          ? ['html', 'json', 'yaml']
+          : contentType === 'text/plain'
+            ? ['yaml', 'json']
+            : ['json', 'yaml']
+        }
+        maxHeight={360}
+      />
     </Box>
   );
 }

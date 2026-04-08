@@ -7,18 +7,28 @@ import CheckIcon from '@mui/icons-material/Check';
 import CodeMirror from '@uiw/react-codemirror';
 import { json as jsonLang } from '@codemirror/lang-json';
 import { yaml as yamlLang } from '@codemirror/lang-yaml';
+import { html as htmlLang } from '@codemirror/lang-html';
 import jsYaml from 'js-yaml';
 import type { Extension } from '@codemirror/state';
 
+type DataFormat = 'json' | 'yaml' | 'html';
+
+/** Label for each format in the toggle button */
+const FORMAT_LABELS: Record<DataFormat, string> = {
+  json: 'JSON',
+  yaml: 'YAML',
+  html: 'HTML',
+};
+
 interface CodeViewPanelProps {
-  /** The data to render */
+  /** The data to render — pass as string for HTML/text content */
   data: unknown;
   /** Label shown in the header bar */
   label?: string;
   /** Default format shown on first render */
-  defaultFormat?: 'json' | 'yaml';
+  defaultFormat?: DataFormat;
   /** Which format toggle buttons to show */
-  formats?: ('json' | 'yaml')[];
+  formats?: DataFormat[];
   maxHeight?: number;
 }
 
@@ -50,10 +60,8 @@ const THEME = {
   },
 };
 
-function formatData(data: unknown, format: 'json' | 'yaml'): string {
-  if (format === 'yaml') {
-    return jsYaml.dump(data, { indent: 2, lineWidth: 120 });
-  }
+function dataAsString(data: unknown): string {
+  if (typeof data === 'string') return data;
   return JSON.stringify(data, null, 2);
 }
 
@@ -65,14 +73,16 @@ export function CodeViewPanel({
   maxHeight = 400,
 }: CodeViewPanelProps) {
   const [expanded, setExpanded] = useState(true);
-  const [format, setFormat] = useState<'json' | 'yaml'>(defaultFormat);
+  const [format, setFormat] = useState<DataFormat>(defaultFormat);
   const [copied, setCopied] = useState(false);
 
   const extensions: Extension[] = [
-    format === 'json' ? jsonLang() : yamlLang(),
+    format === 'json' ? jsonLang() :
+    format === 'yaml' ? yamlLang() :
+    htmlLang(),
   ];
 
-  const content = formatData(data, format);
+  const content = dataAsString(data);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -80,12 +90,12 @@ export function CodeViewPanel({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // clipboard not available
+      // clipboard unavailable
     }
   }, [content]);
 
   const handleFormatChange = useCallback(
-    (_: unknown, next: 'json' | 'yaml' | null) => {
+    (_: unknown, next: DataFormat | null) => {
       if (next !== null) setFormat(next);
     },
     [],
@@ -120,7 +130,7 @@ export function CodeViewPanel({
             >
               {formats.map((f) => (
                 <ToggleButton key={f} value={f} sx={{ py: 0.25, px: 1, fontSize: '0.7rem', textTransform: 'none' }}>
-                  {f.toUpperCase()}
+                  {FORMAT_LABELS[f]}
                 </ToggleButton>
               ))}
             </ToggleButtonGroup>

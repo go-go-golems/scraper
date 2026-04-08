@@ -18,7 +18,7 @@ import {
   RuntimeEventSource,
 } from '../../pb/proto/scraper/runtime/v1/events_pb';
 import { SeverityDotIndicator } from './SeverityDotIndicator';
-import { JsonViewer } from '../common/JsonViewer';
+import { CodeViewPanel } from '../common/CodeViewPanel';
 
 // ── helpers ──────────────────────────────────────────────────────────
 
@@ -166,7 +166,13 @@ function EventDetailRow({
           typeof event.payload === 'object' &&
           Object.keys(event.payload as Record<string, unknown>).length > 0 && (
             <Box sx={{ maxWidth: 480 }}>
-              <JsonViewer data={event.payload} maxHeight={200} />
+              <CodeViewPanel
+                data={event.payload}
+                label="Payload"
+                defaultFormat="yaml"
+                formats={['json', 'yaml']}
+                maxHeight={200}
+              />
             </Box>
           )}
       </TableCell>
