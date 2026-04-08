@@ -1,5 +1,6 @@
 import { Box, Chip, Typography } from '@mui/material';
 import CodeMirror from '@uiw/react-codemirror';
+import { EditorState } from '@codemirror/state';
 import { javascript } from '@codemirror/lang-javascript';
 
 interface ScriptViewerProps {
@@ -23,7 +24,7 @@ export function ScriptViewer({ source, filename }: ScriptViewerProps) {
       <Box
         sx={{
           maxHeight: 500,
-          overflow: 'hidden',
+          overflow: 'auto',
           borderRadius: 1,
           border: '1px solid',
           borderColor: 'divider',
@@ -31,10 +32,10 @@ export function ScriptViewer({ source, filename }: ScriptViewerProps) {
       >
         <CodeMirror
           value={source}
-          extensions={[javascript({ jsx: false, typescript: false })]}
-          editable={() => false}
+          extensions={[javascript({ jsx: false, typescript: false }), EditorState.readOnly.of(true)]}
+          editable={false}
           theme="light"
-          style={{ height: 500 }}
+          style={{ minHeight: 500, height: 0 }}
           basicSetup={{
             lineNumbers: true,
             foldGutter: true,

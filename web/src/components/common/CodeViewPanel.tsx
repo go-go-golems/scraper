@@ -5,6 +5,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
 import CodeMirror from '@uiw/react-codemirror';
+import { EditorState } from '@codemirror/state';
 import { json as jsonLang } from '@codemirror/lang-json';
 import { yaml as yamlLang } from '@codemirror/lang-yaml';
 import { html as htmlLang } from '@codemirror/lang-html';
@@ -80,6 +81,7 @@ export function CodeViewPanel({
     format === 'json' ? jsonLang() :
     format === 'yaml' ? yamlLang() :
     htmlLang(),
+    EditorState.readOnly.of(true),
   ];
 
   const content = dataAsString(data);
@@ -96,10 +98,17 @@ export function CodeViewPanel({
 
   const handleFormatChange = useCallback(
     (_: unknown, next: DataFormat | null) => {
+      // next is null when the active button is clicked in exclusive mode — keep current
       if (next !== null) setFormat(next);
     },
     [],
   );
+
+  // Keep current format when clicking active toggle button (fires null in exclusive mode)
+  const handleToggleFormat = useCallback((f: DataFormat) => {
+    if (format === f) return;
+    setFormat(f);
+  }, [format]);
 
   const showToggle = formats.length > 1;
 
@@ -122,14 +131,14 @@ export function CodeViewPanel({
             </Typography>
           )}
           {showToggle && (
-            <ToggleButtonGroup
-              value={format}
-              exclusive
-              onChange={handleFormatChange}
-              size="small"
-            >
+            <ToggleButtonGroup size="small">
               {formats.map((f) => (
-                <ToggleButton key={f} value={f} sx={{ py: 0.25, px: 1, fontSize: '0.7rem', textTransform: 'none' }}>
+                <ToggleButton
+                  key={f}
+                  selected={format === f}
+                  onClick={() => handleToggleFormat(f)}
+                  sx={{ py: 0.25, px: 1, fontSize: '0.7rem', textTransform: 'none' }}
+                >
                   {FORMAT_LABELS[f]}
                 </ToggleButton>
               ))}
@@ -161,7 +170,7 @@ export function CodeViewPanel({
         <Box
           sx={{
             maxHeight,
-            overflow: 'hidden',
+            overflow: 'auto',
             borderRadius: 1,
             border: '1px solid',
             borderColor: 'divider',
@@ -170,9 +179,9 @@ export function CodeViewPanel({
           <CodeMirror
             value={content}
             extensions={extensions}
-            editable={() => false}
+            editable={false}
             theme="light"
-            style={{ height: maxHeight }}
+            style={{ minHeight: maxHeight, height: 0 }}
             basicSetup={{
               lineNumbers: true,
               foldGutter: false,
