@@ -769,3 +769,115 @@ raw args
 -> build dynamic site verbs
 -> normal Cobra Execute()
 ```
+
+## Step 4: Replace `pflag` bootstrap parsing with a manual scanner
+
+After the main bootstrap slice was committed, I ran a real binary path check instead of relying only on unit tests. That exposed a subtle but important bug: `go run ./cmd/scraper --sites-manifest-dir ./sites site js-demo run seed --help` failed before the Cobra tree executed because the bootstrap `pflag.FlagSet` treated `--help` as its own help request. In other words, the bootstrap parser was still too command-like; it needed to be a dumb extractor that only notices site-manifest flags and ignores everything else.
+
+I replaced the `pflag`-based parser with a tiny manual scanner that only recognizes:
+
+- `--sites-manifest-dir /path`
+- `--sites-manifest-dir=/path`
+
+Everything else is ignored during bootstrap. That made the pre-parser robust against `--help`, command-local flags like `--count`, and arbitrary future Cobra flags.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 1)
+
+**Assistant interpretation:** Harden the bootstrap parsing so it behaves correctly on real CLI invocations, not just synthetic test args.
+
+**Inferred user intent:** Ensure the early-loading architecture works in the actual binary without the bootstrap parser accidentally taking over normal Cobra behavior.
+
+**Commit (code):** `7e0b43a` — "Make scraper bootstrap parser ignore help and non-bootstrap flags"
+
+### What I did
+- Replaced the `pflag.FlagSet` implementation in `pkg/cmd/bootstrap.go` with a manual scanner over raw args.
+- Kept support for:
+  - repeated `--sites-manifest-dir VALUE`
+  - `--sites-manifest-dir=VALUE`
+- Updated `pkg/cmd/bootstrap_test.go` to assert that `--help` and unrelated command flags are ignored by bootstrap parsing.
+- Re-ran:
+
+```bash
+go test ./pkg/cmd/... -run 'TestParseBootstrapArgs|TestNewRootCommandFromBootstrap|TestCollectSitesManifestDirsMergesConfigEnvAndBootstrapFlag' -count=1
+go test ./... -count=1
+```
+
+- Manually validated:
+
+```bash
+go run ./cmd/scraper --sites-manifest-dir ./sites site js-demo run seed --help
+```
+
+That command now renders the expected help output for the dynamic `seed` verb.
+
+### Why
+- Bootstrap parsing should extract one app-owned concern only: manifest dirs.
+- It should not have any semantics for help, unknown flags, or later command-local arguments.
+- A manual scanner is simpler and more robust than fighting `pflag` into acting like a partial parser.
+
+### What worked
+- The manual scanner eliminated the `--help` interception bug completely.
+- The real `go run` path now behaves the same way as the tests.
+- Supporting both spaced and `=` flag forms preserved reasonable CLI ergonomics.
+
+### What didn't work
+- The first bootstrap implementation used `pflag.ParseErrorsWhitelist.UnknownFlags = true`, which looked promising but still failed on `--help`.
+- Exact observed failure from a manual check:
+
+```text
+newroot err: pflag: help requested
+exit status 2
+```
+
+- Command that exposed it:
+
+```bash
+go run /tmp/scraper_check.go
+```
+
+where the helper invoked:
+
+```go
+scrapercmd.NewRootCommandFromBootstrap("dev", []string{"--sites-manifest-dir", "./sites", "site", "js-demo", "run", "seed", "--help"})
+```
+
+### What I learned
+- A bootstrap parser that only needs one or two flags is usually better implemented as a tiny scanner than as a partial general-purpose flag parser.
+- The real binary path is worth checking even when unit tests are strong, because CLI help flags are a classic edge case.
+
+### What was tricky to build
+- The tricky part was not parsing the site-dir flags themselves; it was avoiding accidental ownership of the rest of the command line.
+- `pflag` is designed to be a real parser, which is the wrong abstraction here. Bootstrap needs extraction, not parsing.
+
+### What warrants a second pair of eyes
+- Whether we should document explicitly that bootstrap parsing recognizes only long-form `--sites-manifest-dir` today, not a short alias.
+- Whether future bootstrap concerns (for example a config-path override) should still use the same manual scanner or justify a slightly richer structure.
+
+### What should be done in the future
+- N/A
+
+### Code review instructions
+- Review `pkg/cmd/bootstrap.go` with special attention to the switch cases for spaced and `=` forms.
+- Confirm `pkg/cmd/bootstrap_test.go` covers `--help` and unrelated flags.
+- Validate manually with:
+
+```bash
+go run ./cmd/scraper --sites-manifest-dir ./sites site js-demo run seed --help
+```
+
+### Technical details
+- Recognized bootstrap forms:
+
+```text
+--sites-manifest-dir /path
+--sites-manifest-dir=/path
+```
+
+- Ignored during bootstrap:
+  - `--help`
+  - `-h`
+  - subcommand names
+  - runtime flags such as `--engine-db`, `--count`, `--poll-interval`
+  - positional args

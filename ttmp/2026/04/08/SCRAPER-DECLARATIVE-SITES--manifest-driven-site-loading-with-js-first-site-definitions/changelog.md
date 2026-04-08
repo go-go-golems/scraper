@@ -11,6 +11,8 @@
 - Removed late `LoadSitesFromFlag(...)` registry mutation from `worker` and `api`; site registries are now built before the tree exists.
 - Added bootstrap-aware tests proving `site js-demo run seed` is present when manifests come only from bootstrap sources.
 - Re-ran `go test ./pkg/cmd/... -count=1` and `go test ./... -count=1` successfully.
+- Replaced the initial `pflag`-based bootstrap parser with a tiny manual scanner after a real CLI check showed `--help` was being intercepted too early (`pflag: help requested`).
+- Verified the real binary path with `go run ./cmd/scraper --sites-manifest-dir ./sites site js-demo run seed --help`.
 
 ## 2026-04-08 (session 2) — site manifest loading cleanup
 
