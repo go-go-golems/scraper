@@ -12,11 +12,10 @@ import (
 	"testing/fstest"
 
 	"github.com/go-go-golems/scraper/pkg/engine/model"
-	hackernews "github.com/go-go-golems/scraper/pkg/sites/hackernews"
-	"github.com/go-go-golems/scraper/pkg/sites/jsdemo"
-	"github.com/go-go-golems/scraper/pkg/sites/nereval"
-	slashdot "github.com/go-go-golems/scraper/pkg/sites/slashdot"
+	"os"
+	sitemanifest "github.com/go-go-golems/scraper/pkg/sites/manifest"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
+	"github.com/go-go-golems/scraper/pkg/testfixtures"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
@@ -61,7 +60,7 @@ func TestSiteMigrateUnknownSite(t *testing.T) {
 }
 
 func TestRootCommandIncludesBuiltinSites(t *testing.T) {
-	rootCmd, err := NewRootCommand("test-version")
+	rootCmd, err := NewRootCommand("test-version", testfixtures.SitesDir(t))
 	require.NoError(t, err)
 
 	var stdout bytes.Buffer
@@ -76,7 +75,7 @@ func TestRootCommandIncludesBuiltinSites(t *testing.T) {
 }
 
 func TestJSDemoRunSeedCommand(t *testing.T) {
-	rootCmd, err := NewRootCommand("test-version")
+	rootCmd, err := NewRootCommand("test-version", testfixtures.SitesDir(t))
 	require.NoError(t, err)
 
 	var stdout bytes.Buffer
@@ -103,7 +102,7 @@ func TestJSDemoRunSeedCommand(t *testing.T) {
 }
 
 func TestJSDemoRunItemCommand(t *testing.T) {
-	rootCmd, err := NewRootCommand("test-version")
+	rootCmd, err := NewRootCommand("test-version", testfixtures.SitesDir(t))
 	require.NoError(t, err)
 
 	var stdout bytes.Buffer
@@ -128,7 +127,7 @@ func TestJSDemoRunItemCommand(t *testing.T) {
 }
 
 func TestJSDemoRunSummaryCommand(t *testing.T) {
-	rootCmd, err := NewRootCommand("test-version")
+	rootCmd, err := NewRootCommand("test-version", testfixtures.SitesDir(t))
 	require.NoError(t, err)
 
 	var stdout bytes.Buffer
@@ -153,7 +152,7 @@ func TestJSDemoRunSummaryCommand(t *testing.T) {
 }
 
 func TestJSDemoRunSeedHelpIncludesJSFlags(t *testing.T) {
-	rootCmd, err := NewRootCommand("test-version")
+	rootCmd, err := NewRootCommand("test-version", testfixtures.SitesDir(t))
 	require.NoError(t, err)
 
 	var stdout bytes.Buffer
@@ -173,7 +172,7 @@ func TestJSDemoSubmitThenWorkerRun(t *testing.T) {
 	engineDB := filepath.Join(t.TempDir(), "engine.db")
 
 	runCommand := func(args ...string) string {
-		rootCmd, err := NewRootCommand("test-version")
+		rootCmd, err := NewRootCommand("test-version", testfixtures.SitesDir(t))
 		require.NoError(t, err)
 
 		var stdout bytes.Buffer
@@ -225,7 +224,8 @@ func TestJSDemoSubmitThenWorkerRunWithQueueRateLimit(t *testing.T) {
 	engineDB := filepath.Join(t.TempDir(), "engine.db")
 
 	registry := siteregistry.New()
-	def := jsdemo.Definition()
+	def, err := sitemanifest.LoadDefinition(os.DirFS(filepath.Join(testfixtures.SitesDir(t), "jsdemo")), "")
+	require.NoError(t, err)
 	def.QueuePolicies = map[model.QueueKey]model.QueuePolicy{
 		model.QueueKey("site:js-demo:js"): {
 			MaxInFlight: 4,
@@ -303,8 +303,7 @@ func TestJSDemoSubmitThenWorkerRunWithQueueRateLimit(t *testing.T) {
 func TestHackerNewsRunSeedCommand(t *testing.T) {
 	sitesDir := t.TempDir()
 	engineDB := filepath.Join(t.TempDir(), "engine.db")
-	fixture, err := hackernews.ReadFixture("frontpage.html")
-	require.NoError(t, err)
+	fixture := testfixtures.ReadFixture(t, "hackernews", "frontpage.html")
 	server := newStaticFixtureServer(t, fixture)
 
 	submitOutput := runRootCommand(t, nil,
@@ -383,7 +382,8 @@ func TestHackerNewsRunSeedCommandWithQueueRateLimit(t *testing.T) {
 	sitesDir := t.TempDir()
 	engineDB := filepath.Join(t.TempDir(), "engine.db")
 	registry := siteregistry.New()
-	def := hackernews.Definition()
+	def, err := sitemanifest.LoadDefinition(os.DirFS(filepath.Join(testfixtures.SitesDir(t), "hackernews")), "")
+	require.NoError(t, err)
 	def.QueuePolicies = map[model.QueueKey]model.QueuePolicy{
 		model.QueueKey("site:hackernews:http"): {
 			MaxInFlight: 4,
@@ -436,7 +436,7 @@ func TestHackerNewsRunSeedCommandWithQueueRateLimit(t *testing.T) {
 }
 
 func TestHackerNewsRunSeedHelpIncludesMaxPages(t *testing.T) {
-	rootCmd, err := NewRootCommand("test-version")
+	rootCmd, err := NewRootCommand("test-version", testfixtures.SitesDir(t))
 	require.NoError(t, err)
 
 	var stdout bytes.Buffer
@@ -452,8 +452,7 @@ func TestHackerNewsRunSeedHelpIncludesMaxPages(t *testing.T) {
 func TestHackerNewsRunExtractFrontpageCommand(t *testing.T) {
 	sitesDir := t.TempDir()
 	engineDB := filepath.Join(t.TempDir(), "engine.db")
-	fixture, err := hackernews.ReadFixture("frontpage.html")
-	require.NoError(t, err)
+	fixture := testfixtures.ReadFixture(t, "hackernews", "frontpage.html")
 	server := newStaticFixtureServer(t, fixture)
 
 	submitOutput := runRootCommand(t, nil,
@@ -496,8 +495,7 @@ func TestHackerNewsRunExtractFrontpageCommand(t *testing.T) {
 func TestSlashdotRunSeedCommand(t *testing.T) {
 	sitesDir := t.TempDir()
 	engineDB := filepath.Join(t.TempDir(), "engine.db")
-	fixture, err := slashdot.ReadFixture("frontpage.html")
-	require.NoError(t, err)
+	fixture := testfixtures.ReadFixture(t, "slashdot", "frontpage.html")
 	server := newStaticFixtureServer(t, fixture)
 
 	submitOutput := runRootCommand(t, nil,
@@ -540,7 +538,7 @@ func TestSlashdotRunSeedCommand(t *testing.T) {
 }
 
 func TestSlashdotRunSeedHelpIncludesMaxPages(t *testing.T) {
-	rootCmd, err := NewRootCommand("test-version")
+	rootCmd, err := NewRootCommand("test-version", testfixtures.SitesDir(t))
 	require.NoError(t, err)
 
 	var stdout bytes.Buffer
@@ -556,8 +554,7 @@ func TestSlashdotRunSeedHelpIncludesMaxPages(t *testing.T) {
 func TestSlashdotRunExtractFrontpageCommand(t *testing.T) {
 	sitesDir := t.TempDir()
 	engineDB := filepath.Join(t.TempDir(), "engine.db")
-	fixture, err := slashdot.ReadFixture("frontpage.html")
-	require.NoError(t, err)
+	fixture := testfixtures.ReadFixture(t, "slashdot", "frontpage.html")
 	server := newStaticFixtureServer(t, fixture)
 
 	submitOutput := runRootCommand(t, nil,
@@ -598,7 +595,7 @@ func TestSlashdotRunExtractFrontpageCommand(t *testing.T) {
 }
 
 func TestNerevalRunSeedHelpIncludesFlags(t *testing.T) {
-	rootCmd, err := NewRootCommand("test-version")
+	rootCmd, err := NewRootCommand("test-version", testfixtures.SitesDir(t))
 	require.NoError(t, err)
 
 	var stdout bytes.Buffer
@@ -619,7 +616,7 @@ func TestNerevalSubmitThenWorkerRun(t *testing.T) {
 	server := newNerevalFixtureServer(t)
 
 	runCommand := func(args ...string) string {
-		rootCmd, err := NewRootCommand("test-version")
+		rootCmd, err := NewRootCommand("test-version", testfixtures.SitesDir(t))
 		require.NoError(t, err)
 
 		var stdout bytes.Buffer
@@ -694,16 +691,11 @@ func TestNerevalSubmitThenWorkerRun(t *testing.T) {
 func newNerevalFixtureServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
-	listPage1, err := nereval.ReadFixture("list-page-1.html")
-	require.NoError(t, err)
-	listPage2, err := nereval.ReadFixture("list-page-2.html")
-	require.NoError(t, err)
-	detail24038, err := nereval.ReadFixture("detail-24038.html")
-	require.NoError(t, err)
-	detail24058, err := nereval.ReadFixture("detail-24058.html")
-	require.NoError(t, err)
-	detail24100, err := nereval.ReadFixture("detail-24100.html")
-	require.NoError(t, err)
+	listPage1 := testfixtures.ReadFixture(t, "nereval", "list-page-1.html")
+	listPage2 := testfixtures.ReadFixture(t, "nereval", "list-page-2.html")
+	detail24038 := testfixtures.ReadFixture(t, "nereval", "detail-24038.html")
+	detail24058 := testfixtures.ReadFixture(t, "nereval", "detail-24058.html")
+	detail24100 := testfixtures.ReadFixture(t, "nereval", "detail-24100.html")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -747,7 +739,7 @@ func runRootCommand(t *testing.T, registry *siteregistry.Registry, args ...strin
 		err     error
 	)
 	if registry == nil {
-		rootCmd, err = NewRootCommand("test-version")
+		rootCmd, err = NewRootCommand("test-version", testfixtures.SitesDir(t))
 	} else {
 		rootCmd, err = newRootCommand("test-version", registry)
 	}

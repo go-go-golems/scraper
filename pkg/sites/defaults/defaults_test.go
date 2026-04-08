@@ -1,14 +1,19 @@
 package defaults
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewRegistryIncludesBuiltinSites(t *testing.T) {
-	registry, err := NewRegistry()
+func TestNewRegistryFromDirsLoadsSites(t *testing.T) {
+	// Resolve the repo's sites/ directory relative to this test file.
+	// This test lives in pkg/sites/defaults/, so ../../../sites reaches scraper/sites/.
+	sitesDir := filepath.Join("..", "..", "..", "sites")
+
+	registry, err := NewRegistryFromDirs(sitesDir)
 	require.NoError(t, err)
 
 	_, ok := registry.Get(model.SiteName("hackernews"))
@@ -22,4 +27,10 @@ func TestNewRegistryIncludesBuiltinSites(t *testing.T) {
 
 	_, ok = registry.Get(model.SiteName("nereval"))
 	require.True(t, ok, "nereval should be in registry")
+}
+
+func TestNewRegistryFromDirsEmpty(t *testing.T) {
+	registry, err := NewRegistryFromDirs()
+	require.NoError(t, err)
+	require.Empty(t, registry.List())
 }

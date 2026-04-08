@@ -55,15 +55,26 @@
 - [x] Update the older “adding a site” tutorial to reference the new declarative path.
 - [x] Validate the new help pages through the embedded help system if practical.
 
-## Sites Extraction: Move Manifests Out of Go Packages
+## Phase 1: Clean up site manifest loading (done)
 
-- [x] Remove `defaults.NewRegistry()` CWD-dependent auto-discovery; make manifest dir always explicit.
-- [x] Add `--sites-manifest-dir` as a **persistent** flag on the root command (not just worker/api subcommands).
-- [x] Simplify `defaults` package: `NewRegistry()` registers built-in sites from Go packages; `LoadExternalSites()` loads additional sites from a manifest dir.
-- [x] Update `NewRootCommand()` to use the persistent flag for external site loading.
-- [x] Add `NewRootCommandWithRegistry()` for tests that need a pre-built registry.
-- [x] Update all tests to use `defaults.NewRegistry()` (built-in sites) instead of CWD-dependent path tricks.
-- [x] Verify `go test ./... -count=1` passes.
+- [x] Add `--sites-manifest-dir` as a persistent flag on the root command.
+- [x] Simplify `defaults` package: `NewRegistry()` + `LoadExternalSites()`.
+- [x] Add `NewRootCommandWithRegistry()` for tests.
+- [x] All `go test ./... -count=1` passing.
+
+## Phase 2: Make all sites external
+
+- [ ] Copy site content to `sites/` at repo root (YAML, JS, SQL, fixtures).
+- [ ] Add `testfixtures` helper package for reading HTML fixtures from `sites/`.
+- [ ] Rewrite `defaults.NewRegistry()` → `NewRegistryFromDirs(dirs ...string)` (no Go site imports).
+- [ ] Update `NewRootCommand()` to accept `manifestDirs ...string` and load from them.
+- [ ] Update `main()` to pass a default manifest dir (or empty for pure-CLI usage).
+- [ ] Delete Go site packages from `pkg/sites/`.
+- [ ] Update all tests: use `NewRegistryFromDirs("../../sites")` or `NewRootCommandWithRegistry()`.
+- [ ] Fix tests that used `jsdemo.Definition()` / `hackernews.Definition()` — load from manifest + modify.
+- [ ] Fix tests that used `ReadFixture()` — use `testfixtures` package.
+- [ ] Remove deprecated code (`LoadExternalSites`, dead constants).
+- [ ] Verify `go test ./... -count=1` passes.
 
 ## Validation
 

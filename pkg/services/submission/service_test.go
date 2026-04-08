@@ -6,12 +6,13 @@ import (
 
 	"github.com/go-go-golems/scraper/pkg/metrics"
 	"github.com/go-go-golems/scraper/pkg/sites/defaults"
+	"github.com/go-go-golems/scraper/pkg/testfixtures"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSubmitRecordsAcceptedMetrics(t *testing.T) {
-	registry, err := defaults.NewRegistry()
+	registry, err := defaults.NewRegistryFromDirs(testfixtures.SitesDir(t))
 	require.NoError(t, err)
 
 	metricsRegistry, err := metrics.NewRegistry()
@@ -39,7 +40,7 @@ func TestSubmitRecordsAcceptedMetrics(t *testing.T) {
 }
 
 func TestSubmitRecordsNotFoundFailures(t *testing.T) {
-	registry, err := defaults.NewRegistry()
+	registry, err := defaults.NewRegistryFromDirs(testfixtures.SitesDir(t))
 	require.NoError(t, err)
 
 	metricsRegistry, err := metrics.NewRegistry()
@@ -59,7 +60,7 @@ func TestSubmitRecordsNotFoundFailures(t *testing.T) {
 }
 
 func TestSubmitRecordsValidationFailures(t *testing.T) {
-	registry, err := defaults.NewRegistry()
+	registry, err := defaults.NewRegistryFromDirs(testfixtures.SitesDir(t))
 	require.NoError(t, err)
 
 	metricsRegistry, err := metrics.NewRegistry()

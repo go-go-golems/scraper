@@ -28,15 +28,16 @@ import (
 	sqlitestore "github.com/go-go-golems/scraper/pkg/engine/store/sqlite"
 	"github.com/go-go-golems/scraper/pkg/runtimeevents"
 	"github.com/go-go-golems/scraper/pkg/sites/defaults"
+	"github.com/go-go-golems/scraper/pkg/testfixtures"
 	sitemigrate "github.com/go-go-golems/scraper/pkg/sites/migrate"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 )
 
-// sitesRegistry returns a registry with all built-in sites loaded.
+// sitesRegistry returns a registry with all sites loaded from the repo's sites/ directory.
 func sitesRegistry(t *testing.T) *siteregistry.Registry {
-	reg, err := defaults.NewRegistry()
+	reg, err := defaults.NewRegistryFromDirs(testfixtures.SitesDir(t))
 	if err != nil {
 		t.Skipf("cannot load sites registry: %v", err)
 	}

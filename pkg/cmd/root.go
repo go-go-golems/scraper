@@ -8,6 +8,7 @@ import (
 	"github.com/go-go-golems/glazed/pkg/help"
 	helpcmd "github.com/go-go-golems/glazed/pkg/help/cmd"
 	scraperdoc "github.com/go-go-golems/scraper/pkg/doc"
+	sitemanifest "github.com/go-go-golems/scraper/pkg/sites/manifest"
 	"github.com/go-go-golems/scraper/pkg/sites/defaults"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	"github.com/spf13/cobra"
@@ -33,11 +34,14 @@ func LoadSitesFromFlag(cmd *cobra.Command, registry *siteregistry.Registry) erro
 	if !info.IsDir() {
 		return fmt.Errorf("--%s %s: not a directory", SitesManifestDirFlag, dir)
 	}
-	return defaults.LoadExternalSites(registry, dir)
+	return sitemanifest.RegisterDir(registry, dir)
 }
 
-func NewRootCommand(version string) (*cobra.Command, error) {
-	siteRegistry, err := defaults.NewRegistry()
+// NewRootCommand creates the root scraper command with site manifests loaded from dirs.
+// Pass zero or more directories containing site.yaml subdirectories.
+// In production (main()), pass nothing — sites come from --sites-manifest-dir at runtime.
+func NewRootCommand(version string, manifestDirs ...string) (*cobra.Command, error) {
+	siteRegistry, err := defaults.NewRegistryFromDirs(manifestDirs...)
 	if err != nil {
 		return nil, err
 	}
