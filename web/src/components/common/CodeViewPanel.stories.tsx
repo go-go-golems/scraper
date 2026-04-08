@@ -62,6 +62,17 @@ export const YamlOnly: Story = {
   },
 };
 
+export const HtmlArtifact: Story = {
+  name: 'HTML artifact (HTML highlighting)',
+  args: {
+    data: `<!DOCTYPE html>\n<html lang="en">\n<head><title>Hacker News</title></head>\n<body>\n<table class="itemlist">\n<tr class="athing" id="12345">\n<td class="title"><a href="https://example.com">Show HN: A cool project</a></td>\n</tr>\n</table>\n</body>\n</html>`,
+    label: 'index.html',
+    defaultFormat: 'html',
+    formats: ['html', 'json', 'yaml'],
+    maxHeight: 300,
+  },
+};
+
 export const NestedData: Story = {
   name: 'Nested data',
   args: {
