@@ -12,10 +12,10 @@ import (
 
 type apiCommandOptions struct {
 	address       string
-	engineDB     string
-	sitesDir     string
-	readTimeout  time.Duration
-	writeTimeout time.Duration
+	engineDB      string
+	sitesDir      string
+	readTimeout   time.Duration
+	writeTimeout  time.Duration
 	runtimeEvents runtimeEventOptions
 }
 
@@ -31,11 +31,6 @@ func newAPICommand(version string, siteRegistry *siteregistry.Registry) *cobra.C
 		Use:   "serve",
 		Short: "Run the local HTTP API server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Load external sites from --sites-manifest-dir.
-			if err := LoadSitesFromFlag(cmd, siteRegistry); err != nil {
-				return err
-			}
-
 			eventConfig, err := options.runtimeEvents.pubSubConfig()
 			if err != nil {
 				return err

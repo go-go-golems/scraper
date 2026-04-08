@@ -9,7 +9,7 @@ import (
 var version = "dev"
 
 func main() {
-	rootCmd, err := scrapercmd.NewRootCommand(version)
+	rootCmd, err := scrapercmd.NewRootCommandFromBootstrap(version, os.Args[1:])
 	if err != nil {
 		os.Exit(1)
 	}

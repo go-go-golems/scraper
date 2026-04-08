@@ -1,14 +1,10 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/go-go-golems/glazed/pkg/cmds/logging"
 	"github.com/go-go-golems/glazed/pkg/help"
 	helpcmd "github.com/go-go-golems/glazed/pkg/help/cmd"
 	scraperdoc "github.com/go-go-golems/scraper/pkg/doc"
-	sitemanifest "github.com/go-go-golems/scraper/pkg/sites/manifest"
 	"github.com/go-go-golems/scraper/pkg/sites/defaults"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	"github.com/spf13/cobra"
@@ -16,37 +12,15 @@ import (
 
 const SitesManifestDirFlag = "sites-manifest-dir"
 
-// LoadSitesFromFlag loads external sites from the --sites-manifest-dir flag into the registry.
-// Returns nil if the flag is unset or empty. Shared by subcommands that need site definitions.
-func LoadSitesFromFlag(cmd *cobra.Command, registry *siteregistry.Registry) error {
-	dir, err := cmd.Flags().GetString(SitesManifestDirFlag)
-	if err != nil {
-		// Flag not found on this command — skip silently.
-		return nil
-	}
-	if dir == "" {
-		return nil
-	}
-	info, err := os.Stat(dir)
-	if err != nil {
-		return fmt.Errorf("--%s %s: %w", SitesManifestDirFlag, dir, err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("--%s %s: not a directory", SitesManifestDirFlag, dir)
-	}
-	return sitemanifest.RegisterDir(registry, dir)
-}
-
 // NewRootCommand creates the root scraper command with site manifests loaded from dirs.
 // Pass zero or more directories containing site.yaml subdirectories.
-// In production (main()), pass nothing — sites come from --sites-manifest-dir at runtime.
 func NewRootCommand(version string, manifestDirs ...string) (*cobra.Command, error) {
 	siteRegistry, err := defaults.NewRegistryFromDirs(manifestDirs...)
 	if err != nil {
 		return nil, err
 	}
 
-	return newRootCommand(version, siteRegistry)
+	return newRootCommand(version, siteRegistry, manifestDirs...)
 }
 
 // NewRootCommandWithRegistry is like NewRootCommand but uses a pre-built registry.
@@ -55,7 +29,7 @@ func NewRootCommandWithRegistry(version string, siteRegistry *siteregistry.Regis
 	return newRootCommand(version, siteRegistry)
 }
 
-func newRootCommand(version string, siteRegistry *siteregistry.Registry) (*cobra.Command, error) {
+func newRootCommand(version string, siteRegistry *siteregistry.Registry, manifestDirs ...string) (*cobra.Command, error) {
 	rootCmd := &cobra.Command{
 		Use:     "scraper",
 		Short:   "Durable workflow-driven scraping with Go and embedded JavaScript",
@@ -69,7 +43,11 @@ func newRootCommand(version string, siteRegistry *siteregistry.Registry) (*cobra
 		return nil, err
 	}
 
-	rootCmd.PersistentFlags().String(SitesManifestDirFlag, "", "Directory containing external site manifests (site.yaml per subdirectory). Loaded in addition to built-in sites.")
+	rootCmd.PersistentFlags().StringSlice(
+		SitesManifestDirFlag,
+		manifestDirs,
+		"Directory/directories containing site manifests (site.yaml per subdirectory). Resolved during bootstrap before the command tree is built.",
+	)
 
 	helpSystem := help.NewHelpSystem()
 	if err := scraperdoc.AddDocToHelpSystem(helpSystem); err != nil {

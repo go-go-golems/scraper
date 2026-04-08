@@ -34,10 +34,6 @@ func newWorkerCommand(siteRegistry *siteregistry.Registry) *cobra.Command {
 		Use:   "run",
 		Short: "Poll the engine DB and execute ready ops",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Load external sites from --sites-manifest-dir.
-			if err := LoadSitesFromFlag(cmd, siteRegistry); err != nil {
-				return err
-			}
 			return runWorkerCommand(cmd.Context(), cmd.OutOrStdout(), options, siteRegistry)
 		},
 	}
