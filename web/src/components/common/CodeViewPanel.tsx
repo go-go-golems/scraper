@@ -61,8 +61,17 @@ const THEME = {
   },
 };
 
-function dataAsString(data: unknown): string {
-  if (typeof data === 'string') return data;
+function dataAsString(data: unknown, format: DataFormat): string {
+  if (format === 'html') {
+    return typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  }
+  if (typeof data === 'string') {
+    // content is already a string — show as-is (valid for JSON, YAML will re-output it)
+    return data;
+  }
+  if (format === 'yaml') {
+    return jsYaml.dump(data, { indent: 2, lineWidth: 120 });
+  }
   return JSON.stringify(data, null, 2);
 }
 
@@ -84,7 +93,7 @@ export function CodeViewPanel({
     EditorState.readOnly.of(true),
   ];
 
-  const content = dataAsString(data);
+  const content = dataAsString(data, format);
 
   const handleCopy = useCallback(async () => {
     try {
