@@ -3,31 +3,33 @@ package nereval
 import (
 	"embed"
 	"io/fs"
+	"sync"
 
-	gggengine "github.com/go-go-golems/go-go-goja/engine"
-	"github.com/go-go-golems/scraper/pkg/engine/model"
+	sitemanifest "github.com/go-go-golems/scraper/pkg/sites/manifest"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 )
 
-//go:embed scripts/*.js scripts/lib/*.js verbs/*.js migrations/*.sql fixtures/*.html
+//go:embed site.yaml scripts/*.js scripts/lib/*.js verbs/*.js migrations/*.sql fixtures/*.html
 var siteFS embed.FS
 
+var (
+	siteOnce   sync.Once
+	siteDef    siteregistry.Definition
+	siteDefErr error
+)
+
 func Definition() siteregistry.Definition {
-	return siteregistry.Definition{
-		Name:              model.SiteName("nereval"),
-		DatabaseFileName:  "nereval.db",
-		ScriptsFS:         siteFS,
-		ScriptsRoot:       "scripts",
-		VerbsFS:           siteFS,
-		VerbsRoot:         "verbs",
-		Modules:           []gggengine.ModuleSpec{gggengine.DefaultRegistryModules()},
-		SQLMigrationsFS:   siteFS,
-		SQLMigrationsRoot: "migrations",
+	siteOnce.Do(func() {
+		siteDef, siteDefErr = sitemanifest.LoadDefinition(siteFS, "")
+	})
+	if siteDefErr != nil {
+		panic(siteDefErr)
 	}
+	return siteDef
 }
 
-func Register(registry *siteregistry.Registry) error {
-	return registry.Register(Definition())
+func Register(reg *siteregistry.Registry) error {
+	return reg.Register(Definition())
 }
 
 func ReadFixture(name string) ([]byte, error) {

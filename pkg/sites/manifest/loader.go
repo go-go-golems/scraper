@@ -3,6 +3,8 @@ package manifest
 import (
 	"bytes"
 	"io/fs"
+	"os"
+	"path/filepath"
 
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
@@ -71,6 +73,37 @@ func normalizeManifestPath(manifestPath string) string {
 		return DefaultManifestPath
 	}
 	return manifestPath
+}
+
+// RegisterDir walks rootDir and loads every site.yaml found, registering each
+// into reg. Subdirectories of rootDir are treated as individual site packages.
+// Each subdirectory must contain a site.yaml at its root.
+// Example: rootDir=/etc/scraper/sites → loads /etc/scraper/sites/hackernews/site.yaml
+func RegisterDir(reg *siteregistry.Registry, rootDir string) error {
+	entries, err := os.ReadDir(rootDir)
+	if err != nil {
+		return errors.Wrapf(err, "read sites root dir %q", rootDir)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		siteDir := filepath.Join(rootDir, entry.Name())
+		manifestPath := filepath.Join(siteDir, DefaultManifestPath)
+		if _, err := os.Stat(manifestPath); err != nil {
+			// no site.yaml in this subdirectory — skip
+			continue
+		}
+		siteFS := os.DirFS(siteDir)
+		def, err := LoadDefinition(siteFS, DefaultManifestPath)
+		if err != nil {
+			return errors.Wrapf(err, "load site manifest from %q", manifestPath)
+		}
+		if err := reg.Register(def); err != nil {
+			return errors.Wrapf(err, "register site %q", def.Name)
+		}
+	}
+	return nil
 }
 
 func attachRoots(def *siteregistry.Definition, siteFS fs.FS, site Site) {
