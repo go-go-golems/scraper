@@ -50,6 +50,6 @@
 - [x] Upload the bundled ticket docs to reMarkable.
 - [x] Run focused manifest package tests after each slice.
 - [x] Run `go test ./pkg/sites/... -count=1` after site migrations.
-- [ ] Run `go test ./... -count=1` after the full declarative-site slice is complete.
-- [ ] Re-run `docmgr doctor --ticket SCRAPER-DECLARATIVE-SITES --stale-after 30` after implementation updates.
-- [ ] Re-upload the updated ticket bundle to reMarkable after implementation progress is recorded.
+- [x] Run `go test ./... -count=1` after the full declarative-site slice is complete.
+- [x] Re-run `docmgr doctor --ticket SCRAPER-DECLARATIVE-SITES --stale-after 30` after implementation updates.
+- [x] Re-upload the updated ticket bundle to reMarkable after implementation progress is recorded.

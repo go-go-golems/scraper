@@ -231,3 +231,41 @@ go test ./pkg/sites/manifest ./pkg/sites/hackernews ./pkg/sites/... -count=1
 ```
 
 That test run passed cleanly and confirmed that the still-Go-defined sites (`slashdot`, `nereval`) were unaffected.
+
+## 2026-04-08 final validation and publishing pass
+
+After the code slices were in place, I ran the full repository validation:
+
+```bash
+go test ./... -count=1
+docmgr doctor --ticket SCRAPER-DECLARATIVE-SITES --stale-after 30
+```
+
+Both passed.
+
+I then refreshed the reMarkable bundle. The first upload attempt was skipped because the document already existed:
+
+```bash
+remarquee upload bundle ttmp/2026/04/08/SCRAPER-DECLARATIVE-SITES--manifest-driven-site-loading-with-js-first-site-definitions \
+  --remote-dir /ai/2026/04/08/SCRAPER-DECLARATIVE-SITES \
+  --name "Scraper declarative sites" \
+  --non-interactive
+```
+
+That returned a skip message, so I repeated the upload with `--force`:
+
+```bash
+remarquee upload bundle ttmp/2026/04/08/SCRAPER-DECLARATIVE-SITES--manifest-driven-site-loading-with-js-first-site-definitions \
+  --remote-dir /ai/2026/04/08/SCRAPER-DECLARATIVE-SITES \
+  --name "Scraper declarative sites" \
+  --non-interactive \
+  --force
+```
+
+That upload succeeded.
+
+At this point the backend implementation portion of the ticket is complete. The remaining unchecked items are product follow-ons:
+
+- expose manifest-origin metadata in the catalog API if we decide it is useful
+- decide whether the frontend should display declarative vs Go-native provenance
+- decide whether to add a “create a site without Go” onboarding tutorial
