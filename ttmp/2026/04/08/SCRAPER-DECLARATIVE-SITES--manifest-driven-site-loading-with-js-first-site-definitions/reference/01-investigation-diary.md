@@ -174,3 +174,29 @@ The loader tests cover:
 - queue-policy normalization
 - strict YAML decoding for unknown keys
 - registration through a real `registry.Registry`
+
+## 2026-04-08 js-demo migration slice
+
+The first real site migration was [pkg/sites/jsdemo/site.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/site.go). I added:
+
+- [pkg/sites/jsdemo/site.yaml](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/site.yaml)
+- a manifest-backed `Definition()` implementation that loads once from the embedded filesystem
+- a targeted test in [pkg/sites/jsdemo/site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/jsdemo/site_test.go)
+
+I intentionally kept the external API unchanged:
+
+- `Definition()` still returns `registry.Definition`
+- `Register(...)` still delegates to `registry.Register(...)`
+
+That preserved the CLI test seam in [pkg/cmd/site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/cmd/site_test.go), where the test fetches `Definition()`, overrides queue policies, and registers the modified definition manually.
+
+Because the manifest is embedded into the binary, load failures here would be programming errors, not operator/runtime errors. For that reason I used a one-time cached load behind `sync.Once` and let `Definition()` panic if the embedded manifest is invalid. That keeps the call sites simple and fails fast during development.
+
+Validation for this slice was:
+
+```bash
+gofmt -w pkg/sites/jsdemo/site.go pkg/sites/jsdemo/site_test.go
+go test ./pkg/sites/jsdemo ./pkg/cmd -run 'TestDefinitionLoadsEmbeddedManifest|TestJSDemo|TestJSDemoSubmitThenWorkerRunWithQueueRateLimit' -count=1
+```
+
+Those tests passed cleanly.

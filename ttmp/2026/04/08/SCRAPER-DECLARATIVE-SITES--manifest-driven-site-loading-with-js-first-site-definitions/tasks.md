@@ -29,9 +29,9 @@
 - [ ] Add a `registry.RegisterDefinition(...)` helper if needed to keep registry call sites simple.
 - [x] Add a `registry.RegisterManifestFS(...)` or equivalent helper so embedded and filesystem sites share one loading path.
 - [ ] Keep direct Go `registry.Definition` registration untouched as the fallback/escape hatch.
-- [ ] Migrate `pkg/sites/jsdemo` to embed and load `site.yaml` instead of hand-assembling `registry.Definition`.
-- [ ] Add a `pkg/sites/jsdemo/site.yaml` manifest containing roots, default modules, and database filename.
-- [ ] Add `pkg/sites/jsdemo/site_test.go` coverage proving the manifest-backed registration still loads verbs/scripts and keeps the existing end-to-end behavior.
+- [x] Migrate `pkg/sites/jsdemo` to embed and load `site.yaml` instead of hand-assembling `registry.Definition`.
+- [x] Add a `pkg/sites/jsdemo/site.yaml` manifest containing roots, default modules, and database filename.
+- [x] Add `pkg/sites/jsdemo/site_test.go` coverage proving the manifest-backed registration still loads verbs/scripts and keeps the existing end-to-end behavior.
 - [ ] Migrate `pkg/sites/hackernews` to `site.yaml` as the queue-policy proof point.
 - [ ] Add `pkg/sites/hackernews/site.yaml` with the `site:hackernews:http` rate limit encoded declaratively.
 - [ ] Add `pkg/sites/hackernews/site_test.go` coverage proving the manifest-backed queue policy is preserved.

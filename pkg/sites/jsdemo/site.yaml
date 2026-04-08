@@ -1,0 +1,7 @@
+name: js-demo
+databaseFileName: js-demo.db
+scriptsRoot: scripts
+verbsRoot: verbs
+sqlMigrationsRoot: migrations
+modules:
+  - default-registry

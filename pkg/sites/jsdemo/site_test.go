@@ -21,6 +21,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDefinitionLoadsEmbeddedManifest(t *testing.T) {
+	def := Definition()
+
+	require.Equal(t, model.SiteName("js-demo"), def.Name)
+	require.Equal(t, "js-demo.db", def.DatabaseFileName)
+	require.Equal(t, "scripts", def.ScriptsRoot)
+	require.Equal(t, "verbs", def.VerbsRoot)
+	require.Equal(t, "migrations", def.SQLMigrationsRoot)
+	require.Len(t, def.Modules, 1)
+}
+
 func TestJSDemoSeedWorkflow(t *testing.T) {
 	ctx := context.Background()
 	registry := siteregistry.New()

@@ -2,27 +2,29 @@ package jsdemo
 
 import (
 	"embed"
+	"sync"
 
-	gggengine "github.com/go-go-golems/go-go-goja/engine"
-	"github.com/go-go-golems/scraper/pkg/engine/model"
+	sitemanifest "github.com/go-go-golems/scraper/pkg/sites/manifest"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 )
 
-//go:embed scripts/*.js scripts/lib/*.js verbs/*.js migrations/*.sql
+//go:embed site.yaml scripts/*.js scripts/lib/*.js verbs/*.js migrations/*.sql
 var siteFS embed.FS
 
+var (
+	definitionOnce sync.Once
+	definition     siteregistry.Definition
+	definitionErr  error
+)
+
 func Definition() siteregistry.Definition {
-	return siteregistry.Definition{
-		Name:              model.SiteName("js-demo"),
-		DatabaseFileName:  "js-demo.db",
-		ScriptsFS:         siteFS,
-		ScriptsRoot:       "scripts",
-		VerbsFS:           siteFS,
-		VerbsRoot:         "verbs",
-		Modules:           []gggengine.ModuleSpec{gggengine.DefaultRegistryModules()},
-		SQLMigrationsFS:   siteFS,
-		SQLMigrationsRoot: "migrations",
+	definitionOnce.Do(func() {
+		definition, definitionErr = sitemanifest.LoadDefinition(siteFS, "")
+	})
+	if definitionErr != nil {
+		panic(definitionErr)
 	}
+	return definition
 }
 
 func Register(registry *siteregistry.Registry) error {
