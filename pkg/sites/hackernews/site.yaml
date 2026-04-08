@@ -1,0 +1,11 @@
+name: hackernews
+databaseFileName: hackernews.db
+scriptsRoot: scripts
+verbsRoot: verbs
+sqlMigrationsRoot: migrations
+queuePolicies:
+  - queue: site:hackernews:http
+    maxInFlight: 1
+    rateLimit:
+      ratePerSecond: 1
+      burst: 1

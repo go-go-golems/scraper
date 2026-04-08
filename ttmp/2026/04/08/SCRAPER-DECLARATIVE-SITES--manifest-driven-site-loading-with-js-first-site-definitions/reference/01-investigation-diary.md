@@ -200,3 +200,34 @@ go test ./pkg/sites/jsdemo ./pkg/cmd -run 'TestDefinitionLoadsEmbeddedManifest|T
 ```
 
 Those tests passed cleanly.
+
+## 2026-04-08 hackernews and registry-follow-on slice
+
+The second site migration was [pkg/sites/hackernews/site.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/site.go). I added:
+
+- [pkg/sites/hackernews/site.yaml](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/site.yaml)
+- a manifest-backed `Definition()` implementation
+- a manifest-load sanity test plus the existing queue-policy assertion in [pkg/sites/hackernews/site_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/hackernews/site_test.go)
+
+This slice mattered because Hacker News is the first built-in site with an actual declarative queue policy. Migrating it proved that manifest-backed sites can carry operational metadata, not just roots and module lists.
+
+I also added a mixed-registry test in [pkg/sites/manifest/loader_test.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/manifest/loader_test.go). That test registers:
+
+- one traditional Go `registry.Definition`
+- one manifest-backed site via `RegisterFS(...)`
+
+and verifies that both coexist in the same registry. That closed the main architecture risk in the design doc.
+
+At this point I made two explicit implementation decisions:
+
+- no separate `registry.RegisterDefinition(...)` helper is necessary, because `registry.Register(...)` is already the plain-definition path
+- [pkg/sites/defaults/defaults.go](/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/sites/defaults/defaults.go) should stay as explicit top-level registration for now; the individual site packages can become manifest-backed internally without forcing a registry-bootstrap rewrite
+
+Validation for this slice was:
+
+```bash
+gofmt -w pkg/sites/hackernews/site.go pkg/sites/hackernews/site_test.go pkg/sites/manifest/loader_test.go
+go test ./pkg/sites/manifest ./pkg/sites/hackernews ./pkg/sites/... -count=1
+```
+
+That test run passed cleanly and confirmed that the still-Go-defined sites (`slashdot`, `nereval`) were unaffected.

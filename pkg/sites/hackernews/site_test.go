@@ -7,6 +7,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDefinitionLoadsEmbeddedManifest(t *testing.T) {
+	def := Definition()
+
+	require.Equal(t, model.SiteName("hackernews"), def.Name)
+	require.Equal(t, "hackernews.db", def.DatabaseFileName)
+	require.Equal(t, "scripts", def.ScriptsRoot)
+	require.Equal(t, "verbs", def.VerbsRoot)
+	require.Equal(t, "migrations", def.SQLMigrationsRoot)
+}
+
 func TestDefinitionSetsHTTPQueueRateLimit(t *testing.T) {
 	def := Definition()
 

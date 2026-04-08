@@ -11,3 +11,4 @@
 - Added the first implementation slice under `pkg/sites/manifest/`: manifest structs, bounded module IDs, validation helpers, and focused tests.
 - Added manifest loading helpers that decode `site.yaml`, validate it, map it into `registry.Definition`, and register manifest-backed sites through a shared helper.
 - Migrated `pkg/sites/jsdemo` to load its site definition from embedded `site.yaml` while preserving the existing `Definition()` and `Register(...)` seams.
+- Migrated `pkg/sites/hackernews` to embedded `site.yaml`, including its HTTP queue rate limit, and added a mixed Go+manifest registry test.

@@ -125,3 +125,36 @@ verbsRoot: verbs
 		t.Fatalf("registered roots = scripts:%q verbs:%q", def.ScriptsRoot, def.VerbsRoot)
 	}
 }
+
+func TestRegistryCanMixGoAndManifestDefinitions(t *testing.T) {
+	t.Parallel()
+
+	reg := siteregistry.New()
+	if err := reg.Register(siteregistry.Definition{
+		Name:             model.SiteName("go-site"),
+		DatabaseFileName: "go-site.db",
+	}); err != nil {
+		t.Fatalf("Register() go-site error = %v", err)
+	}
+
+	siteFS := fstest.MapFS{
+		"site.yaml": {
+			Data: []byte(`
+name: manifest-site
+databaseFileName: manifest-site.db
+scriptsRoot: scripts
+`),
+		},
+	}
+
+	if err := RegisterFS(reg, siteFS, ""); err != nil {
+		t.Fatalf("RegisterFS() manifest-site error = %v", err)
+	}
+
+	if _, ok := reg.Get(model.SiteName("go-site")); !ok {
+		t.Fatalf("go-site missing after manifest registration")
+	}
+	if _, ok := reg.Get(model.SiteName("manifest-site")); !ok {
+		t.Fatalf("manifest-site missing after manifest registration")
+	}
+}
