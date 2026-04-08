@@ -39,7 +39,7 @@
 - [x] Decide whether filtering is server-side, client-side, or hybrid for v1.
 - [x] Add pagination and filtering support if the browser needs it immediately.
 
-## Phase 3: Frontend UI Design
+## Storybook + MSW
 
 - [x] Add RTK Query mock store + MSW handlers for Storybook (fix: preview.tsx missing workflowApi, new: handlers.ts)
 

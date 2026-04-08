@@ -344,6 +344,9 @@ Storybook stories for `ArtifactsPanel` crashed on load with three errors:
 
 - Removed forward bridge link (`onNavigateToOp`) from `ArtifactPreviewPanel` — the Op column in the artifact table already opens the op drawer, so the shortcut adds no value
 
+- [x] Add MSW handler for `GET /api/v1/workflows/:id/results` in `handlers.ts`
+- [x] Stories for `ResultsPanel`, `ResultsTable`, `ResultFilterBar`
+
 Full bug report: `reference/04-bug-report-storybook-msw-and-redux-store.md`
 
 See the existing story files:

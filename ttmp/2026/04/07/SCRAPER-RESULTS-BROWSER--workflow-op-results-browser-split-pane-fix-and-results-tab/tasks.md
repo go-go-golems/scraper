@@ -28,8 +28,8 @@
 
 ## Storybook + MSW
 
-- [ ] Add MSW handler for `GET /api/v1/workflows/:id/results` in `handlers.ts`
-- [ ] Stories for `ResultsPanel`, `ResultsTable`, `ResultPreviewPanel`
+- [x] Add MSW handler for `GET /api/v1/workflows/:id/results` in `handlers.ts`
+- [x] Stories for `ResultsPanel`, `ResultsTable`, `ResultPreviewPanel`
 
 ## Docs
 
