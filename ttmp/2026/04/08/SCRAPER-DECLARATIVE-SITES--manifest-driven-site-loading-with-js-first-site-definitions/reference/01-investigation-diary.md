@@ -985,3 +985,70 @@ go test ./... -count=1
   - `SCRAPER_SITES_MANIFEST_DIRS`
   - repeated `--sites-manifest-dir`
 - The current public docs now consistently treat `sites/<site>/` as the canonical site content location.
+
+## Step 6: Add a repo-root README quickstart
+
+The embedded help pages were in good shape after the documentation sweep, but there was still no obvious top-level README for browser/GitHub readers. That meant a new person landing in the repo root would not immediately see the new bootstrap/site-loading model or a minimal command sequence that actually works. I added a root `README.md` that mirrors the current architecture and quickstart path without repeating the entire help system.
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok, update README and commit"
+
+**Assistant interpretation:** Add a repository-level README that reflects the current filesystem-loaded site architecture and bootstrap manifest discovery flow, then commit it.
+
+**Inferred user intent:** Make the repo understandable from the top level, not only through embedded help or ticket docs.
+
+**Commit (code):** TBD after commit
+
+### What I did
+- Added `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/README.md`.
+- Included:
+  - short architecture summary
+  - repository layout
+  - bootstrap site loading explanation
+  - quickstart for `js-demo`
+  - HTTP API quickstart
+  - embedded help-page pointers
+  - explanation of `--sites-dir` vs `--sites-manifest-dir`
+- Sanity-checked the repo and help system with:
+
+```bash
+test -f README.md
+go run ./cmd/scraper --sites-manifest-dir ./sites help scraper-bootstrap-config-and-site-manifest-loading >/dev/null
+```
+
+### Why
+- The repo had embedded help but no obvious top-level quickstart.
+- The new bootstrap/config behavior is too important to leave only in ticket docs or help topics.
+- A short README is the right first-contact document for browser readers and future contributors.
+
+### What worked
+- The README can stay short because the embedded help pages now carry the deeper detail.
+- The quickstart commands are consistent with the actual working CLI flow (`--sites-manifest-dir ./sites`).
+
+### What didn't work
+- N/A
+
+### What I learned
+- Once a project depends on bootstrap config for command discovery, the README needs to teach that very early or people will assume the commands exist by default.
+
+### What was tricky to build
+- The only real tradeoff was scope: the README should be useful immediately without duplicating the full embedded help system. I kept it focused on quickstart, architecture shape, and the difference between manifest dirs and site DB dirs.
+
+### What warrants a second pair of eyes
+- Whether we want to add frontend/web UI startup instructions to the README later, or keep it backend/CLI-focused for now.
+
+### What should be done in the future
+- Optional: add a very short section for the frontend dev loop if that becomes a common onboarding path.
+
+### Code review instructions
+- Read `README.md` from top to bottom and compare it with the current CLI flow.
+- Spot-check one command from the quickstart.
+
+### Technical details
+- README now teaches:
+  - `~/.scraper/config.yaml`
+  - `SCRAPER_SITES_MANIFEST_DIRS`
+  - repeated `--sites-manifest-dir`
+  - `--sites-dir` as runtime SQLite location
+  - `--sites-manifest-dir` as bootstrap site-definition location

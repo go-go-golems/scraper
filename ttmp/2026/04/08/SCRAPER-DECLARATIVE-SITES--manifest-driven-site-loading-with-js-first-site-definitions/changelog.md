@@ -16,6 +16,7 @@
 - Updated the embedded help/tutorial pages to reflect filesystem-loaded `sites/<site>/` directories and the new bootstrap config flow.
 - Added a dedicated help page: `scraper-bootstrap-config-and-site-manifest-loading`.
 - Re-validated the help system and full Go test suite after the documentation sweep.
+- Added a repo-root `README.md` with a bootstrap-aware quickstart, HTTP API example, and the distinction between `--sites-dir` and `--sites-manifest-dir`.
 
 ## 2026-04-08 (session 2) — site manifest loading cleanup
 
