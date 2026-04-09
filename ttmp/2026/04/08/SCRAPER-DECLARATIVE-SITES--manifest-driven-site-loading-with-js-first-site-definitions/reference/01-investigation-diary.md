@@ -881,3 +881,107 @@ go run ./cmd/scraper --sites-manifest-dir ./sites site js-demo run seed --help
   - subcommand names
   - runtime flags such as `--engine-db`, `--count`, `--poll-interval`
   - positional args
+
+## Step 5: Update product documentation for filesystem-loaded sites and bootstrap config
+
+After the code was stable, I did a documentation sweep across the user-facing help pages. Several core docs still described the old world where sites lived under `pkg/sites/`, built-in sites were embedded in Go packages, and commands like `scraper site js-demo run seed` would just exist without any bootstrap site-manifest discovery. That was now misleading for both operators and new contributors, so I updated the docs before leaving the ticket.
+
+I focused on the pages most likely to shape first impressions: architecture overview, runtime model, onboarding, site authoring, and HTTP API usage. I also added a new dedicated help page for bootstrap config because that behavior had become important enough to deserve its own operator-facing explanation, not just ticket notes.
+
+### Prompt Context
+
+**User prompt (verbatim):** "update documentation where needed / let me know if documentation is missing."
+
+**Assistant interpretation:** Audit and update the public help/docs so they match the new bootstrap config and filesystem-loaded site architecture, and identify any remaining gaps.
+
+**Inferred user intent:** Make the repo understandable to other humans after the architectural changes, not just technically correct in code and tests.
+
+**Commit (code):** `064e2fa` — "Update help docs for filesystem-loaded sites and bootstrap config"
+
+### What I did
+- Updated:
+  - `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-architecture-overview.md`
+  - `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-runtime-model.md`
+  - `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-http-api.md`
+  - `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/tutorials/scraper-new-developer-onboarding.md`
+  - `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/tutorials/scraper-adding-a-site.md`
+  - `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/tutorials/scraper-adding-a-declarative-site.md`
+- Added:
+  - `/home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/doc/topics/scraper-bootstrap-config-and-site-manifest-loading.md`
+- Replaced stale references from `pkg/sites/<site>/...` to `sites/<site>/...` where appropriate.
+- Updated command examples so they include `--sites-manifest-dir ./sites` where needed.
+- Reframed the Go-native site tutorial as the fallback path and the declarative site tutorial as the default path.
+- Added troubleshooting guidance for missing site verbs caused by bootstrap manifest discovery.
+- Validated with:
+
+```bash
+go run ./cmd/scraper --sites-manifest-dir ./sites help scraper-bootstrap-config-and-site-manifest-loading
+go test ./pkg/cmd/... -count=1
+go test ./... -count=1
+```
+
+### Why
+- The code had shifted from embedded/default Go site packages to filesystem-loaded manifests, but the public docs still taught the old model.
+- New contributors would otherwise read outdated paths and cargo-cult the wrong directory structure.
+- Operators also needed a dedicated explanation of config/env/bootstrap flag precedence for site loading.
+
+### What worked
+- The new dedicated bootstrap topic filled the most obvious missing documentation gap.
+- Updating the onboarding and runtime-model pages gave a coherent end-to-end story: sites are loaded during bootstrap, then dynamic verbs are built, then normal CLI usage begins.
+- The docs rendered correctly through the real help system.
+
+### What didn't work
+- One cmd test failed after the HTTP API page update because the test expected the literal phrase `scraper api serve`.
+- The new doc wording had changed the example to the fuller bootstrap form and dropped that exact phrase.
+- Exact failure:
+
+```text
+--- FAIL: TestRootHelpLoadsEmbeddedHTTPAPIDoc
+Error: ... does not contain "scraper api serve"
+```
+
+- Command that exposed it:
+
+```bash
+go test ./... -count=1
+```
+
+- I fixed this by rewriting the HTTP API page intro to say: “Start the server with `scraper api serve`. In practice, most local runs also need bootstrap site manifests loaded first...” and then showing the full example.
+
+### What I learned
+- Product docs often encode assumptions just as strongly as code. Once the architecture changes, the help pages become part of the migration surface.
+- A dedicated topic page is often better than sprinkling bootstrap details into every other page, as long as the other pages link to it.
+
+### What was tricky to build
+- The tricky part was deciding which old references were historical context versus user-facing guidance. Ticket docs can remain historical, but embedded help pages should describe the current operating model.
+- Another subtle point was keeping examples realistic without making them too verbose. The compromise was: use `--sites-manifest-dir ./sites` in most examples, and add one dedicated bootstrap explainer page for the full model.
+
+### What warrants a second pair of eyes
+- Whether the Go-native site tutorial should eventually be shortened even more, since it now serves mostly as an escape-hatch document.
+- Whether we want a top-level non-help `README.md` in the repo that mirrors the same bootstrap guidance for GitHub/browser readers.
+
+### What should be done in the future
+- Optional: add a repo-root `README.md` with a very short “first run” section using `--sites-manifest-dir ./sites`.
+- Optional: do a future cleanup pass on historical ticket docs if we want them to read less like archaeology.
+
+### Code review instructions
+- Start with the new page:
+  - `pkg/doc/topics/scraper-bootstrap-config-and-site-manifest-loading.md`
+- Then skim the changed examples in:
+  - `pkg/doc/topics/scraper-architecture-overview.md`
+  - `pkg/doc/topics/scraper-runtime-model.md`
+  - `pkg/doc/tutorials/scraper-new-developer-onboarding.md`
+  - `pkg/doc/tutorials/scraper-adding-a-declarative-site.md`
+- Validate with:
+
+```bash
+go run ./cmd/scraper --sites-manifest-dir ./sites help scraper-bootstrap-config-and-site-manifest-loading
+go test ./... -count=1
+```
+
+### Technical details
+- New user-facing bootstrap inputs documented:
+  - `~/.scraper/config.yaml`
+  - `SCRAPER_SITES_MANIFEST_DIRS`
+  - repeated `--sites-manifest-dir`
+- The current public docs now consistently treat `sites/<site>/` as the canonical site content location.

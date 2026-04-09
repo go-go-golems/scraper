@@ -13,6 +13,9 @@
 - Re-ran `go test ./pkg/cmd/... -count=1` and `go test ./... -count=1` successfully.
 - Replaced the initial `pflag`-based bootstrap parser with a tiny manual scanner after a real CLI check showed `--help` was being intercepted too early (`pflag: help requested`).
 - Verified the real binary path with `go run ./cmd/scraper --sites-manifest-dir ./sites site js-demo run seed --help`.
+- Updated the embedded help/tutorial pages to reflect filesystem-loaded `sites/<site>/` directories and the new bootstrap config flow.
+- Added a dedicated help page: `scraper-bootstrap-config-and-site-manifest-loading`.
+- Re-validated the help system and full Go test suite after the documentation sweep.
 
 ## 2026-04-08 (session 2) — site manifest loading cleanup
 
