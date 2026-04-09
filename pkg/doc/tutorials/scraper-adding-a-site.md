@@ -1,7 +1,7 @@
 ---
 Title: Adding a New Site
 Slug: scraper-adding-a-site
-Short: "Step-by-step guide for adding a new built-in site using the current registry, JS runtime, migrations, and fixture-backed tests."
+Short: "Step-by-step guide for adding a new Go-native site when declarative manifests are not enough."
 Topics:
 - scraper
 - tutorial
@@ -20,9 +20,9 @@ ShowPerDefault: true
 SectionType: Tutorial
 ---
 
-Adding a site means fitting your scraper into the existing engine shape rather than inventing a new execution path. The durable engine is already responsible for scheduling, retries, HTTP execution, DB lifecycle, and queue policy. Your job is to describe the site's behavior in a site package with submit verbs, scripts, migrations, fixtures, and tests.
+Adding a site means fitting your scraper into the existing engine shape rather than inventing a new execution path. The durable engine is already responsible for scheduling, retries, HTTP execution, DB lifecycle, and queue policy. Your job is to describe the site's behavior in a site definition with submit verbs, scripts, migrations, fixtures, and tests.
 
-This tutorial shows the path that the current built-in Go-defined sites follow. Use it when the site truly needs Go-native extensions.
+This tutorial now covers the fallback Go-native path only. Use it when the site truly needs custom Go-owned behavior beyond what `site.yaml` plus JavaScript can express.
 
 If your site can be expressed with `site.yaml` plus JavaScript, start with:
 
@@ -36,38 +36,33 @@ Before starting, make sure you understand:
 - `scraper help scraper-runtime-model`
 - `scraper help scraper-js-api-reference`
 
-It also helps to read one simple site and one complex site:
+It also helps to read one simple site and one complex site under the repo-level `sites/` directory:
 
-- `pkg/sites/jsdemo/`
-- `pkg/sites/nereval/`
+- `sites/jsdemo/`
+- `sites/nereval/`
 
-## Step 1 — Create The Site Package Skeleton
+## Step 1 — Decide If You Really Need Go
 
-Create a new directory under `pkg/sites/<site>/` and add:
+Before writing any Go, start from a declarative site under `sites/<site>/` and ask what is still missing.
 
-- `site.go`
-- `migrations/`
-- `scripts/`
-- `verbs/`
-- optional `fixtures/`
+You only need this Go-native path when at least one of these is true:
 
-Your `site.go` should embed those directories and return a `registry.Definition`. Follow the pattern in `pkg/sites/jsdemo/site.go` or `pkg/sites/nereval/site.go`.
+- the site requires a custom native module not available through the manifest module IDs
+- the site needs custom runtime registrars or other non-standard runtime wiring
+- the site needs custom CLI behavior that cannot be expressed through JS verbs alone
+- the site needs another Go-only integration point that the manifest loader cannot describe
 
-The core fields are:
+If none of those are true, stop and use `scraper help scraper-adding-a-declarative-site` instead.
 
-- `Name` — the site name used in CLI commands and queue keys
-- `DatabaseFileName` — filename for the site's SQLite DB
-- `ScriptsFS` / `ScriptsRoot` — embedded FS and root for execution scripts
-- `VerbsFS` / `VerbsRoot` — embedded FS and root for submit verb JS files
-- `SQLMigrationsFS` / `SQLMigrationsRoot` — embedded FS and root for SQL migrations
+If you do need Go, create a normal Go package under `pkg/sites/<site>/` that contributes the extra runtime behavior, then point it at the declarative content under `sites/<site>/`.
 
-Additional fields you may need:
+Typical additions in a Go-native site are:
 
-- `Modules` — extra goja module specs (nereval uses `gggengine.DefaultRegistryModules()`)
-- `QueuePolicies` — site-level queue policy map for rate limiting
-- `RuntimeModuleRegistrars` — additional runtime modules to inject into JS
-- `HelpFS` / `HelpRoot` — per-site embedded help pages
-- `JSMigrationsFS` / `JSMigrationsRoot` — JS-based migrations (unused by current sites)
+- extra module specs
+- runtime registrars
+- custom CLI wiring
+- special test helpers
+- other site-specific Go seams that cannot be shared
 
 ## Step 2 — Decide The First Submit Verb
 
@@ -75,15 +70,15 @@ Every site should have at least one operator entrypoint that seeds the first dur
 
 Use `js-demo` as the smallest pattern:
 
-- `pkg/sites/jsdemo/verbs/seed.js`
+- `sites/jsdemo/verbs/seed.js`
 
 Use `hackernews` for an HTTP-based site:
 
-- `pkg/sites/hackernews/verbs/seed.js`
+- `sites/hackernews/verbs/seed.js`
 
 Use `nereval` when the site needs more complex input:
 
-- `pkg/sites/nereval/verbs/seed.js`
+- `sites/nereval/verbs/seed.js`
 
 The submit verb should:
 
@@ -129,10 +124,10 @@ See `scraper help scraper-js-api-reference` for the complete API.
 
 For examples:
 
-- `pkg/sites/hackernews/scripts/extract_frontpage.js`
-- `pkg/sites/slashdot/scripts/extract_frontpage.js`
-- `pkg/sites/nereval/scripts/extract_list.js`
-- `pkg/sites/nereval/scripts/extract_detail.js`
+- `sites/hackernews/scripts/extract_frontpage.js`
+- `sites/slashdot/scripts/extract_frontpage.js`
+- `sites/nereval/scripts/extract_list.js`
+- `sites/nereval/scripts/extract_detail.js`
 
 ## Step 4 — Add Site DB Migrations
 
@@ -142,20 +137,21 @@ Migration files are numbered SQL scripts (e.g. `001_init.sql`). The migration ma
 
 Examples:
 
-- `pkg/sites/jsdemo/migrations/001_init.sql`
-- `pkg/sites/nereval/migrations/001_init.sql`
+- `sites/jsdemo/migrations/001_init.sql`
+- `sites/nereval/migrations/001_init.sql`
 
 Keep the first migration small and query-oriented. Add only the tables that the first end-to-end workflow actually writes.
 
-## Step 5 — Register The Site
+## Step 5 — Register Or Bootstrap The Site
 
-Add the site to the default registry so the root command can discover it.
+The site still needs to be reachable during bootstrap so the root command can build dynamic site verbs.
 
-Update:
+There are two normal ways to do that:
 
-- `pkg/sites/defaults/defaults.go`
+1. put the site's declarative content in a directory that scraper loads during bootstrap (for example via `--sites-manifest-dir`, `SCRAPER_SITES_MANIFEST_DIRS`, or `~/.scraper/config.yaml`)
+2. if the site truly needs Go-native extensions, make sure the constructor path that builds the root command is given the correct manifest directory and any required Go-native registration hooks
 
-If you skip this step, your site package will compile but the CLI will not expose it.
+If you skip this step, your code may compile but the CLI will not expose the site verbs.
 
 ## Step 6 — Add Fixtures Before Live Traffic
 
@@ -169,9 +165,9 @@ Good fixture sets usually include:
 
 Current examples:
 
-- `pkg/sites/hackernews/fixtures/frontpage.html`
-- `pkg/sites/slashdot/fixtures/frontpage.html`
-- `pkg/sites/nereval/fixtures/`
+- `sites/hackernews/fixtures/frontpage.html`
+- `sites/slashdot/fixtures/frontpage.html`
+- `sites/nereval/fixtures/`
 
 ## Step 7 — Add A Command-Path Test
 
@@ -191,21 +187,21 @@ That test proves the site works in the actual engine path rather than only in a 
 Before committing:
 
 ```bash
-gofmt -w pkg/sites/<site> pkg/cmd/site_test.go pkg/sites/defaults/defaults.go
+gofmt -w pkg/sites/<site> pkg/cmd/site_test.go
 go test ./... -count=1
 ```
 
-If the site adds or changes embedded help pages, also verify:
+If the site adds or changes help pages, also verify:
 
 ```bash
-go run ./cmd/scraper help <your-slug>
+go run ./cmd/scraper --sites-manifest-dir ./sites help <your-slug>
 ```
 
 ## Troubleshooting
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
-| The CLI does not show the site | The site was not registered in the default registry | Update `pkg/sites/defaults/defaults.go` |
+| The CLI does not show the site | The site manifests were not available during bootstrap, or Go-native registration is incomplete | Check the bootstrap manifest dirs first, then review the root-command construction path |
 | `site <site> run <verb>` exists but does nothing useful | The submit verb emitted no initial ops | Review the `verbs/` file first |
 | The worker runs but the site DB stays empty | The durable scripts never write projections or they errored out early | Add assertions around `ctx.dep(...)`, artifact extraction, and `site-db` writes |
 | Pagination or detail fan-out duplicates work | The script emits duplicate child ops | Add workflow-local dedup checks or explicit dedup keys before changing the engine |
@@ -213,6 +209,7 @@ go run ./cmd/scraper help <your-slug>
 ## See Also
 
 - `scraper help scraper-new-developer-onboarding` — Suggested first-day path through the existing sites
+- `scraper help scraper-bootstrap-config-and-site-manifest-loading` — How manifest directories are discovered before dynamic site commands exist
 - `scraper help scraper-runtime-model` — Why submit verbs and durable scripts are separate
 - `scraper help scraper-js-api-reference` — Complete JavaScript API reference
 - `scraper help scraper-architecture-overview` — Broader system map

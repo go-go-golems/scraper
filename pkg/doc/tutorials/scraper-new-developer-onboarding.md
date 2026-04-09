@@ -1,7 +1,7 @@
 ---
 Title: New Developer Onboarding
 Slug: scraper-new-developer-onboarding
-Short: "Step-by-step onboarding path for a new contributor using the current built-in sites and engine commands."
+Short: "Step-by-step onboarding path for a new contributor using the current filesystem-loaded sites and engine commands."
 Topics:
 - scraper
 - onboarding
@@ -56,7 +56,7 @@ Then skim these code files:
 
 ## Step 2 — Run The Full Test Suite
 
-The fastest sanity check is the whole Go test suite. This confirms that the engine, site packages, embedded help pages, and fixture-backed workflows all load correctly in the current environment.
+The fastest sanity check is the whole Go test suite. This confirms that the engine, site manifests, embedded help pages, and fixture-backed workflows all load correctly in the current environment.
 
 ```bash
 go test ./... -count=1
@@ -73,7 +73,9 @@ First submit work:
 ```bash
 tmpdir=$(mktemp -d)
 
-go run ./cmd/scraper site js-demo run seed \
+go run ./cmd/scraper \
+  --sites-manifest-dir ./sites \
+  site js-demo run seed \
   --sites-dir "$tmpdir/sites" \
   --engine-db "$tmpdir/engine.db" \
   --workflow-id demo-1 \
@@ -82,7 +84,7 @@ go run ./cmd/scraper site js-demo run seed \
   --prefix smoke
 ```
 
-The flags `--count`, `--multiplier`, and `--prefix` are defined in `pkg/sites/jsdemo/verbs/seed.js` using `__verb__` metadata. The submit-verb host discovers these JS declarations and wires them into Cobra CLI flags automatically. This pattern is used by all built-in sites.
+The flags `--count`, `--multiplier`, and `--prefix` are defined in `sites/jsdemo/verbs/seed.js` using `__verb__` metadata. The submit-verb host discovers these JS declarations and wires them into Cobra CLI flags automatically. This pattern is used by all default sites.
 
 Then inspect the engine DB:
 
@@ -93,7 +95,9 @@ go run ./cmd/scraper engine status --engine-db "$tmpdir/engine.db"
 You should see one workflow and ready work, but not a completed workflow yet. Now run the worker:
 
 ```bash
-go run ./cmd/scraper worker run \
+go run ./cmd/scraper \
+  --sites-manifest-dir ./sites \
+  worker run \
   --sites-dir "$tmpdir/sites" \
   --engine-db "$tmpdir/engine.db" \
   --max-cycles 16 \
@@ -106,12 +110,14 @@ Re-run engine status after that. The workflow should now be succeeded and the re
 
 Now move to a site that uses the full `js -> http/fetch -> js -> site-db` path. Hacker News is the simplest HTTP site.
 
-All sites use the same two-step pattern: submit work with a verb, then run the worker. The hackernews verb defines `--base-url` and `--max-pages` flags in `pkg/sites/hackernews/verbs/seed.js`.
+All sites use the same two-step pattern: submit work with a verb, then run the worker. The hackernews verb defines `--base-url` and `--max-pages` flags in `sites/hackernews/verbs/seed.js`.
 
 ```bash
 tmpdir=$(mktemp -d)
 
-go run ./cmd/scraper site hackernews run seed \
+go run ./cmd/scraper \
+  --sites-manifest-dir ./sites \
+  site hackernews run seed \
   --sites-dir "$tmpdir/sites" \
   --engine-db "$tmpdir/engine.db" \
   --workflow-id hn-test \
@@ -122,7 +128,9 @@ go run ./cmd/scraper site hackernews run seed \
 Then run the worker to execute the queued ops:
 
 ```bash
-go run ./cmd/scraper worker run \
+go run ./cmd/scraper \
+  --sites-manifest-dir ./sites \
+  worker run \
   --sites-dir "$tmpdir/sites" \
   --engine-db "$tmpdir/engine.db" \
   --max-cycles 32 \
@@ -144,12 +152,12 @@ The first complex site is `nereval`. Its value is not just parsing HTML. It prov
 
 Do not run it live as part of onboarding. Instead, study these files:
 
-- `pkg/sites/nereval/site.go`
-- `pkg/sites/nereval/verbs/seed.js`
-- `pkg/sites/nereval/scripts/seed.js`
-- `pkg/sites/nereval/scripts/extract_list.js`
-- `pkg/sites/nereval/scripts/extract_detail.js`
-- `pkg/sites/nereval/migrations/001_init.sql`
+- `sites/nereval/site.yaml`
+- `sites/nereval/verbs/seed.js`
+- `sites/nereval/scripts/seed.js`
+- `sites/nereval/scripts/extract_list.js`
+- `sites/nereval/scripts/extract_detail.js`
+- `sites/nereval/migrations/001_init.sql`
 
 Then read the fixture-backed test:
 
@@ -190,6 +198,7 @@ Read these if you need deeper implementation history (search for these ticket ID
 |---------|-------|----------|
 | `go test ./...` fails immediately | Workspace dependencies or generated docs are not loading | Fix the environment before debugging scraper logic |
 | `site js-demo run seed` works but nothing completes | The worker was never run | Use `worker run` against the same temp DBs |
+| `site js-demo run seed` is missing entirely | scraper did not load the site manifests during bootstrap | Pass `--sites-manifest-dir ./sites`, set `SCRAPER_SITES_MANIFEST_DIRS`, or configure `~/.scraper/config.yaml` |
 | You do not know whether a bug is engine or site specific | Too many layers are being changed at once | Reproduce first on `js-demo`, then on `hackernews` or `slashdot`, then on `nereval` |
 | `nereval` feels too big to start with | You skipped the simpler sites | Go back to `js-demo` and one HTTP site first |
 
@@ -198,4 +207,5 @@ Read these if you need deeper implementation history (search for these ticket ID
 - `scraper help scraper-architecture-overview` — High-level map of the repository
 - `scraper help scraper-runtime-model` — Submit verbs, workers, and op execution explained in more detail
 - `scraper help scraper-js-api-reference` — Complete JavaScript API reference
-- `scraper help scraper-adding-a-site` — Step-by-step site-authoring path once onboarding is complete
+- `scraper help scraper-adding-a-site` — Step-by-step Go-native site-authoring path once onboarding is complete
+- `scraper help scraper-bootstrap-config-and-site-manifest-loading` — How scraper finds site manifests before building dynamic site commands

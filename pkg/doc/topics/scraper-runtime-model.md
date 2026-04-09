@@ -28,9 +28,9 @@ At the highest level, the CLI submits workflows into the engine DB and the worke
 
 ## Submission-Time JS
 
-Submission-time JS lives under `pkg/sites/<site>/verbs/`. These files expose top-level functions annotated with `__verb__`. The submit-verb host scans those files, builds Glazed/Cobra commands, and runs the selected function exactly once when the operator invokes a command such as `scraper site js-demo run seed`.
+Submission-time JS lives under `sites/<site>/verbs/`. These files expose top-level functions annotated with `__verb__`. The submit-verb host scans those files, builds Glazed/Cobra commands, and runs the selected function exactly once when the operator invokes a command such as `scraper --sites-manifest-dir ./sites site js-demo run seed`.
 
-CLI flags are defined in the `__verb__` metadata, not in Go code. For example, `hackernews/verbs/seed.js` declares `--base-url` and `--max-pages` as fields, and the host wires them into Cobra automatically. The parsed values are available in the verb function as `ctx.values`.
+CLI flags are defined in the `__verb__` metadata, not in Go code. For example, `sites/hackernews/verbs/seed.js` declares `--base-url` and `--max-pages` as fields, and the host wires them into Cobra automatically. The parsed values are available in the verb function as `ctx.values`.
 
 The important constraint is that a submit verb is not a worker. It does not crawl pages for minutes and it does not keep an in-process scheduler alive by default. Its job is to describe or emit the initial durable work graph.
 
@@ -41,7 +41,7 @@ The submit-verb host is implemented in:
 
 ## Execution-Time JS
 
-Execution-time JS lives under `pkg/sites/<site>/scripts/`. These files run as durable ops through the `js` runner. Each op is persisted in the engine DB and references the script to run through op metadata, usually `metadata.script`.
+Execution-time JS lives under `sites/<site>/scripts/`. These files run as durable ops through the `js` runner. Each op is persisted in the engine DB and references the script to run through op metadata, usually `metadata.script`.
 
 Scripts can be synchronous or async. The runtime supports `async function` exports and will await the returned Promise before persisting results.
 
@@ -86,7 +86,7 @@ The scheduler does not know site-specific parsing logic. It only knows how to:
 - invoke a runner
 - write back results, emitted ops, artifacts, and errors
 
-That separation is what lets `js-demo`, `hackernews`, `slashdot`, and `nereval` all use the same engine.
+That separation is what lets `js-demo`, `hackernews`, `slashdot`, and `nereval` all use the same engine, even though their manifests are loaded from the filesystem during bootstrap rather than being compiled into the binary.
 
 ## Data Flow
 
@@ -108,7 +108,7 @@ worker
 For example, the NEREVAL workflow looks like this:
 
 ```text
-site nereval run seed
+scraper --sites-manifest-dir ./sites site nereval run seed
   -> verb emits js seed op
 
 worker run
@@ -132,23 +132,26 @@ If a contributor is unsure where a new table should go, the rule of thumb is:
 
 Read these in order if you want the shortest path through the real runtime:
 
-1. `pkg/cmd/root.go`
-2. `pkg/cmd/site.go`
-3. `pkg/sites/submitverbs/host.go`
-4. `pkg/sites/submitverbs/runtime.go`
-5. `pkg/cmd/worker.go`
-6. `pkg/engine/scheduler/scheduler.go`
-7. `pkg/engine/store/sqlite/store.go`
+1. `pkg/cmd/bootstrap.go`
+2. `pkg/cmd/app_config.go`
+3. `pkg/cmd/root.go`
+4. `pkg/cmd/site.go`
+5. `pkg/sites/submitverbs/host.go`
+6. `pkg/sites/submitverbs/runtime.go`
+7. `pkg/cmd/worker.go`
+8. `pkg/engine/scheduler/scheduler.go`
+9. `pkg/engine/store/sqlite/store.go`
 
-Then read one site package end to end.
+Then read one site directory under `sites/` end to end.
 
 ## Troubleshooting
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
-| You expected `site <site> run <verb>` to do the whole scrape | Submit verbs only seed work | Run `scraper worker run` against the same DBs |
+| You expected `site <site> run <verb>` to do the whole scrape | Submit verbs only seed work | Run `scraper --sites-manifest-dir ./sites worker run` against the same DBs |
 | JS script cannot find dependency output | The dependency op ID is wrong or the dependency was never emitted | Check the workflow graph in the emitting script and the dependency read in the consumer script |
 | A site writes nothing to its DB | The worker never opened that site DB or the script returned an error early | Start with the command-path tests in `pkg/cmd/site_test.go` |
+| `site <site> run <verb>` is missing entirely | The site manifests were not resolved before the command tree was built | Pass `--sites-manifest-dir`, set `SCRAPER_SITES_MANIFEST_DIRS`, or configure `~/.scraper/config.yaml` so bootstrap can load the site directories |
 | It is unclear whether logic belongs in a verb or a script | Submission and execution responsibilities are mixed | Keep workflow seeding in `verbs/` and durable parsing/fan-out in `scripts/` |
 
 ## See Also
@@ -157,3 +160,4 @@ Then read one site package end to end.
 - `scraper help scraper-js-api-reference` — Complete JavaScript API reference for both verb and script contexts
 - `scraper help scraper-queue-policies-and-rate-limiting` — Queue policy and token-bucket behavior in the worker
 - `scraper help scraper-new-developer-onboarding` — First-day path through the repo and smoke tests
+- `scraper help scraper-bootstrap-config-and-site-manifest-loading` — How scraper resolves site directories before building dynamic site commands

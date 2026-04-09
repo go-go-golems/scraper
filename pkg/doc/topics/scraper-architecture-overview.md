@@ -1,7 +1,7 @@
 ---
 Title: Scraper Architecture Overview
 Slug: scraper-architecture-overview
-Short: "High-level map of the durable engine, JS site layer, and built-in site packages."
+Short: "High-level map of the durable engine, JS site layer, and filesystem-loaded site manifests."
 Topics:
 - scraper
 - architecture
@@ -20,7 +20,7 @@ SectionType: GeneralTopic
 
 The `scraper` repository is a durable workflow engine for scraping tasks. Go owns persistence, scheduling, HTTP execution, leases, retries, queue policy, and CLI ergonomics. JavaScript owns most site-specific behavior: parsing HTML, deciding what work to emit next, and writing site-specific projections into each site database. That split is the main thing a new contributor needs to understand before reading code.
 
-The current system is built around a small set of stable primitives. A workflow contains ops. Ops are persisted in the engine SQLite database. Workers poll for ready ops, lease them, execute them through a runner such as `js` or `http/fetch`, and persist results plus artifacts. Site packages such as `js-demo`, `hackernews`, `slashdot`, and `nereval` provide the JS scripts, submit verbs, fixtures, and per-site schema that sit on top of that engine.
+The current system is built around a small set of stable primitives. A workflow contains ops. Ops are persisted in the engine SQLite database. Workers poll for ready ops, lease them, execute them through a runner such as `js` or `http/fetch`, and persist results plus artifacts. Site manifests such as `js-demo`, `hackernews`, `slashdot`, and `nereval` live under the repo-level `sites/` directory and provide the JS scripts, submit verbs, fixtures, and per-site schema that sit on top of that engine.
 
 ## Core Layers
 
@@ -33,9 +33,9 @@ The runner layer maps op kinds to execution logic. A runner registry (`pkg/engin
 
 HTTP runner behavior is configured through `pkg/engine/config/config.go` (user agent, timeout).
 
-The site layer is the programmable behavior layer. Each site definition in `pkg/sites/` contributes:
+The site layer is the programmable behavior layer. Each site definition under `sites/<site>/` contributes:
 
-- a site name and embedded filesystem
+- a `site.yaml` manifest
 - submit verbs under `verbs/` (define CLI commands via `__verb__` metadata)
 - op execution scripts under `scripts/`
 - site DB migrations under `migrations/`
@@ -75,16 +75,16 @@ Each site gets its own SQLite database under the sites directory. A site DB stor
 
 This split matters because it keeps engine correctness and site-specific schema evolution separate. If a site needs new projection tables, it changes its own migrations without forcing a top-level engine redesign.
 
-## Built-In Sites
+## Default Site Set
 
-The current built-in sites are intentionally progressive:
+The current default site set is intentionally progressive:
 
 - `js-demo` proves pure `js -> js -> site-db` execution without HTTP.
 - `hackernews` proves `js -> http/fetch -> js -> site-db`.
 - `slashdot` proves the same path on a different HTML shape and multipage fan-out.
 - `nereval` is the first complex site. It adds ASP.NET form-state pagination, detail-page fan-out, and normalized site projections.
 
-All four sites use JS submit verbs for CLI entrypoints. The default site registry lives in `pkg/sites/defaults/defaults.go`.
+All four sites use JS submit verbs for CLI entrypoints and are loaded from the repo-level `sites/` directory during bootstrap.
 
 ## Commands You Will Use First
 
@@ -92,12 +92,12 @@ The fastest way to get oriented is to use the CLI against the engine visibility 
 
 - `scraper engine status`
 - `scraper engine migrations status`
-- `scraper site migrate js-demo`
-- `scraper site js-demo run seed --workflow-id demo-1`
-- `scraper worker run --max-cycles 16 --poll-interval 5ms`
-- `scraper site hackernews run seed --max-pages 2`
-- `scraper site slashdot run seed --max-pages 2`
-- `scraper site nereval run seed --workflow-id nereval-test --max-pages 2`
+- `scraper --sites-manifest-dir ./sites site migrate js-demo`
+- `scraper --sites-manifest-dir ./sites site js-demo run seed --workflow-id demo-1`
+- `scraper --sites-manifest-dir ./sites worker run --max-cycles 16 --poll-interval 5ms`
+- `scraper --sites-manifest-dir ./sites site hackernews run seed --max-pages 2`
+- `scraper --sites-manifest-dir ./sites site slashdot run seed --max-pages 2`
+- `scraper --sites-manifest-dir ./sites site nereval run seed --workflow-id nereval-test --max-pages 2`
 
 Use `scraper help <slug>` for the detailed pages added in this help set.
 
@@ -116,4 +116,5 @@ Use `scraper help <slug>` for the detailed pages added in this help set.
 - `scraper help scraper-js-api-reference` — Complete JavaScript API reference for both verb and script contexts
 - `scraper help scraper-queue-policies-and-rate-limiting` — How queue policies and durable token-bucket pacing work
 - `scraper help scraper-new-developer-onboarding` — Step-by-step onboarding path for a new contributor
-- `scraper help scraper-adding-a-site` — How to add a new site package using the current patterns
+- `scraper help scraper-adding-a-site` — How to add a Go-native site when declarative manifests are not enough
+- `scraper help scraper-bootstrap-config-and-site-manifest-loading` — How scraper finds site manifests before building dynamic site commands

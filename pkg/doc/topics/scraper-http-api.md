@@ -38,10 +38,12 @@ That split is the same one used by `scraper site <site> run <verb>` and `scraper
 
 ## Command
 
-Start the server with:
+Start the server with `scraper api serve`. In practice, most local runs also need bootstrap site manifests loaded first, so the full command usually looks like:
 
 ```bash
-scraper api serve \
+scraper \
+  --sites-manifest-dir ./sites \
+  api serve \
   --address 127.0.0.1:8080 \
   --engine-db state/engine.db \
   --sites-dir state/sites
@@ -49,6 +51,7 @@ scraper api serve \
 
 Important flags:
 
+- `--sites-manifest-dir`: directory or directories containing site manifests used to build the site/verb catalog before the command tree is executed
 - `--address`: loopback bind address for the local server
 - `--engine-db`: durable engine SQLite database
 - `--sites-dir`: directory holding per-site DBs
@@ -57,7 +60,7 @@ Important flags:
 
 ## Runtime Boundary
 
-The API does not execute full workflows inline. A submit request runs exactly one JS submit verb under `pkg/sites/<site>/verbs/*.js`. That JS function can seed the workflow by emitting initial ops. Those ops are then picked up later by the worker process.
+The API does not execute full workflows inline. A submit request runs exactly one JS submit verb under `sites/<site>/verbs/*.js`. That JS function can seed the workflow by emitting initial ops. Those ops are then picked up later by the worker process.
 
 This is the same split described in `scraper help scraper-runtime-model`:
 
@@ -87,7 +90,9 @@ Catalog endpoints expose the same JS/Glazed metadata the CLI uses for `site <sit
 Start the server:
 
 ```bash
-scraper api serve \
+scraper \
+  --sites-manifest-dir ./sites \
+  api serve \
   --address 127.0.0.1:8080 \
   --engine-db /tmp/scraper-http-api/engine.db \
   --sites-dir /tmp/scraper-http-api/sites
@@ -111,7 +116,9 @@ curl -X POST http://127.0.0.1:8080/api/v1/sites/js-demo/verbs/seed:submit \
 In another terminal, process the queued work:
 
 ```bash
-scraper worker run \
+scraper \
+  --sites-manifest-dir ./sites \
+  worker run \
   --engine-db /tmp/scraper-http-api/engine.db \
   --sites-dir /tmp/scraper-http-api/sites \
   --max-cycles 16 \
@@ -141,6 +148,7 @@ Start here if you need to change the implementation:
 ## Common Mistakes
 
 - Expecting the API server to run the scheduler itself by default. It does not. Start `scraper worker run` separately.
+- Forgetting to provide site manifest directories during bootstrap. If the API starts with no manifests loaded, the site/verb catalog will be empty.
 - Treating submit verbs like worker-side op scripts. Submit verbs seed workflows; scripts do the durable scraping later.
 - Posting arbitrary JSON fields that are not declared in the JS verb metadata. The API validates values against the generated Glazed schema and returns `400` on unknown or incompatible fields.
 
@@ -149,3 +157,4 @@ Start here if you need to change the implementation:
 - `scraper help scraper-runtime-model`
 - `scraper help scraper-architecture-overview`
 - `scraper help scraper-new-developer-onboarding`
+- `scraper help scraper-bootstrap-config-and-site-manifest-loading`

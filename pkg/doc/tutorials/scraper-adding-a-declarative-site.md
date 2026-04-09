@@ -43,7 +43,7 @@ For those cases, use `scraper help scraper-adding-a-site` and keep the site Go-d
 
 ## Step 1 — Create The Site Directory
 
-Create a directory under `pkg/sites/<site>/` with:
+Create a directory under `sites/<site>/` with:
 
 - `site.yaml`
 - `scripts/`
@@ -51,7 +51,7 @@ Create a directory under `pkg/sites/<site>/` with:
 - `migrations/`
 - optional `fixtures/`
 
-You still need a tiny `site.go` wrapper today for embedded built-in sites, but that wrapper should only embed the files and load the manifest. The site behavior itself stays in YAML, SQL, and JavaScript.
+No site-specific Go wrapper is needed for the normal declarative path. The site behavior lives entirely in YAML, SQL, and JavaScript.
 
 ## Step 2 — Write `site.yaml`
 
@@ -82,29 +82,24 @@ queuePolicies:
 
 Current manifest fields are validated strictly. Typos and unknown keys fail fast during load.
 
-## Step 3 — Add The Small Wrapper
+## Step 3 — Make The Site Discoverable During Bootstrap
 
-For embedded built-in sites, keep `site.go` minimal:
+Scraper must know where your `sites/<site>/` directory lives before it can build dynamic commands like `site <site> run <verb>`.
 
-```go
-//go:embed site.yaml scripts/*.js verbs/*.js migrations/*.sql
-var siteFS embed.FS
+Choose one of these bootstrap paths:
 
-func Definition() siteregistry.Definition {
-    def, err := sitemanifest.LoadDefinition(siteFS, "")
-    if err != nil {
-        panic(err)
-    }
-    return def
-}
+- pass `--sites-manifest-dir /path/to/sites`
+- set `SCRAPER_SITES_MANIFEST_DIRS`
+- add the directory to `~/.scraper/config.yaml`
+
+Example config:
+
+```yaml
+sitesManifestDirs:
+  - /absolute/path/to/my-sites
 ```
 
-In practice, the current built-in sites cache this load behind `sync.Once` so repeated calls stay cheap.
-
-Reference examples:
-
-- `pkg/sites/jsdemo/site.go`
-- `pkg/sites/hackernews/site.go`
+You can use multiple site directories. Scraper merges config, env, and CLI bootstrap values before building the Cobra command tree.
 
 ## Step 4 — Write The Submit Verbs
 
@@ -133,8 +128,8 @@ Use the existing JS runtime APIs:
 See:
 
 - `scraper help scraper-js-api-reference`
-- `pkg/sites/jsdemo/scripts/`
-- `pkg/sites/hackernews/scripts/`
+- `sites/jsdemo/scripts/`
+- `sites/hackernews/scripts/`
 
 ## Step 6 — Add Migrations
 
@@ -142,20 +137,12 @@ If the site needs queryable projections, add numbered SQL files in `migrations/`
 
 Examples:
 
-- `pkg/sites/jsdemo/migrations/001_init.sql`
-- `pkg/sites/hackernews/migrations/001_init.sql`
+- `sites/jsdemo/migrations/001_init.sql`
+- `sites/hackernews/migrations/001_init.sql`
 
 Keep the first migration small and focused on the output your workflow actually writes.
 
-## Step 7 — Register The Site
-
-Today, built-in sites are still registered explicitly in:
-
-- `pkg/sites/defaults/defaults.go`
-
-The registry bootstrap remains explicit for now, even when individual sites are manifest-backed internally.
-
-## Step 8 — Add At Least One End-To-End Test
+## Step 7 — Add At Least One End-To-End Test
 
 Do not stop at unit tests for a parser or one helper function. Add a command-path or scheduler-path test that proves:
 
@@ -165,23 +152,22 @@ Do not stop at unit tests for a parser or one helper function. Add a command-pat
 
 Good examples:
 
-- `pkg/sites/jsdemo/site_test.go`
 - `pkg/cmd/site_test.go`
+- `pkg/cmd/bootstrap_test.go`
 
-## Step 9 — Validate
+## Step 8 — Validate
 
 Before committing:
 
 ```bash
-gofmt -w pkg/sites/<site>
-go test ./pkg/sites/... -count=1
+go test ./pkg/cmd/... -count=1
 go test ./... -count=1
 ```
 
 If you added or changed help pages:
 
 ```bash
-go run ./cmd/scraper help scraper-adding-a-declarative-site
+go run ./cmd/scraper --sites-manifest-dir ./sites help scraper-adding-a-declarative-site
 ```
 
 ## Practical Advice
@@ -189,7 +175,8 @@ go run ./cmd/scraper help scraper-adding-a-declarative-site
 - Start with the smallest possible workflow graph.
 - Add queue policies only where the site actually needs protection.
 - Keep the first manifest small and boring.
-- If you feel pressure to stuff custom runtime logic into the manifest, that is a signal the site may still need a Go-native wrapper.
+- If you feel pressure to stuff custom runtime logic into the manifest, that is a signal the site may still need a Go-native extension path.
+- Prefer keeping example/default sites in normal `sites/` directories instead of recompiling the binary.
 
 ## See Also
 
@@ -197,3 +184,4 @@ go run ./cmd/scraper help scraper-adding-a-declarative-site
 - `scraper help scraper-runtime-model`
 - `scraper help scraper-js-api-reference`
 - `scraper help scraper-architecture-overview`
+- `scraper help scraper-bootstrap-config-and-site-manifest-loading`
