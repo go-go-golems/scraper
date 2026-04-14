@@ -1,7 +1,7 @@
 ---
 Title: "SCRAPER-SYNTAX-VIEWS Implementation Diary"
 Ticket: SCRAPER-SYNTAX-VIEWS
-Status: active
+Status: done
 Topics:
     - implementation
     - syntax-highlighting

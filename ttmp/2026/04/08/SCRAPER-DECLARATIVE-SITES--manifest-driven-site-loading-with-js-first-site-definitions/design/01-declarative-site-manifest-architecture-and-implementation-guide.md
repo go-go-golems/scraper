@@ -1,7 +1,7 @@
 ---
 Title: Declarative site manifest architecture and implementation guide
 Ticket: SCRAPER-DECLARATIVE-SITES
-Status: active
+Status: done
 Topics:
     - scraper
     - architecture

@@ -1,7 +1,7 @@
 ---
 Title: Artifact Browser Frontend — Implementation Diary
 Ticket: SCRAPER-ARTIFACT-BROWSER
-Status: active
+Status: done
 Topics:
     - scraper
     - frontend

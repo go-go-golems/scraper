@@ -1,7 +1,7 @@
 ---
 Title: Investigation diary
 Ticket: SCRAPER-DECLARATIVE-SITES
-Status: active
+Status: done
 Topics:
     - scraper
     - architecture

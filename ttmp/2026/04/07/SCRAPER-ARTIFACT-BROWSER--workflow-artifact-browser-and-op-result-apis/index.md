@@ -1,7 +1,7 @@
 ---
 Title: Workflow artifact browser and op result APIs
 Ticket: SCRAPER-ARTIFACT-BROWSER
-Status: active
+Status: done
 Topics:
     - scraper
     - backend
@@ -50,9 +50,9 @@ What is missing is the backend/API layer that turns those op-local pieces into a
 
 ## Status
 
-Current status: **active**
+Current status: **done**
 
-This ticket is in active implementation. The first backend tasks are:
+This ticket is complete and ready to close. The first backend tasks are:
 
 - workflow-level artifact listing,
 - real op-result retrieval,

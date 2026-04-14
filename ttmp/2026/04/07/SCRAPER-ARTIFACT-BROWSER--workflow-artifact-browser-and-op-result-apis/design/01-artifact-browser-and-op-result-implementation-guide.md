@@ -1,7 +1,7 @@
 ---
 Title: Artifact browser and op result implementation guide
 Ticket: SCRAPER-ARTIFACT-BROWSER
-Status: active
+Status: done
 Topics:
     - scraper
     - backend

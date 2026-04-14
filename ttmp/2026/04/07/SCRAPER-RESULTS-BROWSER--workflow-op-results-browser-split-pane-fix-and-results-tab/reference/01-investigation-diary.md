@@ -1,7 +1,7 @@
 ---
 Title: "SCRAPER-RESULTS-BROWSER Implementation Diary"
 Ticket: SCRAPER-RESULTS-BROWSER
-Status: active
+Status: done
 Topics:
     - implementation
     - results

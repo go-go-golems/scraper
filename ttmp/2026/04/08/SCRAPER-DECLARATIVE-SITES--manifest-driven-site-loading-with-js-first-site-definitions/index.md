@@ -1,7 +1,7 @@
 ---
 Title: Manifest-driven site loading with JS-first site definitions
 Ticket: SCRAPER-DECLARATIVE-SITES
-Status: active
+Status: done
 Topics:
     - scraper
     - architecture
@@ -53,9 +53,9 @@ This is an intern-facing design ticket. It explains the current state, the trade
 
 ## Status
 
-Current status: **active**
+Current status: **done**
 
-This ticket is currently a design/research ticket. No runtime code is changed by this ticket yet.
+This ticket is complete. The declarative-sites migration, bootstrap loading, tests, and docs are now in place.
 
 ## Tasks
 

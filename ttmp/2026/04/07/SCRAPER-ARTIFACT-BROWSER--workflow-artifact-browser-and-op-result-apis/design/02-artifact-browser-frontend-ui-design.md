@@ -1,7 +1,7 @@
 ---
 Title: "Artifact Browser — Frontend UI Design"
 Ticket: SCRAPER-ARTIFACT-BROWSER
-Status: active
+Status: done
 Topics:
     - frontend
     - artifacts

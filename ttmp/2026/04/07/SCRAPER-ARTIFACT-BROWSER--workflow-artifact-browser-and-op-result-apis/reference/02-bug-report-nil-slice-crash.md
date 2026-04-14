@@ -1,7 +1,7 @@
 ---
 Title: "Bug: OpResult nil slice crash — EmittedIDs.length TypeError"
 Ticket: SCRAPER-ARTIFACT-BROWSER
-Status: active
+Status: done
 Topics:
     - bug
     - frontend

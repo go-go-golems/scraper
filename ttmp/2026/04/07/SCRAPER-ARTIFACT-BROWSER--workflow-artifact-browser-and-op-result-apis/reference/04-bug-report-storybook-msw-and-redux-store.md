@@ -1,7 +1,7 @@
 ---
 Title: "Bug: Storybook stories crash — missing RTK Query store + MSW handlers"
 Ticket: SCRAPER-ARTIFACT-BROWSER
-Status: active
+Status: done
 Topics:
     - bug
     - frontend

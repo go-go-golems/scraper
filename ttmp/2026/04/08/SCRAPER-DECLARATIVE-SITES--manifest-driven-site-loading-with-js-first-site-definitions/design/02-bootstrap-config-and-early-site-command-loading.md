@@ -1,7 +1,7 @@
 ---
 Title: Bootstrap config and early site command loading
 Ticket: SCRAPER-DECLARATIVE-SITES
-Status: active
+Status: done
 DocType: design
 Owners: []
 Summary: Design for loading site manifest directories from config, env, and bootstrap CLI flags before building the Cobra command tree.
