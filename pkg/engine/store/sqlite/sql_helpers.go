@@ -23,7 +23,7 @@ func loadDependenciesTx(ctx context.Context, db queryer, opID model.OpID) ([]mod
 	if err != nil {
 		return nil, fmt.Errorf("query dependencies for %s: %w", opID, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	ret := []model.Dependency{}
 	for rows.Next() {

@@ -437,7 +437,7 @@ func (s *Scheduler) refreshWorkflowStatus(ctx context.Context, workflowID model.
 		return nil
 	}
 
-	status := workflow.Status
+	var status model.WorkflowStatus
 	switch {
 	case stats.Pending == 0 && stats.Ready == 0 && stats.Running == 0 && stats.Failed == 0 && stats.Canceled == 0 && stats.Succeeded == stats.Total:
 		status = model.WorkflowStatusSucceeded
@@ -501,6 +501,8 @@ func backoffDelay(policy model.RetryPolicy, attempt int) time.Duration {
 	}
 
 	switch policy.BackoffKind {
+	case model.BackoffKindFixed:
+		// Keep the initial delay unchanged.
 	case model.BackoffKindLinear:
 		delay = time.Duration(float64(delay) * float64(attempt))
 	case model.BackoffKindExponential:
@@ -519,9 +521,9 @@ func backoffDelay(policy model.RetryPolicy, attempt int) time.Duration {
 	return clampDuration(delay, policy.MaxBackoff)
 }
 
-func clampDuration(delay, max time.Duration) time.Duration {
-	if max > 0 && delay > max {
-		return max
+func clampDuration(delay, maxDelay time.Duration) time.Duration {
+	if maxDelay > 0 && delay > maxDelay {
+		return maxDelay
 	}
 	return delay
 }
@@ -572,7 +574,7 @@ func (s *Scheduler) emit(ctx context.Context, event Event) {
 			Str("queue", string(event.Queue)).
 			Int("attempt", event.Attempt).
 			Msg(event.Message)
-	default:
+	case EventWorkflowCreated, EventOpLeased, EventOpSucceeded, EventOpRetried, EventWorkflowUpdated:
 		log.Info().
 			Str("event", string(event.Kind)).
 			Str("workflow_id", string(event.WorkflowID)).

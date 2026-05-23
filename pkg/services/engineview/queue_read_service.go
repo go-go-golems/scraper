@@ -40,7 +40,7 @@ func (s *Service) ListQueues(ctx context.Context) ([]QueueStatus, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list queue op counts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type queueKey struct {
 		site  model.SiteName
@@ -75,6 +75,8 @@ func (s *Service) ListQueues(ctx context.Context) ([]QueueStatus, error) {
 			qs.Succeeded = count
 		case model.OpStatusFailed:
 			qs.Failed = count
+		case model.OpStatusCanceled:
+			// Canceled ops do not have a dedicated queue summary field yet.
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -83,7 +85,7 @@ func (s *Service) ListQueues(ctx context.Context) ([]QueueStatus, error) {
 
 	tokenRows, err := db.QueryContext(ctx, `SELECT site, queue_key, tokens FROM queue_limit_state`)
 	if err == nil {
-		defer tokenRows.Close()
+		defer func() { _ = tokenRows.Close() }()
 		for tokenRows.Next() {
 			var site model.SiteName
 			var queue model.QueueKey

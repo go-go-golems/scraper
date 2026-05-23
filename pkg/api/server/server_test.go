@@ -67,7 +67,7 @@ func TestServerHealthAndCatalogEndpoints(t *testing.T) {
 	t.Run("healthz", func(t *testing.T) {
 		resp, err := http.Get(ts.URL + "/healthz")
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		payload := map[string]bool{}
@@ -78,7 +78,7 @@ func TestServerHealthAndCatalogEndpoints(t *testing.T) {
 	t.Run("sites", func(t *testing.T) {
 		resp, err := http.Get(ts.URL + "/api/v1/sites")
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		payload := struct {
@@ -109,7 +109,7 @@ func TestServerHealthAndCatalogEndpoints(t *testing.T) {
 	t.Run("site detail provenance", func(t *testing.T) {
 		resp, err := http.Get(ts.URL + "/api/v1/sites/js-demo/detail")
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		payload := struct {
@@ -128,7 +128,7 @@ func TestServerHealthAndCatalogEndpoints(t *testing.T) {
 	t.Run("metrics", func(t *testing.T) {
 		resp, err := http.Get(ts.URL + "/metrics")
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		body, err := io.ReadAll(resp.Body)
@@ -140,7 +140,7 @@ func TestServerHealthAndCatalogEndpoints(t *testing.T) {
 	t.Run("verb details", func(t *testing.T) {
 		resp, err := http.Get(ts.URL + "/api/v1/sites/js-demo/verbs/seed")
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		payload := struct {
@@ -185,7 +185,7 @@ func TestServerSubmitThenWorkerAndInspectWorkflow(t *testing.T) {
 	}`)
 	resp, err := http.Post(ts.URL+"/api/v1/sites/js-demo/verbs/seed:submit", "application/json", body)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	submitPayload := struct {
@@ -411,7 +411,7 @@ func TestServerRuntimeEventsWebsocketSnapshotAndLiveEvents(t *testing.T) {
 	}`)
 	resp, err := http.Post(ts.URL+"/api/v1/sites/js-demo/verbs/seed:submit", "application/json", body)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	submitPayload := struct {
@@ -423,7 +423,7 @@ func TestServerRuntimeEventsWebsocketSnapshotAndLiveEvents(t *testing.T) {
 	require.Equal(t, "event-js-demo", submitPayload.Workflow.ID)
 
 	conn := dialRuntimeEventsWebsocket(t, ts.URL)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	require.NoError(t, sendRuntimeEventsSubscribe(conn, string(runtimestream.WorkflowSessionID(submitPayload.Workflow.ID))))
 
 	events := make(chan *runtimev1.RuntimeEventV1, 64)
@@ -434,7 +434,7 @@ func TestServerRuntimeEventsWebsocketSnapshotAndLiveEvents(t *testing.T) {
 	var succeededSeen bool
 	var runnerLogSeen bool
 	timeout := time.After(10 * time.Second)
-	for !(succeededSeen && runnerLogSeen) {
+	for !succeededSeen || !runnerLogSeen {
 		select {
 		case <-timeout:
 			t.Fatalf("timed out waiting for websocket runtime events")
@@ -499,7 +499,7 @@ func dialRuntimeEventsWebsocket(t *testing.T, baseURL string) *websocket.Conn {
 	wsURL := "ws" + strings.TrimPrefix(baseURL, "http") + "/api/v1/runtime-events/ws"
 	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 	}
 	require.NoError(t, err)
 	return conn

@@ -415,7 +415,7 @@ func buildMigrationAPI(vm *goja.Runtime, tx *sql.Tx, site model.SiteName) goja.V
 		if err != nil {
 			panic(vm.NewGoError(fmt.Errorf("query %q: %w", sqlText, err)))
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		columns, err := rows.Columns()
 		if err != nil {

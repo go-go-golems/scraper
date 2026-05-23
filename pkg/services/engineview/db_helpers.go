@@ -94,7 +94,7 @@ func loadDependencies(ctx context.Context, db *sql.DB, opID model.OpID) ([]model
 	if err != nil {
 		return nil, fmt.Errorf("query op dependencies: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	ret := []model.Dependency{}
 	for rows.Next() {

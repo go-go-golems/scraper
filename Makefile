@@ -57,7 +57,7 @@ lintmax: golangci-lint-install
 
 gosec:
 	go install github.com/securego/gosec/v2/cmd/gosec@latest
-	gosec -exclude=G101,G304,G301,G306,G204 -exclude-dir=ttmp -exclude-dir=.history -exclude-dir=web/node_modules ./...
+	gosec -exclude=G101,G304,G301,G306,G204 -exclude-dir=gen -exclude-dir=ttmp -exclude-dir=.history -exclude-dir=web/node_modules ./...
 
 govulncheck:
 	go install golang.org/x/vuln/cmd/govulncheck@latest

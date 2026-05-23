@@ -56,6 +56,8 @@ func schedulerEventKind(kind scheduler.EventKind) runtimev1.RuntimeEventKind {
 		return runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_OP_FAILED
 	case scheduler.EventQueueRateLimited:
 		return runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_QUEUE_RATE_LIMITED
+	case scheduler.EventIdle:
+		return runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_UNSPECIFIED
 	default:
 		return runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_UNSPECIFIED
 	}
@@ -67,6 +69,8 @@ func schedulerEventSeverity(kind scheduler.EventKind) runtimev1.RuntimeEventSeve
 		return runtimev1.RuntimeEventSeverity_RUNTIME_EVENT_SEVERITY_ERROR
 	case scheduler.EventOpRetried, scheduler.EventQueueRateLimited:
 		return runtimev1.RuntimeEventSeverity_RUNTIME_EVENT_SEVERITY_WARN
+	case scheduler.EventWorkflowCreated, scheduler.EventOpLeased, scheduler.EventOpSucceeded, scheduler.EventWorkflowUpdated, scheduler.EventIdle:
+		return runtimev1.RuntimeEventSeverity_RUNTIME_EVENT_SEVERITY_INFO
 	default:
 		return runtimev1.RuntimeEventSeverity_RUNTIME_EVENT_SEVERITY_INFO
 	}

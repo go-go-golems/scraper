@@ -44,7 +44,7 @@ func TestManagerAppliesMixedSQLAndJSMigrations(t *testing.T) {
 	require.Equal(t, filepath.Base(report.DatabasePath), "demo.db")
 
 	rows := openRows(t, report.DatabasePath, `SELECT name, notes FROM widgets`)
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	require.True(t, rows.Next())
 	var name string
@@ -87,7 +87,7 @@ func TestManagerSupportsRelativeRequireInJSMigrations(t *testing.T) {
 	require.NoError(t, err)
 
 	rows := openRows(t, report.DatabasePath, `SELECT name FROM widgets`)
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	require.True(t, rows.Next())
 	var name string
