@@ -26,6 +26,8 @@ func NewSchedulerObserver(registry *Registry) scheduler.Observer {
 			registry.ObserveOpRetried(event.Site, event.Queue, event.RunnerKind)
 		case scheduler.EventQueueRateLimited:
 			registry.ObserveQueueRateLimited(event.Site, event.Queue)
+		case scheduler.EventWorkflowCreated, scheduler.EventOpSucceeded, scheduler.EventWorkflowUpdated, scheduler.EventIdle:
+			// These events do not currently update Prometheus scheduler metrics.
 		}
 	})
 }

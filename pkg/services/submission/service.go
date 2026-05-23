@@ -34,11 +34,11 @@ type Response struct {
 type Service struct {
 	siteRegistry *siteregistry.Registry
 	catalog      *catalog.Service
-	events       *runtimeevents.Publisher
+	events       runtimeevents.Publisher
 	metrics      *metrics.Registry
 }
 
-func NewService(siteRegistry *siteregistry.Registry, events *runtimeevents.Publisher, metricsRegistry *metrics.Registry) *Service {
+func NewService(siteRegistry *siteregistry.Registry, events runtimeevents.Publisher, metricsRegistry *metrics.Registry) *Service {
 	return &Service{
 		siteRegistry: siteRegistry,
 		catalog:      catalog.NewService(siteRegistry),
@@ -79,7 +79,7 @@ func (s *Service) Submit(ctx context.Context, request Request) (*Response, error
 	}
 	result.CommandPath = verbSummary.CommandPath
 	s.metrics.ObserveSubmissionAccepted(string(request.Site), request.Verb)
-	_ = runtimeevents.EmitSimpleEvent(s.events, &runtimev1.RuntimeEventV1{
+	_ = runtimeevents.EmitSimpleEvent(ctx, s.events, &runtimev1.RuntimeEventV1{
 		Source:     runtimev1.RuntimeEventSource_RUNTIME_EVENT_SOURCE_SUBMISSION,
 		Component:  "submission-service",
 		Kind:       runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_SUBMISSION_ACCEPTED,

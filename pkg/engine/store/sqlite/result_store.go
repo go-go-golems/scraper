@@ -262,7 +262,7 @@ func (s *Store) loadArtifacts(
 	if err != nil {
 		return nil, fmt.Errorf("query artifacts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	ret := []model.ArtifactWrite{}
 	for rows.Next() {

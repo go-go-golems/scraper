@@ -53,7 +53,7 @@ func openScraperDB(engineDB string) (*sql.DB, error) {
 func newDefaultRunnerRegistry(
 	siteRegistry *siteregistry.Registry,
 	httpConfig config.HTTP,
-	eventPublisher *runtimeevents.Publisher,
+	eventPublisher runtimeevents.Publisher,
 	metricsRegistry *metrics.Registry,
 	component string,
 	workerID string,

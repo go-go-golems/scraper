@@ -14,12 +14,12 @@ import (
 
 type ObservedRunner struct {
 	base      runner.Runner
-	publisher *Publisher
+	publisher Publisher
 	component string
 	workerID  string
 }
 
-func WrapRunner(base runner.Runner, publisher *Publisher, component string, workerID string) runner.Runner {
+func WrapRunner(base runner.Runner, publisher Publisher, component string, workerID string) runner.Runner {
 	if base == nil || publisher == nil {
 		return base
 	}
@@ -37,7 +37,7 @@ func (r *ObservedRunner) Kind() string {
 
 func (r *ObservedRunner) Run(ctx context.Context, runCtx runner.RunContext) (*model.OpResult, error) {
 	startedAt := time.Now().UTC()
-	_ = r.publisher.Publish(buildRunnerLogEvent(
+	_ = r.publisher.Publish(ctx, buildRunnerLogEvent(
 		runCtx,
 		r.component,
 		r.workerID,
@@ -83,7 +83,7 @@ func (r *ObservedRunner) Run(ctx context.Context, runCtx runner.RunContext) (*mo
 		}
 	}
 
-	_ = r.publisher.Publish(buildRunnerLogEvent(
+	_ = r.publisher.Publish(ctx, buildRunnerLogEvent(
 		runCtx,
 		r.component,
 		r.workerID,
@@ -152,7 +152,8 @@ func artifactSummaries(artifacts []model.ArtifactWrite) []any {
 }
 
 func EmitSimpleEvent(
-	publisher *Publisher,
+	ctx context.Context,
+	publisher Publisher,
 	event *runtimev1.RuntimeEventV1,
 ) error {
 	if publisher == nil || event == nil {
@@ -164,7 +165,7 @@ func EmitSimpleEvent(
 	if event.SchemaVersion == 0 {
 		event.SchemaVersion = SchemaVersionV1
 	}
-	return publisher.Publish(event)
+	return publisher.Publish(ctx, event)
 }
 
 func BuildPayload(fields map[string]any) *structpb.Struct {

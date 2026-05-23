@@ -17,7 +17,7 @@ const meta: Meta<typeof AppErrorBoundary> = {
 export default meta;
 type Story = StoryObj<typeof AppErrorBoundary>;
 
-export const Error: Story = {
+export const ErrorState: Story = {
   render: () => (
     <AppErrorBoundary>
       <ThrowingChild shouldThrow={true} />

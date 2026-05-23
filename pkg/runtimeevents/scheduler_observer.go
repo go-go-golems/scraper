@@ -7,7 +7,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func NewSchedulerObserver(publisher *Publisher, component string, workerID string) scheduler.Observer {
+func NewSchedulerObserver(publisher Publisher, component string, workerID string) scheduler.Observer {
 	if publisher == nil {
 		return nil
 	}
@@ -21,7 +21,7 @@ func NewSchedulerObserver(publisher *Publisher, component string, workerID strin
 		if runtimeEvent == nil {
 			return
 		}
-		if err := publisher.Publish(runtimeEvent); err != nil {
+		if err := publisher.Publish(ctx, runtimeEvent); err != nil {
 			log.Warn().Err(err).Str("component", component).Str("worker_id", workerID).Msg("failed to publish scheduler event")
 		}
 	})

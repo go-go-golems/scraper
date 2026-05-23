@@ -1,0 +1,1144 @@
+===== /home/manuel/code/wesen/go-go-golems/pinocchio/proto/pinocchio/chatapp/v1/chat.proto =====
+     1	syntax = "proto3";
+     2	
+     3	package pinocchio.chatapp.v1;
+     4	
+     5	option go_package = "github.com/go-go-golems/pinocchio/pkg/chatapp/pb/proto/pinocchio/chatapp/v1;chatappv1";
+     6	
+     7	message StartInferenceCommand {
+     8	  string prompt = 1;
+     9	  string idempotency_key = 2;
+    10	  string request_id = 3;
+    11	}
+    12	
+    13	message StopInferenceCommand {}
+    14	
+    15	message UsageInfo {
+    16	  int32 input_tokens = 1;
+    17	  int32 output_tokens = 2;
+    18	  int32 cached_tokens = 3;
+    19	  int32 cache_creation_input_tokens = 4;
+    20	  int32 cache_read_input_tokens = 5;
+    21	}
+    22	
+    23	message CorrelationInfo {
+    24	  string session_id = 1;
+    25	  string run_id = 2;
+    26	  string turn_id = 4;
+    27	  string provider_call_id = 5;
+    28	  string segment_id = 15;
+    29	  string tool_call_id = 19;
+    30	}
+    31	
+    32	message ChatRunStarted {
+    33	  string message_id = 1;
+    34	  string prompt = 2;
+    35	  CorrelationInfo correlation = 3;
+    36	}
+    37	
+    38	message ChatRunFinished {
+    39	  string message_id = 1;
+    40	  string status = 2;
+    41	  string error = 3;
+    42	  optional int64 duration_ms = 4;
+    43	  CorrelationInfo correlation = 5;
+    44	}
+    45	
+    46	message ChatRunStopped {
+    47	  string message_id = 1;
+    48	  string status = 2;
+    49	  string error = 3;
+    50	  CorrelationInfo correlation = 4;
+    51	}
+    52	
+    53	message ChatRunFailed {
+    54	  string message_id = 1;
+    55	  string status = 2;
+    56	  string error = 3;
+    57	  CorrelationInfo correlation = 4;
+    58	}
+    59	
+    60	message ChatProviderCallStarted {
+    61	  CorrelationInfo correlation = 1;
+    62	}
+    63	
+    64	message ChatProviderCallMetadataUpdated {
+    65	  string stop_reason = 1;
+    66	  UsageInfo usage = 2;
+    67	  CorrelationInfo correlation = 3;
+    68	}
+    69	
+    70	message ChatProviderCallFinished {
+    71	  string stop_reason = 1;
+    72	  string finish_class = 2;
+    73	  UsageInfo usage = 3;
+    74	  optional int64 duration_ms = 4;
+    75	  bool has_tool_calls = 5;
+    76	  CorrelationInfo correlation = 6;
+    77	}
+    78	
+    79	message ChatTextSegmentStarted {
+    80	  string message_id = 1;
+    81	  string role = 2;
+    82	  string prompt = 3;
+    83	  string status = 4;
+    84	  bool streaming = 5;
+    85	  CorrelationInfo correlation = 6;
+    86	}
+    87	
+    88	enum ChatStreamPatchMode {
+    89	  CHAT_STREAM_PATCH_MODE_UNSPECIFIED = 0;
+    90	  CHAT_STREAM_PATCH_MODE_APPEND = 1;
+    91	  CHAT_STREAM_PATCH_MODE_SNAPSHOT = 2;
+    92	  CHAT_STREAM_PATCH_MODE_REPLACE = 3;
+    93	}
+    94	
+    95	message ChatTextPatch {
+    96	  string message_id = 1;
+    97	  string role = 2;
+    98	  string stream_id = 3;
+    99	  uint64 sequence = 4;
+   100	  uint64 offset = 5;
+   101	  string text = 6;
+   102	  ChatStreamPatchMode mode = 7;
+   103	  string status = 8;
+   104	  bool final = 9;
+   105	  string finish_reason = 10;
+   106	  string prompt = 11;
+   107	  CorrelationInfo correlation = 12;
+   108	}
+   109	
+   110	message ChatTextSegmentFinished {
+   111	  string message_id = 1;
+   112	  string role = 2;
+   113	  string prompt = 3;
+   114	  string text = 4;
+   115	  string content = 5;
+   116	  string status = 6;
+   117	  bool streaming = 7;
+   118	  bool final = 8;
+   119	  string finish_reason = 9;
+   120	  CorrelationInfo correlation = 10;
+   121	}
+   122	
+   123	message ChatReasoningSegmentStarted {
+   124	  string message_id = 1;
+   125	  string parent_message_id = 2;
+   126	  string role = 3;
+   127	  string status = 4;
+   128	  bool streaming = 5;
+   129	  string source = 6;
+   130	  CorrelationInfo correlation = 7;
+   131	}
+   132	
+   133	message ChatReasoningPatch {
+   134	  string message_id = 1;
+   135	  string parent_message_id = 2;
+   136	  string role = 3;
+   137	  string stream_id = 4;
+   138	  uint64 sequence = 5;
+   139	  uint64 offset = 6;
+   140	  string text = 7;
+   141	  ChatStreamPatchMode mode = 8;
+   142	  string status = 9;
+   143	  bool final = 10;
+   144	  string source = 11;
+   145	  string finish_reason = 12;
+   146	  CorrelationInfo correlation = 13;
+   147	}
+   148	
+   149	message ChatReasoningSegmentFinished {
+   150	  string message_id = 1;
+   151	  string parent_message_id = 2;
+   152	  string role = 3;
+   153	  string text = 4;
+   154	  string content = 5;
+   155	  string status = 6;
+   156	  bool streaming = 7;
+   157	  string source = 8;
+   158	  string finish_reason = 9;
+   159	  CorrelationInfo correlation = 10;
+   160	}
+   161	
+   162	message ChatToolCallStarted {
+   163	  string message_id = 1;
+   164	  string tool_call_id = 2;
+   165	  string tool_name = 3;
+   166	  string input = 4;
+   167	  bool executing = 5;
+   168	  string status = 6;
+   169	  CorrelationInfo correlation = 7;
+   170	}
+   171	
+   172	message ChatToolArgumentsPatch {
+   173	  string message_id = 1;
+   174	  string tool_call_id = 2;
+   175	  string tool_name = 3;
+   176	  string stream_id = 4;
+   177	  uint64 sequence = 5;
+   178	  uint64 offset = 6;
+   179	  string arguments = 7;
+   180	  ChatStreamPatchMode mode = 8;
+   181	  string status = 9;
+   182	  bool final = 10;
+   183	  CorrelationInfo correlation = 11;
+   184	}
+   185	
+   186	message ChatToolCallRequested {
+   187	  string message_id = 1;
+   188	  string tool_call_id = 2;
+   189	  string tool_name = 3;
+   190	  string input = 4;
+   191	  bool executing = 5;
+   192	  string status = 6;
+   193	  CorrelationInfo correlation = 7;
+   194	}
+   195	
+   196	message ChatToolExecutionStarted {
+   197	  string message_id = 1;
+   198	  string tool_call_id = 2;
+   199	  string tool_name = 3;
+   200	  string input = 4;
+   201	  bool executing = 5;
+   202	  string status = 6;
+   203	  CorrelationInfo correlation = 7;
+   204	}
+   205	
+   206	message ChatToolResultReady {
+   207	  string message_id = 1;
+   208	  string tool_call_id = 2;
+   209	  string tool_name = 3;
+   210	  string result = 4;
+   211	  string status = 5;
+   212	  CorrelationInfo correlation = 6;
+   213	}
+   214	
+   215	message ChatToolCallFinished {
+   216	  string message_id = 1;
+   217	  string tool_call_id = 2;
+   218	  string tool_name = 3;
+   219	  string status = 4;
+   220	  CorrelationInfo correlation = 5;
+   221	}
+   222	
+   223	message ChatUserMessageAccepted {
+   224	  string message_id = 1;
+   225	  string role = 2;
+   226	  string prompt = 3;
+   227	  string text = 4;
+   228	  string content = 5;
+   229	  string status = 6;
+   230	}
+   231	
+   232	message ChatMessageEntity {
+   233	  string message_id = 1;
+   234	  string role = 2;
+   235	  string prompt = 3;
+   236	  string text = 4;
+   237	  string content = 5;
+   238	  string status = 6;
+   239	  bool streaming = 7;
+   240	  string error = 8;
+   241	  string parent_message_id = 9;
+   242	  int32 segment = 10;
+   243	  string segment_type = 11;
+   244	  bool final = 12;
+   245	  CorrelationInfo correlation = 13;
+   246	}
+   247	
+   248	message AgentModePreviewUpdate {
+   249	  string message_id = 1;
+   250	  string candidate_mode = 2;
+   251	  string analysis = 3;
+   252	  string parse_state = 4;
+   253	  bool preview = 5;
+   254	}
+   255	
+   256	message AgentModeCommittedUpdate {
+   257	  string message_id = 1;
+   258	  string title = 2;
+   259	  string from = 3;
+   260	  string to = 4;
+   261	  string analysis = 5;
+   262	  bool preview = 6;
+   263	}
+   264	
+   265	message AgentModePreviewCleared {
+   266	  string message_id = 1;
+   267	}
+   268	
+   269	message AgentModeEntity {
+   270	  string message_id = 1;
+   271	  string title = 2;
+   272	  string from = 3;
+   273	  string to = 4;
+   274	  string analysis = 5;
+   275	  bool preview = 6;
+   276	}
+   277	
+   278	message ToolCallEntity {
+   279	  string message_id = 1;
+   280	  string tool_call_id = 2;
+   281	  string tool_name = 3;
+   282	  string input = 4;
+   283	  bool executing = 5;
+   284	  string status = 6;
+   285	  CorrelationInfo correlation = 7;
+   286	}
+   287	
+   288	message ToolResultEntity {
+   289	  string message_id = 1;
+   290	  string tool_call_id = 2;
+   291	  string tool_name = 3;
+   292	  string result = 4;
+   293	  string status = 5;
+   294	  CorrelationInfo correlation = 6;
+   295	}
+
+===== /home/manuel/code/wesen/go-go-golems/pinocchio/pkg/chatapp/chat.go =====
+     1	package chatapp
+     2	
+     3	import (
+     4		"context"
+     5		"fmt"
+     6		"sync"
+     7		"time"
+     8	
+     9		chatappv1 "github.com/go-go-golems/pinocchio/pkg/chatapp/pb/proto/pinocchio/chatapp/v1"
+    10		chatstore "github.com/go-go-golems/pinocchio/pkg/persistence/chatstore"
+    11		sessionstream "github.com/go-go-golems/sessionstream/pkg/sessionstream"
+    12	)
+    13	
+    14	const (
+    15		CommandStartInference = "ChatStartInference"
+    16		CommandStopInference  = "ChatStopInference"
+    17	
+    18		EventUserMessageAccepted = "ChatUserMessageAccepted"
+    19	
+    20		EventChatRunStarted                  = "ChatRunStarted"
+    21		EventChatRunFinished                 = "ChatRunFinished"
+    22		EventChatRunStopped                  = "ChatRunStopped"
+    23		EventChatRunFailed                   = "ChatRunFailed"
+    24		EventChatProviderCallStarted         = "ChatProviderCallStarted"
+    25		EventChatProviderCallMetadataUpdated = "ChatProviderCallMetadataUpdated"
+    26		EventChatProviderCallFinished        = "ChatProviderCallFinished"
+    27		EventChatTextSegmentStarted          = "ChatTextSegmentStarted"
+    28		EventChatTextPatch                   = "ChatTextPatch"
+    29		EventChatTextSegmentFinished         = "ChatTextSegmentFinished"
+    30		EventChatReasoningSegmentStarted     = "ChatReasoningSegmentStarted"
+    31		EventChatReasoningPatch              = "ChatReasoningPatch"
+    32		EventChatReasoningSegmentFinished    = "ChatReasoningSegmentFinished"
+    33		EventChatToolCallStarted             = "ChatToolCallStarted"
+    34		EventChatToolArgumentsPatch          = "ChatToolArgumentsPatch"
+    35		EventChatToolCallRequested           = "ChatToolCallRequested"
+    36		EventChatToolExecutionStarted        = "ChatToolExecutionStarted"
+    37		EventChatToolResultReady             = "ChatToolResultReady"
+    38		EventChatToolCallFinished            = "ChatToolCallFinished"
+    39	
+    40		TimelineEntityChatMessage = "ChatMessage"
+    41	)
+    42	
+    43	type Hooks struct {
+    44		OnBackendEvent func(sessionID, eventName string, payload map[string]any)
+    45	}
+    46	
+    47	type Option func(*Engine)
+    48	
+    49	type Engine struct {
+    50		mu         sync.Mutex
+    51		nextID     int
+    52		active     map[sessionstream.SessionId]*activeRun
+    53		pending    map[string]PromptRequest
+    54		chunkDelay time.Duration
+    55		hooks      Hooks
+    56		features   []ChatPlugin
+    57		turnStore  chatstore.TurnStore
+    58	}
+    59	
+    60	type activeRun struct {
+    61		messageID string
+    62		cancel    context.CancelFunc
+    63		done      chan struct{}
+    64	}
+    65	
+    66	func WithChunkDelay(delay time.Duration) Option {
+    67		return func(e *Engine) {
+    68			e.chunkDelay = delay
+    69		}
+    70	}
+    71	
+    72	func WithHooks(h Hooks) Option {
+    73		return func(e *Engine) {
+    74			e.hooks = h
+    75		}
+    76	}
+    77	
+    78	func WithTurnStore(ts chatstore.TurnStore) Option {
+    79		return func(e *Engine) {
+    80			e.turnStore = ts
+    81		}
+    82	}
+    83	
+    84	func NewEngine(opts ...Option) *Engine {
+    85		engine := &Engine{
+    86			active:     map[sessionstream.SessionId]*activeRun{},
+    87			pending:    map[string]PromptRequest{},
+    88			chunkDelay: 20 * time.Millisecond,
+    89		}
+    90		for _, opt := range opts {
+    91			if opt != nil {
+    92				opt(engine)
+    93			}
+    94		}
+    95		return engine
+    96	}
+    97	
+    98	func RegisterSchemas(reg *sessionstream.SchemaRegistry, features ...ChatPlugin) error {
+    99		for _, err := range []error{
+   100			reg.RegisterCommand(CommandStartInference, &chatappv1.StartInferenceCommand{}),
+   101			reg.RegisterCommand(CommandStopInference, &chatappv1.StopInferenceCommand{}),
+   102			reg.RegisterEvent(EventUserMessageAccepted, &chatappv1.ChatUserMessageAccepted{}),
+   103			reg.RegisterEvent(EventChatRunStarted, &chatappv1.ChatRunStarted{}),
+   104			reg.RegisterEvent(EventChatRunFinished, &chatappv1.ChatRunFinished{}),
+   105			reg.RegisterEvent(EventChatRunStopped, &chatappv1.ChatRunStopped{}),
+   106			reg.RegisterEvent(EventChatRunFailed, &chatappv1.ChatRunFailed{}),
+   107			reg.RegisterEvent(EventChatProviderCallStarted, &chatappv1.ChatProviderCallStarted{}),
+   108			reg.RegisterEvent(EventChatProviderCallMetadataUpdated, &chatappv1.ChatProviderCallMetadataUpdated{}),
+   109			reg.RegisterEvent(EventChatProviderCallFinished, &chatappv1.ChatProviderCallFinished{}),
+   110			reg.RegisterEvent(EventChatTextSegmentStarted, &chatappv1.ChatTextSegmentStarted{}),
+   111			reg.RegisterEvent(EventChatTextPatch, &chatappv1.ChatTextPatch{}),
+   112			reg.RegisterEvent(EventChatTextSegmentFinished, &chatappv1.ChatTextSegmentFinished{}),
+   113			reg.RegisterUIEvent(EventUserMessageAccepted, &chatappv1.ChatUserMessageAccepted{}),
+   114			reg.RegisterUIEvent(EventChatRunStarted, &chatappv1.ChatRunStarted{}),
+   115			reg.RegisterUIEvent(EventChatRunFinished, &chatappv1.ChatRunFinished{}),
+   116			reg.RegisterUIEvent(EventChatRunStopped, &chatappv1.ChatRunStopped{}),
+   117			reg.RegisterUIEvent(EventChatRunFailed, &chatappv1.ChatRunFailed{}),
+   118			reg.RegisterUIEvent(EventChatProviderCallStarted, &chatappv1.ChatProviderCallStarted{}),
+   119			reg.RegisterUIEvent(EventChatProviderCallMetadataUpdated, &chatappv1.ChatProviderCallMetadataUpdated{}),
+   120			reg.RegisterUIEvent(EventChatProviderCallFinished, &chatappv1.ChatProviderCallFinished{}),
+   121			reg.RegisterUIEvent(EventChatTextSegmentStarted, &chatappv1.ChatTextSegmentStarted{}),
+   122			reg.RegisterUIEvent(EventChatTextPatch, &chatappv1.ChatTextPatch{}),
+   123			reg.RegisterUIEvent(EventChatTextSegmentFinished, &chatappv1.ChatTextSegmentFinished{}),
+   124			reg.RegisterTimelineEntity(TimelineEntityChatMessage, &chatappv1.ChatMessageEntity{}),
+   125		} {
+   126			if err != nil {
+   127				return err
+   128			}
+   129		}
+   130		for _, feature := range features {
+   131			if feature == nil {
+   132				continue
+   133			}
+   134			if err := feature.RegisterSchemas(reg); err != nil {
+   135				return err
+   136			}
+   137		}
+   138		return nil
+   139	}
+   140	
+   141	func Install(hub *sessionstream.Hub, engine *Engine) error {
+   142		if hub == nil {
+   143			return fmt.Errorf("hub is nil")
+   144		}
+   145		if engine == nil {
+   146			engine = NewEngine()
+   147		}
+   148		if err := hub.RegisterCommand(CommandStartInference, engine.handleStartInference); err != nil {
+   149			return err
+   150		}
+   151		if err := hub.RegisterCommand(CommandStopInference, engine.handleStopInference); err != nil {
+   152			return err
+   153		}
+   154		if err := hub.RegisterUIProjection(sessionstream.UIProjectionFunc(engine.uiProjection)); err != nil {
+   155			return err
+   156		}
+   157		if err := hub.RegisterTimelineProjection(sessionstream.TimelineProjectionFunc(engine.timelineProjection)); err != nil {
+   158			return err
+   159		}
+   160		return nil
+   161	}
+   162	
+   163	func (e *Engine) WaitIdle(ctx context.Context, sid sessionstream.SessionId) error {
+   164		for {
+   165			run := e.currentRun(sid)
+   166			if run == nil {
+   167				return nil
+   168			}
+   169			select {
+   170			case <-run.done:
+   171			case <-ctx.Done():
+   172				return ctx.Err()
+   173			}
+   174		}
+   175	}
+   176	
+   177	func (e *Engine) nextMessageID() string {
+   178		e.mu.Lock()
+   179		defer e.mu.Unlock()
+   180		e.nextID++
+   181		return fmt.Sprintf("chat-msg-%d", e.nextID)
+   182	}
+   183	
+   184	func (e *Engine) swapRun(sid sessionstream.SessionId, run *activeRun) *activeRun {
+   185		e.mu.Lock()
+   186		defer e.mu.Unlock()
+   187		prev := e.active[sid]
+   188		e.active[sid] = run
+   189		return prev
+   190	}
+   191	
+   192	func (e *Engine) currentRun(sid sessionstream.SessionId) *activeRun {
+   193		e.mu.Lock()
+   194		defer e.mu.Unlock()
+   195		return e.active[sid]
+   196	}
+   197	
+   198	func (e *Engine) clearRun(sid sessionstream.SessionId, messageID string) {
+   199		e.mu.Lock()
+   200		defer e.mu.Unlock()
+   201		current := e.active[sid]
+   202		if current != nil && current.messageID == messageID {
+   203			delete(e.active, sid)
+   204		}
+   205	}
+   206	
+   207	func (e *Engine) setPendingRequest(requestID string, req PromptRequest) {
+   208		if e == nil || requestID == "" {
+   209			return
+   210		}
+   211		e.mu.Lock()
+   212		defer e.mu.Unlock()
+   213		e.pending[requestID] = req
+   214	}
+   215	
+   216	func (e *Engine) takePendingRequest(requestID string) PromptRequest {
+   217		if e == nil || requestID == "" {
+   218			return PromptRequest{}
+   219		}
+   220		e.mu.Lock()
+   221		defer e.mu.Unlock()
+   222		req := e.pending[requestID]
+   223		delete(e.pending, requestID)
+   224		return req
+   225	}
+   226	
+   227	func (e *Engine) clearPendingRequest(requestID string) {
+   228		if e == nil || requestID == "" {
+   229			return
+   230		}
+   231		e.mu.Lock()
+   232		defer e.mu.Unlock()
+   233		delete(e.pending, requestID)
+   234	}
+
+===== /home/manuel/code/wesen/go-go-golems/pinocchio/pkg/chatapp/runtime_inference.go =====
+     1	package chatapp
+     2	
+     3	import (
+     4		"context"
+     5		"errors"
+     6		"fmt"
+     7		"strings"
+     8	
+     9		gepevents "github.com/go-go-golems/geppetto/pkg/events"
+    10		gepsession "github.com/go-go-golems/geppetto/pkg/inference/session"
+    11		"github.com/go-go-golems/geppetto/pkg/inference/toolloop/enginebuilder"
+    12		"github.com/go-go-golems/geppetto/pkg/turns"
+    13		"github.com/go-go-golems/geppetto/pkg/turns/serde"
+    14		chatappv1 "github.com/go-go-golems/pinocchio/pkg/chatapp/pb/proto/pinocchio/chatapp/v1"
+    15		sessionstream "github.com/go-go-golems/sessionstream/pkg/sessionstream"
+    16		"google.golang.org/protobuf/proto"
+    17	)
+    18	
+    19	func (e *Engine) handleStartInference(ctx context.Context, cmd sessionstream.Command, _ *sessionstream.Session, pub sessionstream.EventPublisher) error {
+    20		payload, ok := cmd.Payload.(*chatappv1.StartInferenceCommand)
+    21		if !ok || payload == nil {
+    22			return fmt.Errorf("start inference payload must be %T, got %T", &chatappv1.StartInferenceCommand{}, cmd.Payload)
+    23		}
+    24		pending := e.takePendingRequest(strings.TrimSpace(payload.GetRequestId()))
+    25		prompt := strings.TrimSpace(pending.Prompt)
+    26		if prompt == "" {
+    27			prompt = strings.TrimSpace(payload.GetPrompt())
+    28		}
+    29		if prompt == "" {
+    30			prompt = "Explain evtstream"
+    31		}
+    32		messageID := e.nextMessageID()
+    33		userMessageID := messageID + "-user"
+    34		if err := e.publish(ctx, cmd.SessionId, pub, EventUserMessageAccepted, &chatappv1.ChatUserMessageAccepted{MessageId: userMessageID, Role: "user", Text: prompt, Content: prompt, Status: "accepted"}); err != nil {
+    35			return err
+    36		}
+    37		runCtx, cancel := context.WithCancel(publishContext(ctx))
+    38		run := &activeRun{messageID: messageID, cancel: cancel, done: make(chan struct{})}
+    39		if previous := e.swapRun(cmd.SessionId, run); previous != nil {
+    40			previous.cancel()
+    41			<-previous.done
+    42		}
+    43		go e.runPrompt(runCtx, cmd.SessionId, messageID, pending, prompt, pub, run.done)
+    44		return nil
+    45	}
+    46	
+    47	func (e *Engine) handleStopInference(_ context.Context, cmd sessionstream.Command, _ *sessionstream.Session, _ sessionstream.EventPublisher) error {
+    48		if current := e.currentRun(cmd.SessionId); current != nil {
+    49			current.cancel()
+    50		}
+    51		return nil
+    52	}
+    53	
+    54	func (e *Engine) runPrompt(ctx context.Context, sid sessionstream.SessionId, messageID string, pending PromptRequest, prompt string, pub sessionstream.EventPublisher, done chan struct{}) {
+    55		defer close(done)
+    56		defer e.clearRun(sid, messageID)
+    57		if pending.Runtime != nil && pending.Runtime.Engine != nil {
+    58			e.runRuntimeInference(ctx, sid, messageID, prompt, pending, pub)
+    59			return
+    60		}
+    61		e.runDemoInference(ctx, sid, messageID, prompt, pub)
+    62	}
+    63	
+    64	func (e *Engine) runRuntimeInference(ctx context.Context, sid sessionstream.SessionId, messageID, prompt string, pending PromptRequest, pub sessionstream.EventPublisher) {
+    65		runtime := pending.Runtime
+    66		if runtime == nil || runtime.Engine == nil {
+    67			e.runDemoInference(ctx, sid, messageID, prompt, pub)
+    68			return
+    69		}
+    70		if err := e.publish(ctx, sid, pub, EventChatRunStarted, &chatappv1.ChatRunStarted{MessageId: messageID, Prompt: prompt, Correlation: runCorrelationInfo(sid, messageID)}); err != nil {
+    71			return
+    72		}
+    73	
+    74		baseSink := gepevents.EventSink(&runtimeEventSink{publishCtx: publishContext(ctx), sessionID: sid, messageID: messageID, prompt: prompt, pub: pub, engine: e})
+    75		eventSink := baseSink
+    76		if runtime.WrapSink != nil {
+    77			wrapped, err := runtime.WrapSink(baseSink)
+    78			if err != nil {
+    79				e.publishRunFailed(publishContext(ctx), sid, pub, messageID, err.Error())
+    80				return
+    81			}
+    82			eventSink = wrapped
+    83		}
+    84		sink, ok := baseSink.(*runtimeEventSink)
+    85		if !ok {
+    86			e.publishRunFailed(publishContext(ctx), sid, pub, messageID, "internal runtime sink type assertion failed")
+    87			return
+    88		}
+    89		sess := gepsession.NewSessionWithID(string(sid))
+    90		sess.Builder = &enginebuilder.Builder{
+    91			Base:       runtime.Engine,
+    92			EventSinks: []gepevents.EventSink{eventSink},
+    93		}
+    94	
+    95		if pending.InitialTurn != nil {
+    96			sess.Append(pending.InitialTurn.Clone())
+    97		} else {
+    98			// Load conversation history: the last persisted turn contains the full
+    99			// conversation as an accumulator. AppendNewTurnFromUserPrompt will clone
+   100			// it and add the new user block, giving the LLM the full context.
+   101			if e.turnStore != nil {
+   102				snapshot, err := e.turnStore.LoadLatestTurn(ctx, string(sid), "final")
+   103				if err != nil {
+   104					e.publishRunFailed(publishContext(ctx), sid, pub, messageID, fmt.Sprintf("load conversation history: %v", err))
+   105					return
+   106				}
+   107				if snapshot != nil {
+   108					turn, err := serde.FromYAML([]byte(snapshot.Payload))
+   109					if err != nil {
+   110						e.publishRunFailed(publishContext(ctx), sid, pub, messageID, fmt.Sprintf("decode conversation history: %v", err))
+   111						return
+   112					}
+   113					if turn == nil {
+   114						e.publishRunFailed(publishContext(ctx), sid, pub, messageID, "decode conversation history: empty turn")
+   115						return
+   116					}
+   117					sess.Append(turn)
+   118				}
+   119			}
+   120	
+   121			_, err := sess.AppendNewTurnFromUserPrompt(prompt)
+   122			if err != nil {
+   123				e.publishRunFailed(publishContext(ctx), sid, pub, messageID, err.Error())
+   124				return
+   125			}
+   126		}
+   127		assistantBlockOffset := countAssistantBlocks(sess.Latest())
+   128		handle, err := sess.StartInference(ctx)
+   129		if err != nil {
+   130			e.publishRunFailed(publishContext(ctx), sid, pub, messageID, err.Error())
+   131			return
+   132		}
+   133		output, err := handle.Wait()
+   134		if err != nil {
+   135			if !sink.IsTerminal() {
+   136				if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+   137					_ = sink.finishActiveTextSegment("stopped", "stopped", "")
+   138					_ = e.publish(publishContext(ctx), sid, pub, EventChatRunStopped, &chatappv1.ChatRunStopped{MessageId: messageID, Status: "stopped", Correlation: runCorrelationInfo(sid, messageID)})
+   139					return
+   140				}
+   141				_ = sink.finishActiveTextSegment("failed", "error", "")
+   142				if isMaxIterationsError(err) {
+   143					_ = e.publish(publishContext(ctx), sid, pub, EventChatTextSegmentFinished, &chatappv1.ChatTextSegmentFinished{MessageId: runtimeWarningMessageID(messageID), Role: "warning", Prompt: prompt, Text: maxIterationsWarningText(err), Content: maxIterationsWarningText(err), Status: "finished", Streaming: false, Final: true})
+   144				}
+   145				e.publishRunFailed(publishContext(ctx), sid, pub, messageID, err.Error())
+   146			}
+   147			return
+   148		}
+   149		if pending.OnFinalTurn != nil && output != nil {
+   150			pending.OnFinalTurn(output.Clone())
+   151		}
+   152		if sink.IsTerminal() {
+   153			return
+   154		}
+   155		if sink.HasActiveTextSegment() {
+   156			_ = sink.finishActiveTextSegment("finished", "stop", "")
+   157		} else if !sink.HasTextSegment() {
+   158			_ = e.publishFallbackAssistantText(publishContext(ctx), sid, pub, messageID, prompt, output, assistantBlockOffset)
+   159		}
+   160		_ = e.publish(publishContext(ctx), sid, pub, EventChatRunFinished, &chatappv1.ChatRunFinished{MessageId: messageID, Status: "finished", Correlation: runCorrelationInfo(sid, messageID)})
+   161	}
+   162	
+   163	func publishContext(ctx context.Context) context.Context {
+   164		if ctx == nil {
+   165			return context.Background()
+   166		}
+   167		return context.WithoutCancel(ctx)
+   168	}
+   169	
+   170	func runCorrelationInfo(sid sessionstream.SessionId, messageID string) *chatappv1.CorrelationInfo {
+   171		return &chatappv1.CorrelationInfo{SessionId: string(sid), RunId: messageID}
+   172	}
+   173	
+   174	func fallbackTextCorrelationInfo(sid sessionstream.SessionId, messageID string, segment int32) *chatappv1.CorrelationInfo {
+   175		segmentID := textSegmentMessageID(messageID, segment)
+   176		return &chatappv1.CorrelationInfo{SessionId: string(sid), RunId: messageID, SegmentId: segmentID}
+   177	}
+   178	
+   179	func (e *Engine) publishFallbackAssistantText(ctx context.Context, sid sessionstream.SessionId, pub sessionstream.EventPublisher, messageID, prompt string, output *turns.Turn, assistantBlockOffset int) error {
+   180		text := assistantTextFromTurnAfter(output, assistantBlockOffset)
+   181		if strings.TrimSpace(text) == "" {
+   182			return nil
+   183		}
+   184		const segment int32 = 1
+   185		textMessageID := textSegmentMessageID(messageID, segment)
+   186		corr := fallbackTextCorrelationInfo(sid, messageID, segment)
+   187		if err := e.publish(ctx, sid, pub, EventChatTextSegmentStarted, &chatappv1.ChatTextSegmentStarted{MessageId: textMessageID, Role: "assistant", Prompt: prompt, Status: "streaming", Streaming: true, Correlation: corr}); err != nil {
+   188			return err
+   189		}
+   190		return e.publish(ctx, sid, pub, EventChatTextSegmentFinished, &chatappv1.ChatTextSegmentFinished{MessageId: textMessageID, Role: "assistant", Prompt: prompt, Text: text, Content: text, Status: "finished", Streaming: false, Final: true, FinishReason: "stop", Correlation: corr})
+   191	}
+   192	
+   193	func countAssistantBlocks(turn *turns.Turn) int {
+   194		if turn == nil {
+   195			return 0
+   196		}
+   197		count := 0
+   198		for _, block := range turn.Blocks {
+   199			if block.Role == turns.RoleAssistant {
+   200				count++
+   201			}
+   202		}
+   203		return count
+   204	}
+   205	
+   206	func assistantTextFromTurnAfter(turn *turns.Turn, skip int) string {
+   207		if turn == nil {
+   208			return ""
+   209		}
+   210		parts := make([]string, 0, len(turn.Blocks))
+   211		seen := 0
+   212		for _, block := range turn.Blocks {
+   213			if block.Role != turns.RoleAssistant {
+   214				continue
+   215			}
+   216			if seen < skip {
+   217				seen++
+   218				continue
+   219			}
+   220			seen++
+   221			text, _ := block.Payload[turns.PayloadKeyText].(string)
+   222			if strings.TrimSpace(text) == "" {
+   223				continue
+   224			}
+   225			parts = append(parts, text)
+   226		}
+   227		return strings.Join(parts, "")
+   228	}
+   229	
+   230	func (e *Engine) publishRunFailed(ctx context.Context, sid sessionstream.SessionId, pub sessionstream.EventPublisher, messageID, errText string) {
+   231		_ = e.publish(ctx, sid, pub, EventChatRunFailed, &chatappv1.ChatRunFailed{MessageId: messageID, Status: "failed", Error: errText, Correlation: runCorrelationInfo(sid, messageID)})
+   232	}
+   233	
+   234	func (e *Engine) publish(ctx context.Context, sid sessionstream.SessionId, pub sessionstream.EventPublisher, name string, payload proto.Message) error {
+   235		if payload == nil {
+   236			return fmt.Errorf("event %s payload is nil", name)
+   237		}
+   238		if e.hooks.OnBackendEvent != nil {
+   239			e.hooks.OnBackendEvent(string(sid), name, protoMessageAsMap(payload))
+   240		}
+   241		return pub.Publish(ctx, sessionstream.Event{Name: name, SessionId: sid, Payload: payload})
+   242	}
+
+===== /home/manuel/code/wesen/go-go-golems/pinocchio/pkg/chatapp/projections.go =====
+     1	package chatapp
+     2	
+     3	import (
+     4		"context"
+     5		"strings"
+     6	
+     7		chatappv1 "github.com/go-go-golems/pinocchio/pkg/chatapp/pb/proto/pinocchio/chatapp/v1"
+     8		sessionstream "github.com/go-go-golems/sessionstream/pkg/sessionstream"
+     9		"google.golang.org/protobuf/proto"
+    10	)
+    11	
+    12	func baseUIProjection(_ context.Context, ev sessionstream.Event, _ *sessionstream.Session, _ sessionstream.TimelineView) ([]sessionstream.UIEvent, error) {
+    13		if ev.Payload == nil {
+    14			return nil, nil
+    15		}
+    16		switch ev.Name {
+    17		case EventUserMessageAccepted,
+    18			EventChatRunStarted, EventChatRunFinished, EventChatRunStopped, EventChatRunFailed,
+    19			EventChatProviderCallStarted, EventChatProviderCallMetadataUpdated, EventChatProviderCallFinished,
+    20			EventChatTextSegmentStarted, EventChatTextPatch, EventChatTextSegmentFinished:
+    21			return []sessionstream.UIEvent{{Name: ev.Name, Payload: proto.Clone(ev.Payload)}}, nil
+    22		default:
+    23			return nil, nil
+    24		}
+    25	}
+    26	
+    27	func baseTimelineProjection(_ context.Context, ev sessionstream.Event, _ *sessionstream.Session, view sessionstream.TimelineView) ([]sessionstream.TimelineEntity, error) {
+    28		switch payload := ev.Payload.(type) {
+    29		case *chatappv1.ChatUserMessageAccepted:
+    30			messageID := strings.TrimSpace(payload.GetMessageId())
+    31			if messageID == "" {
+    32				return nil, nil
+    33			}
+    34			entity := &chatappv1.ChatMessageEntity{
+    35				MessageId: messageID,
+    36				Role:      firstNonEmpty(payload.GetRole(), "user"),
+    37				Prompt:    payload.GetPrompt(),
+    38				Content:   firstNonEmpty(payload.GetContent(), payload.GetText()),
+    39				Status:    firstNonEmpty(payload.GetStatus(), "accepted"),
+    40				Streaming: false,
+    41			}
+    42			entity.Text = entity.Content
+    43			return []sessionstream.TimelineEntity{{Kind: TimelineEntityChatMessage, Id: messageID, Payload: entity}}, nil
+    44		case *chatappv1.ChatTextSegmentStarted:
+    45			messageID := strings.TrimSpace(payload.GetMessageId())
+    46			if messageID == "" {
+    47				return nil, nil
+    48			}
+    49			entity, hadEntity := currentChatMessageEntity(view, messageID)
+    50			content := firstNonEmpty(entity.GetContent(), entity.GetText())
+    51			if content == "" && !hadEntity {
+    52				return nil, nil
+    53			}
+    54			entity.MessageId = messageID
+    55			entity.Role = firstNonEmpty(payload.GetRole(), "assistant")
+    56			entity.Prompt = firstNonEmpty(payload.GetPrompt(), entity.GetPrompt())
+    57			entity.Content = content
+    58			entity.Text = content
+    59			entity.Status = firstNonEmpty(payload.GetStatus(), "streaming")
+    60			entity.Streaming = payload.GetStreaming()
+    61			entity.ParentMessageId = parentMessageIDFromSegmentMessageID(messageID)
+    62			entity.Correlation = MergeCorrelationInfo(entity.GetCorrelation(), payload.GetCorrelation())
+    63			return []sessionstream.TimelineEntity{{Kind: TimelineEntityChatMessage, Id: messageID, Payload: entity}}, nil
+    64		case *chatappv1.ChatTextPatch:
+    65			messageID := strings.TrimSpace(payload.GetMessageId())
+    66			if messageID == "" {
+    67				return nil, nil
+    68			}
+    69			entity, _ := currentChatMessageEntity(view, messageID)
+    70			content := ApplyStreamPatch(firstNonEmpty(entity.GetContent(), entity.GetText()), payload.GetText(), payload.GetMode())
+    71			if content == "" {
+    72				return nil, nil
+    73			}
+    74			entity.MessageId = messageID
+    75			entity.Role = firstNonEmpty(payload.GetRole(), "assistant")
+    76			entity.Prompt = firstNonEmpty(payload.GetPrompt(), entity.GetPrompt())
+    77			entity.Content = content
+    78			entity.Text = content
+    79			entity.Status = firstNonEmpty(payload.GetStatus(), "streaming")
+    80			entity.Streaming = !payload.GetFinal()
+    81			entity.Final = payload.GetFinal()
+    82			entity.ParentMessageId = parentMessageIDFromSegmentMessageID(messageID)
+    83			entity.Correlation = MergeCorrelationInfo(entity.GetCorrelation(), payload.GetCorrelation())
+    84			return []sessionstream.TimelineEntity{{Kind: TimelineEntityChatMessage, Id: messageID, Payload: entity}}, nil
+    85		case *chatappv1.ChatTextSegmentFinished:
+    86			messageID := strings.TrimSpace(payload.GetMessageId())
+    87			if messageID == "" {
+    88				return nil, nil
+    89			}
+    90			entity, hadEntity := currentChatMessageEntity(view, messageID)
+    91			content := firstNonEmpty(payload.GetContent(), payload.GetText(), entity.GetContent(), entity.GetText())
+    92			if content == "" && !hadEntity {
+    93				return nil, nil
+    94			}
+    95			entity.MessageId = messageID
+    96			entity.Role = firstNonEmpty(payload.GetRole(), "assistant")
+    97			entity.Prompt = firstNonEmpty(payload.GetPrompt(), entity.GetPrompt())
+    98			entity.Content = content
+    99			entity.Text = content
+   100			entity.Status = firstNonEmpty(payload.GetStatus(), "finished")
+   101			entity.Streaming = payload.GetStreaming()
+   102			entity.Final = payload.GetFinal()
+   103			entity.ParentMessageId = parentMessageIDFromSegmentMessageID(messageID)
+   104			entity.Correlation = MergeCorrelationInfo(entity.GetCorrelation(), payload.GetCorrelation())
+   105			return []sessionstream.TimelineEntity{{Kind: TimelineEntityChatMessage, Id: messageID, Payload: entity}}, nil
+   106		default:
+   107			return nil, nil
+   108		}
+   109	}
+   110	
+   111	func parentMessageIDFromSegmentMessageID(messageID string) string {
+   112		messageID = strings.TrimSpace(messageID)
+   113		idx := strings.LastIndex(messageID, ":text:")
+   114		if idx <= 0 {
+   115			return ""
+   116		}
+   117		return messageID[:idx]
+   118	}
+   119	
+   120	func currentChatMessageEntity(view sessionstream.TimelineView, id string) (*chatappv1.ChatMessageEntity, bool) {
+   121		entity, ok := view.Get(TimelineEntityChatMessage, id)
+   122		if !ok || entity.Payload == nil {
+   123			return &chatappv1.ChatMessageEntity{}, false
+   124		}
+   125		pb, ok := entity.Payload.(*chatappv1.ChatMessageEntity)
+   126		if !ok || pb == nil {
+   127			return &chatappv1.ChatMessageEntity{}, false
+   128		}
+   129		return proto.Clone(pb).(*chatappv1.ChatMessageEntity), true
+   130	}
+   131	
+   132	func ApplyStreamPatch(current, patch string, mode chatappv1.ChatStreamPatchMode) string {
+   133		switch mode {
+   134		case chatappv1.ChatStreamPatchMode_CHAT_STREAM_PATCH_MODE_SNAPSHOT,
+   135			chatappv1.ChatStreamPatchMode_CHAT_STREAM_PATCH_MODE_REPLACE:
+   136			return patch
+   137		case chatappv1.ChatStreamPatchMode_CHAT_STREAM_PATCH_MODE_APPEND,
+   138			chatappv1.ChatStreamPatchMode_CHAT_STREAM_PATCH_MODE_UNSPECIFIED:
+   139			fallthrough
+   140		default:
+   141			return current + patch
+   142		}
+   143	}
+
+===== /home/manuel/code/wesen/go-go-golems/pinocchio/pkg/chatapp/runner.go =====
+     1	package chatapp
+     2	
+     3	import (
+     4		"fmt"
+     5		"time"
+     6	
+     7		chatstore "github.com/go-go-golems/pinocchio/pkg/persistence/chatstore"
+     8		sessionstream "github.com/go-go-golems/sessionstream/pkg/sessionstream"
+     9		storesqlite "github.com/go-go-golems/sessionstream/pkg/sessionstream/hydration/sqlite"
+    10	)
+    11	
+    12	// RunnerOptions configures a non-web chatapp/sessionstream runtime.
+    13	type RunnerOptions struct {
+    14		Registry       *sessionstream.SchemaRegistry
+    15		HydrationStore sessionstream.HydrationStore
+    16		UIFanout       sessionstream.UIFanout
+    17		TurnStore      chatstore.TurnStore
+    18		Plugins        []ChatPlugin
+    19		ChunkDelay     time.Duration
+    20	}
+    21	
+    22	// Runner is the reusable non-web wiring of chatapp on top of sessionstream.
+    23	//
+    24	// It mirrors the core setup used by cmd/web-chat/app.Server without HTTP or
+    25	// websocket assumptions, so CLI, RPC, and TUI adapters can share the same
+    26	// command/event/projection/hydration pipeline.
+    27	type Runner struct {
+    28		Registry *sessionstream.SchemaRegistry
+    29		Store    sessionstream.HydrationStore
+    30		Hub      *sessionstream.Hub
+    31		Engine   *Engine
+    32		Service  *Service
+    33	
+    34		closeFn func() error
+    35	}
+    36	
+    37	// NewRunner builds a chatapp runner with schema registration, hydration store,
+    38	// hub, engine, projections, and service already installed.
+    39	func NewRunner(opts RunnerOptions) (*Runner, error) {
+    40		reg := opts.Registry
+    41		if reg == nil {
+    42			reg = sessionstream.NewSchemaRegistry()
+    43		}
+    44		if err := RegisterSchemas(reg, opts.Plugins...); err != nil {
+    45			return nil, err
+    46		}
+    47	
+    48		store := opts.HydrationStore
+    49		closeFn := func() error { return nil }
+    50		if store == nil {
+    51			memoryStore, err := storesqlite.NewInMemory(reg)
+    52			if err != nil {
+    53				return nil, err
+    54			}
+    55			store = memoryStore
+    56			closeFn = memoryStore.Close
+    57		}
+    58	
+    59		engineOptions := []Option{
+    60			WithPlugins(opts.Plugins...),
+    61			WithTurnStore(opts.TurnStore),
+    62		}
+    63		if opts.ChunkDelay > 0 {
+    64			engineOptions = append(engineOptions, WithChunkDelay(opts.ChunkDelay))
+    65		}
+    66		engine := NewEngine(engineOptions...)
+    67	
+    68		hubOptions := []sessionstream.HubOption{
+    69			sessionstream.WithSchemaRegistry(reg),
+    70			sessionstream.WithHydrationStore(store),
+    71		}
+    72		if opts.UIFanout != nil {
+    73			hubOptions = append(hubOptions, sessionstream.WithUIFanout(opts.UIFanout))
+    74		}
+    75		hub, err := sessionstream.NewHub(hubOptions...)
+    76		if err != nil {
+    77			_ = closeFn()
+    78			return nil, err
+    79		}
+    80		if err := Install(hub, engine); err != nil {
+    81			_ = closeFn()
+    82			return nil, err
+    83		}
+    84		service, err := NewService(hub, engine)
+    85		if err != nil {
+    86			_ = closeFn()
+    87			return nil, err
+    88		}
+    89		return &Runner{
+    90			Registry: reg,
+    91			Store:    store,
+    92			Hub:      hub,
+    93			Engine:   engine,
+    94			Service:  service,
+    95			closeFn:  closeFn,
+    96		}, nil
+    97	}
+    98	
+    99	// Close releases resources owned by the runner, such as the default in-memory
+   100	// SQLite hydration store.
+   101	func (r *Runner) Close() error {
+   102		if r == nil || r.closeFn == nil {
+   103			return nil
+   104		}
+   105		if err := r.closeFn(); err != nil {
+   106			return fmt.Errorf("close chatapp runner: %w", err)
+   107		}
+   108		return nil
+   109	}
+
+===== /home/manuel/code/wesen/go-go-golems/pinocchio/pkg/chatapp/service.go =====
+     1	package chatapp
+     2	
+     3	import (
+     4		"context"
+     5		"fmt"
+     6		"strings"
+     7	
+     8		"github.com/go-go-golems/geppetto/pkg/turns"
+     9		chatappv1 "github.com/go-go-golems/pinocchio/pkg/chatapp/pb/proto/pinocchio/chatapp/v1"
+    10		infruntime "github.com/go-go-golems/pinocchio/pkg/inference/runtime"
+    11		sessionstream "github.com/go-go-golems/sessionstream/pkg/sessionstream"
+    12		"github.com/google/uuid"
+    13	)
+    14	
+    15	// PromptRequest is the app-facing prompt submission input.
+    16	type PromptRequest struct {
+    17		Prompt         string
+    18		IdempotencyKey string
+    19		Runtime        *infruntime.ComposedRuntime
+    20		// InitialTurn optionally seeds the Geppetto runtime with a fully rendered
+    21		// turn instead of appending Prompt as a new user-only turn. This is used by
+    22		// Pinocchio verbs whose inputs can include system prompts, pre-seeded blocks,
+    23		// images, and templated content.
+    24		InitialTurn *turns.Turn
+    25		// OnFinalTurn is called with the final Geppetto turn after successful runtime
+    26		// inference. Callers that maintain an in-memory conversation accumulator can
+    27		// clone this turn directly instead of reconstructing assistant output from
+    28		// projected timeline entities.
+    29		OnFinalTurn func(*turns.Turn)
+    30	}
+    31	
+    32	// Service is an app-facing chat service surface suitable for consumer apps such as cmd/web-chat.
+    33	// It wraps command submission and snapshot access behind domain methods rather than exposing raw
+    34	// command names to callers.
+    35	type Service struct {
+    36		hub    *sessionstream.Hub
+    37		engine *Engine
+    38	}
+    39	
+    40	func NewService(hub *sessionstream.Hub, engine *Engine) (*Service, error) {
+    41		if hub == nil {
+    42			return nil, fmt.Errorf("hub is nil")
+    43		}
+    44		if engine == nil {
+    45			engine = NewEngine()
+    46		}
+    47		return &Service{hub: hub, engine: engine}, nil
+    48	}
+    49	
+    50	func (s *Service) SubmitPrompt(ctx context.Context, sid sessionstream.SessionId, prompt string) error {
+    51		return s.SubmitPromptRequest(ctx, sid, PromptRequest{Prompt: prompt})
+    52	}
+    53	
+    54	func (s *Service) SubmitPromptRequest(ctx context.Context, sid sessionstream.SessionId, req PromptRequest) error {
+    55		if s == nil || s.hub == nil {
+    56			return fmt.Errorf("chat service is not initialized")
+    57		}
+    58		if sid == "" {
+    59			return fmt.Errorf("session id is empty")
+    60		}
+    61		req.Prompt = strings.TrimSpace(req.Prompt)
+    62		if req.Prompt == "" {
+    63			return fmt.Errorf("prompt is empty")
+    64		}
+    65		requestID := uuid.NewString()
+    66		if s.engine != nil {
+    67			s.engine.setPendingRequest(requestID, req)
+    68		}
+    69		payload := &chatappv1.StartInferenceCommand{
+    70			Prompt:         req.Prompt,
+    71			RequestId:      requestID,
+    72			IdempotencyKey: req.IdempotencyKey,
+    73		}
+    74		if err := s.hub.Submit(ctx, sid, CommandStartInference, payload); err != nil {
+    75			s.engine.clearPendingRequest(requestID)
+    76			return err
+    77		}
+    78		return nil
+    79	}
+    80	
+    81	func (s *Service) Stop(ctx context.Context, sid sessionstream.SessionId) error {
+    82		if s == nil || s.hub == nil {
+    83			return fmt.Errorf("chat service is not initialized")
+    84		}
+    85		if sid == "" {
+    86			return fmt.Errorf("session id is empty")
+    87		}
+    88		return s.hub.Submit(ctx, sid, CommandStopInference, &chatappv1.StopInferenceCommand{})
+    89	}
+    90	
+    91	func (s *Service) WaitIdle(ctx context.Context, sid sessionstream.SessionId) error {
+    92		if s == nil || s.engine == nil {
+    93			return fmt.Errorf("chat engine is not initialized")
+    94		}
+    95		if sid == "" {
+    96			return fmt.Errorf("session id is empty")
+    97		}
+    98		return s.engine.WaitIdle(ctx, sid)
+    99	}
+   100	
+   101	func (s *Service) Snapshot(ctx context.Context, sid sessionstream.SessionId) (sessionstream.Snapshot, error) {
+   102		if s == nil || s.hub == nil {
+   103			return sessionstream.Snapshot{}, fmt.Errorf("chat service is not initialized")
+   104		}
+   105		if sid == "" {
+   106			return sessionstream.Snapshot{}, fmt.Errorf("session id is empty")
+   107		}
+   108		return s.hub.Snapshot(ctx, sid)
+   109	}
+

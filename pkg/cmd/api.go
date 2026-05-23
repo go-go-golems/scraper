@@ -45,6 +45,7 @@ func newAPICommand(version string, siteRegistry *siteregistry.Registry) *cobra.C
 				Version:          version,
 				RuntimeEvents:    eventConfig,
 				RecentEventLimit: options.runtimeEvents.recentEventLimit,
+				RuntimeEventsDB:  options.runtimeEvents.sessionstreamDB,
 			}, siteRegistry)
 			if err != nil {
 				return err

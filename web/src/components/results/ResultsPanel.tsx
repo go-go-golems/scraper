@@ -11,7 +11,6 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PanelIcon from '@mui/icons-material/ViewAgenda';
 import { useGetWorkflowResultsQuery, useGetWorkflowOpsQuery } from '../../api/workflowApi';
-import type { WorkflowOp } from '../../api/types';
 import { ResultFilterBar, type ResultFilters } from './ResultFilterBar';
 import { ActiveResultFilterChips } from './ActiveResultFilterChips';
 import { ResultsTable } from './ResultsTable';

@@ -6,13 +6,14 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 	"testing/fstest"
 
 	"github.com/go-go-golems/scraper/pkg/engine/model"
-	"os"
 	sitemanifest "github.com/go-go-golems/scraper/pkg/sites/manifest"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 	"github.com/go-go-golems/scraper/pkg/testfixtures"
@@ -433,6 +434,90 @@ func TestHackerNewsRunSeedCommandWithQueueRateLimit(t *testing.T) {
 	statusAfter := runRootCommand(t, registry, "engine", "status", "--engine-db", engineDB)
 	require.Contains(t, statusAfter, "ready: 0")
 	require.Contains(t, statusAfter, "succeeded: 5")
+}
+
+func TestHackerNewsQueryOnlyNextPageUsesOrigin(t *testing.T) {
+	pageOne := hackerNewsFixturePage(
+		[]hackerNewsFixtureStory{{ID: "47490070", Rank: 1, Title: "First Story", StoryURL: "https://example.com/first-story", SiteName: "example.com", Score: 236, Author: "anemll", AgeText: "3 hours ago", CommentsText: "138 comments"}},
+		"?p=2",
+	)
+	pageTwo := hackerNewsFixturePage(
+		[]hackerNewsFixtureStory{{ID: "47490100", Rank: 31, Title: "Page Two Story", StoryURL: "https://example.com/page-two", SiteName: "example.com", Score: 55, Author: "deeper", AgeText: "1 hour ago", CommentsText: "12 comments"}},
+		"?p=3",
+	)
+	pageThree := hackerNewsFixturePage(
+		[]hackerNewsFixtureStory{{ID: "47490200", Rank: 61, Title: "Page Three Story", StoryURL: "https://example.com/page-three", SiteName: "example.com", Score: 42, Author: "pager", AgeText: "30 minutes ago", CommentsText: "3 comments"}},
+		"",
+	)
+
+	var mu sync.Mutex
+	requestedQueries := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestedQueries = append(requestedQueries, r.URL.RawQuery)
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		switch r.URL.RawQuery {
+		case "":
+			_, _ = w.Write([]byte(pageOne))
+		case "p=2":
+			_, _ = w.Write([]byte(pageTwo))
+		case "p=3":
+			_, _ = w.Write([]byte(pageThree))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	sitesDir := t.TempDir()
+	engineDB := filepath.Join(t.TempDir(), "engine.db")
+	registry := siteregistry.New()
+	def, err := sitemanifest.LoadDefinition(os.DirFS(filepath.Join(testfixtures.SitesDir(t), "hackernews")), "")
+	require.NoError(t, err)
+	def.QueuePolicies = map[model.QueueKey]model.QueuePolicy{
+		model.QueueKey("site:hackernews:http"): {
+			MaxInFlight: 4,
+			RateLimit: &model.RateLimitPolicy{
+				Kind:          model.RateLimitKindTokenBucket,
+				RatePerSecond: 100,
+				Burst:         1,
+			},
+		},
+	}
+	require.NoError(t, registry.Register(def))
+
+	submitOutput := runRootCommand(t, registry,
+		"site", "hackernews", "run", "seed",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--workflow-id", "cmd-hackernews-query-next",
+		"--base-url", server.URL+"/",
+		"--max-pages", "3",
+	)
+	require.Contains(t, submitOutput, "Submitted ops: 1")
+
+	workerOutput := runRootCommand(t, registry,
+		"worker", "run",
+		"--sites-dir", sitesDir,
+		"--engine-db", engineDB,
+		"--max-workers", "4",
+		"--max-cycles", "20",
+		"--poll-interval", "20ms",
+	)
+	require.Contains(t, workerOutput, "Succeeded:")
+
+	statusAfter := runRootCommand(t, registry, "engine", "status", "--engine-db", engineDB)
+	require.Contains(t, statusAfter, "ready: 0")
+	require.Contains(t, statusAfter, "failed: 0")
+	require.Contains(t, statusAfter, "succeeded: 7")
+
+	mu.Lock()
+	gotQueries := append([]string(nil), requestedQueries...)
+	mu.Unlock()
+	require.Contains(t, gotQueries, "p=3")
+	require.NotContains(t, gotQueries, "p=2/?p=3")
 }
 
 func TestHackerNewsRunSeedHelpIncludesMaxPages(t *testing.T) {

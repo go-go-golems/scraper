@@ -9,7 +9,7 @@ import (
 	"github.com/go-go-golems/scraper/pkg/engine/config"
 	"github.com/go-go-golems/scraper/pkg/engine/scheduler"
 	"github.com/go-go-golems/scraper/pkg/metrics"
-	"github.com/go-go-golems/scraper/pkg/runtimeevents"
+	runtimestream "github.com/go-go-golems/scraper/pkg/runtimeevents/sessionstream"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
 )
 
@@ -51,13 +51,13 @@ func runWorkerCommand(ctx context.Context, out io.Writer, options *workerCommand
 	if err != nil {
 		return err
 	}
-	eventResources, err := runtimeevents.OpenPublisher(eventConfig)
+	eventRuntime, err := runtimestream.NewProducerRuntime(runtimestream.Config{Events: eventConfig})
 	if err != nil {
 		return err
 	}
-	defer func() { _ = eventResources.Close() }()
+	defer func() { _ = eventRuntime.Close(context.Background()) }()
 
-	eventPublisher := eventResources.EventPublisher()
+	eventPublisher := eventRuntime.Publisher
 	metricsRegistry, err := metrics.NewRegistry()
 	if err != nil {
 		return err

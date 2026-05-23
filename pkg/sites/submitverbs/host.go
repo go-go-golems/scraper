@@ -28,7 +28,7 @@ type Host struct {
 	siteRegistry *siteregistry.Registry
 	def          siteregistry.Definition
 	registry     *jsverbs.Registry
-	events       *runtimeevents.Publisher
+	events       runtimeevents.Publisher
 }
 
 type SubmitOptions struct {
@@ -50,7 +50,7 @@ func NewHost(
 	siteRegistry *siteregistry.Registry,
 	def siteregistry.Definition,
 	registry *jsverbs.Registry,
-	events *runtimeevents.Publisher,
+	events runtimeevents.Publisher,
 ) *Host {
 	return &Host{
 		siteRegistry: siteRegistry,
@@ -209,7 +209,7 @@ func openScraperDB(engineDB string) (*sql.DB, error) {
 func newDefaultRunnerRegistry(
 	siteRegistry *siteregistry.Registry,
 	httpConfig config.HTTP,
-	eventPublisher *runtimeevents.Publisher,
+	eventPublisher runtimeevents.Publisher,
 	component string,
 	workerID string,
 ) (*runner.Registry, error) {

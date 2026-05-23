@@ -136,7 +136,7 @@ func (r *HTTPRunner) Run(ctx context.Context, runCtx RunContext) (*model.OpResul
 			CompletedAt: runCtx.Now,
 		}, nil
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {

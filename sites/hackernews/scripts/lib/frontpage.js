@@ -30,6 +30,9 @@ function toAbsolute(baseURL, href) {
   if (value.charAt(0) === "/") {
     return root ? root + value : value;
   }
+  if (value.charAt(0) === "?") {
+    return root ? root + "/" + value : value;
+  }
 
   const trimmedBase = String(baseURL || "").replace(/\/+$/, "");
   return trimmedBase ? trimmedBase + "/" + value.replace(/^\/+/, "") : value;

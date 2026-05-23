@@ -20,6 +20,7 @@ const (
 )
 
 const (
+	DefaultTopic              = "scraper.runtime.sessionstream.v1.events"
 	DefaultRedisAddress       = "127.0.0.1:6379"
 	DefaultRedisConsumerGroup = "scraper-api"
 	DefaultRecentEventLimit   = 256
@@ -51,7 +52,7 @@ func (c Config) Normalize() Config {
 		c.Backend = BackendOff
 	}
 	if c.Topic == "" {
-		c.Topic = TopicRuntimeEventsV1
+		c.Topic = DefaultTopic
 	}
 	if c.RedisAddress == "" {
 		c.RedisAddress = DefaultRedisAddress
@@ -86,6 +87,10 @@ func OpenPublisher(cfg Config) (*Resources, error) {
 
 func OpenPublisherSubscriber(cfg Config) (*Resources, error) {
 	return open(cfg, true)
+}
+
+func NewGoChannelPubSub() *gochannel.GoChannel {
+	return gochannel.NewGoChannel(gochannel.Config{}, watermill.NopLogger{})
 }
 
 func open(cfg Config, withSubscriber bool) (*Resources, error) {
@@ -167,20 +172,6 @@ func openRedis(cfg Config, withSubscriber bool) (*Resources, error) {
 	res.Subscriber = subscriber
 	res.closers = append(res.closers, subscriber.Close)
 	return res, nil
-}
-
-func (r *Resources) EventPublisher() *Publisher {
-	if r == nil || r.Publisher == nil {
-		return nil
-	}
-	return NewPublisher(r.Publisher, r.Topic)
-}
-
-func (r *Resources) EventSubscriber() *Subscriber {
-	if r == nil || r.Subscriber == nil {
-		return nil
-	}
-	return NewSubscriber(r.Subscriber, r.Topic)
 }
 
 func (r *Resources) Close() error {

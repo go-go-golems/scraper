@@ -175,7 +175,7 @@ export function ResultPreviewPanel({ result, workflowId, onClose, onOpClick }: R
 
         {!loading && !error && body && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {body.Data && (
+            {body.Data !== null && body.Data !== undefined && (
               <CodeViewPanel
                 data={body.Data}
                 label="Data"

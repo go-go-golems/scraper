@@ -6,7 +6,6 @@ import type {
   OpResult,
   ArtifactSummary,
   WorkflowArtifactListResponse,
-  WorkflowResultSummary,
   WorkflowResultsResponse,
 } from './types';
 import { engineApi } from './engineApi';

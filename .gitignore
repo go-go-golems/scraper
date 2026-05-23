@@ -14,8 +14,13 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 dist/
+.bin/
 
 # misc files and directories
 .env
 .envrc
 .history
+
+# Local devctl runtime state and scraper dev databases
+.devctl/
+state/

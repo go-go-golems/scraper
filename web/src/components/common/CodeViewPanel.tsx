@@ -33,34 +33,6 @@ interface CodeViewPanelProps {
   maxHeight?: number;
 }
 
-const THEME = {
-  '&': {
-    fontSize: '0.8rem',
-    fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-    height: '100%',
-  },
-  '.cm-scroller': {
-    overflow: 'auto',
-    fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-    fontSize: '0.8rem',
-    lineHeight: 1.5,
-  },
-  '.cm-content': {
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-word',
-    padding: '12px',
-  },
-  '.cm-gutters': {
-    backgroundColor: '#f0f0f0',
-    borderRight: '1px solid #ddd',
-    color: '#aaa',
-  },
-  '.cm-lineNumbers .cm-gutterElement': {
-    minWidth: '2em',
-    padding: '0 8px 0 4px',
-  },
-};
-
 function dataAsString(data: unknown, format: DataFormat): string {
   if (format === 'html') {
     return typeof data === 'string' ? data : JSON.stringify(data, null, 2);
@@ -113,12 +85,6 @@ export function CodeViewPanel({
     [],
   );
 
-  // Keep current format when clicking active toggle button (fires null in exclusive mode)
-  const handleToggleFormat = useCallback((f: DataFormat) => {
-    if (format === f) return;
-    setFormat(f);
-  }, [format]);
-
   const showToggle = formats.length > 1;
 
   return (
@@ -140,12 +106,11 @@ export function CodeViewPanel({
             </Typography>
           )}
           {showToggle && (
-            <ToggleButtonGroup size="small">
+            <ToggleButtonGroup size="small" value={format} exclusive onChange={handleFormatChange}>
               {formats.map((f) => (
                 <ToggleButton
                   key={f}
-                  selected={format === f}
-                  onClick={() => handleToggleFormat(f)}
+                  value={f}
                   sx={{ py: 0.25, px: 1, fontSize: '0.7rem', textTransform: 'none' }}
                 >
                   {FORMAT_LABELS[f]}

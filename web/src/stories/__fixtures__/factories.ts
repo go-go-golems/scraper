@@ -232,7 +232,7 @@ export function createOpResult(overrides: {
 }
 
 export function createArtifactSummary(overrides: Partial<ArtifactSummary> = {}): ArtifactSummary {
-  return {
+  const artifact = {
     id: 'art-001',
     opID: 'wf-001:seed',
     workflowID: 'wf-001',
@@ -241,7 +241,12 @@ export function createArtifactSummary(overrides: Partial<ArtifactSummary> = {}):
     contentType: 'text/html',
     size: 24_320,
     createdAt: '2026-03-23T14:32:05Z',
+    previewable: true,
     ...overrides,
+  };
+  return {
+    ...artifact,
+    previewable: artifact.previewable ?? false,
   };
 }
 

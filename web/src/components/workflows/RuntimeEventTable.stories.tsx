@@ -28,11 +28,11 @@ export const ExpandedRow: Story = {
   args: {
     events: generateMockEvents(20),
   },
-  play: async ({ canvas }) => {
-    // Click the 3rd row to expand it
-    const rows = canvas.getAllByRole('row');
+  play: async ({ canvasElement }) => {
+    // Click the 3rd row to expand it.
+    const rows = canvasElement.querySelectorAll('[role="row"]');
     if (rows.length > 3) {
-      rows[3].click();
+      (rows[3] as HTMLElement).click();
     }
   },
 };

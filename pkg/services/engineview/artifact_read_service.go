@@ -46,31 +46,29 @@ type ListWorkflowArtifactsOptions struct {
 }
 
 type ResultSummary struct {
-	OpID         model.OpID `json:"opID"`
-	Kind         string     `json:"kind"`
-	Status       string     `json:"status"`
-	RecordCount  int        `json:"recordCount"`
-	ArtifactCount int       `json:"artifactCount"`
-	DataSize     int        `json:"dataSize"`
-	Error        *model.OpError `json:"error,omitempty"`
-	CompletedAt  time.Time  `json:"completedAt"`
+	OpID          model.OpID     `json:"opID"`
+	Kind          string         `json:"kind"`
+	Status        string         `json:"status"`
+	RecordCount   int            `json:"recordCount"`
+	ArtifactCount int            `json:"artifactCount"`
+	DataSize      int            `json:"dataSize"`
+	Error         *model.OpError `json:"error,omitempty"`
+	CompletedAt   time.Time      `json:"completedAt"`
 }
-
 
 type WorkflowResultsResult struct {
 	WorkflowID model.WorkflowID `json:"workflowID"`
-	Total      int             `json:"total"`
-	Results    []ResultSummary `json:"results"`
+	Total      int              `json:"total"`
+	Results    []ResultSummary  `json:"results"`
 }
 
-
 type ListWorkflowResultsOptions struct {
-	OpID    model.OpID
-	Kind    string
-	Status  string
-	Search  string
-	Limit   int
-	Offset  int
+	OpID   model.OpID
+	Kind   string
+	Status string
+	Search string
+	Limit  int
+	Offset int
 }
 
 func (s *Service) ListArtifacts(ctx context.Context, workflowID model.WorkflowID, opID model.OpID) ([]ArtifactSummary, error) {
@@ -93,7 +91,7 @@ func (s *Service) ListArtifacts(ctx context.Context, workflowID model.WorkflowID
 	if err != nil {
 		return nil, fmt.Errorf("list artifacts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var ret []ArtifactSummary
 	for rows.Next() {
@@ -163,11 +161,13 @@ func (s *Service) ListWorkflowArtifacts(ctx context.Context, workflowID model.Wo
 	}
 
 	var total int
+	// #nosec G202 -- whereClause is assembled only from fixed predicates above; user values are bound parameters.
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(1) FROM artifacts WHERE `+whereClause, args...).Scan(&total); err != nil {
 		return nil, fmt.Errorf("count workflow artifacts: %w", err)
 	}
 
 	queryArgs := append(append([]any{}, args...), limit, offset)
+	// #nosec G202 -- whereClause is assembled only from fixed predicates above; user values are bound parameters.
 	rows, err := db.QueryContext(ctx,
 		`SELECT id, workflow_id, op_id, name, kind, content_type, metadata_json, length(body), created_at
 		 FROM artifacts
@@ -179,7 +179,7 @@ func (s *Service) ListWorkflowArtifacts(ctx context.Context, workflowID model.Wo
 	if err != nil {
 		return nil, fmt.Errorf("list workflow artifacts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	ret := &WorkflowArtifactsResult{
 		WorkflowID: workflowID,
@@ -291,6 +291,7 @@ func (s *Service) ListWorkflowResults(ctx context.Context, workflowID model.Work
 	}
 
 	var total int
+	// #nosec G202 -- whereClause is assembled only from fixed predicates above; user values are bound parameters.
 	if err := db.QueryRowContext(ctx,
 		`SELECT COUNT(1) FROM results JOIN ops ON results.op_id = ops.id AND results.workflow_id = ops.workflow_id WHERE `+whereClause,
 		args...,
@@ -299,6 +300,7 @@ func (s *Service) ListWorkflowResults(ctx context.Context, workflowID model.Work
 	}
 
 	queryArgs := append(append([]any{}, args...), limit, offset)
+	// #nosec G202 -- whereClause is assembled only from fixed predicates above; user values are bound parameters.
 	rows, err := db.QueryContext(ctx,
 		`SELECT results.op_id, ops.kind, ops.status,
 		        length(results.data_json),
@@ -320,7 +322,7 @@ func (s *Service) ListWorkflowResults(ctx context.Context, workflowID model.Work
 	if err != nil {
 		return nil, fmt.Errorf("list workflow results: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	ret := &WorkflowResultsResult{WorkflowID: workflowID, Total: total, Results: []ResultSummary{}}
 	for rows.Next() {
@@ -338,7 +340,6 @@ func (s *Service) ListWorkflowResults(ctx context.Context, workflowID model.Work
 			records = nil
 		}
 		rs.RecordCount = len(records)
-
 
 		if errorJSON.Valid {
 			var err2 model.OpError

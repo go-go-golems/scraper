@@ -93,14 +93,18 @@ export function RuntimeEventsPage() {
 
   const serverUntil = timeRange.mode === 'absolute' ? timeRange.to : undefined;
 
-  // RTK Query — SSE managed by onCacheEntryAdded, pause via skip
+  // RTK Query — websocket subscription managed by onCacheEntryAdded; pause via skip.
+  // Keep a larger cache than one page so severity/source/time filters can match
+  // older non-debug events instead of only filtering the newest request logs.
   const { data: rawEvents = [], isLoading, isError, isSuccess } = useGetRecentRuntimeEventsQuery(
     {
       workflowId: workflowId || undefined,
       opId: opId || undefined,
       site: site || undefined,
       workerId: workerId || undefined,
-      limit: 100,
+      severities: selectedSeverities,
+      sources: selectedSources,
+      limit: 500,
       since: serverSince,
       until: serverUntil,
     },
