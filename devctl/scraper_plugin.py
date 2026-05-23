@@ -189,6 +189,7 @@ def launch_plan(ctx: Dict[str, Any]) -> Dict[str, Any]:
                     f"--engine-db {json.dumps(engine_db)} "
                     f"--sites-dir {json.dumps(sites_dir)} "
                     f"--events-sessionstream-db {json.dumps(runtime_events_db)} "
+                    f"--events-recent-limit 1000 "
                     f"{event_flags}",
                 ],
                 "env": common_env,

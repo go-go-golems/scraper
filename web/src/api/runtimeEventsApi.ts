@@ -14,6 +14,8 @@ export interface RuntimeEventsParams {
   opId?: string;
   site?: string;
   workerId?: string;
+  severities?: string[];
+  sources?: string[];
   limit?: number;
   since?: string;
   until?: string;
@@ -105,6 +107,11 @@ function matchesParams(event: RuntimeEventV1, params: RuntimeEventsParams): bool
   if (params.opId && event.opId !== params.opId) return false;
   if (params.site && event.site !== params.site) return false;
   if (params.workerId && event.workerId !== params.workerId) return false;
+  if (params.severities?.length && !params.severities.includes(String(event.severity))) return false;
+  if (params.sources?.length && !params.sources.includes(String(event.source))) return false;
+  const occurredAt = runtimeEventOccurredAtMillis(event);
+  if (params.since && occurredAt < Date.parse(params.since)) return false;
+  if (params.until && occurredAt > Date.parse(params.until)) return false;
   return true;
 }
 
