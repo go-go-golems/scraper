@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package scraper.runtime.sessionstream.v1;
+
+import "proto/scraper/runtime/v1/events.proto";
+
+option go_package = "github.com/go-go-golems/scraper/gen/proto/scraper/runtime/sessionstream/v1;scraperruntimesessionstreamv1";
+
+// PublishRuntimeEventCommand is submitted by scraper producers into the
+// sessionstream hub. The command handler normalizes the embedded runtime event
+// and emits a RuntimeEventObserved backend event in the same session.
+message PublishRuntimeEventCommand {
+  scraper.runtime.v1.RuntimeEventV1 event = 1;
+}
+
+// RuntimeEventObserved is the canonical backend event consumed by scraper
+// runtime-event projections.
+message RuntimeEventObserved {
+  scraper.runtime.v1.RuntimeEventV1 event = 1;
+}
+
+// RuntimeEventAppended is the UI event sent to clients when a runtime event is
+// projected for live display.
+message RuntimeEventAppended {
+  scraper.runtime.v1.RuntimeEventV1 event = 1;
+}
+
+// RuntimeEventEntity is the hydratable timeline entity stored in the
+// sessionstream projection store for runtime-event snapshots.
+message RuntimeEventEntity {
+  scraper.runtime.v1.RuntimeEventV1 event = 1;
+}
