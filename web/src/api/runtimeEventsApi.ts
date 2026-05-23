@@ -1,13 +1,13 @@
-import { fromJson } from '@bufbuild/protobuf';
-import type { JsonValue } from '@bufbuild/protobuf';
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { fromJson, toJson } from '@bufbuild/protobuf';
+import type { JsonObject, JsonValue } from '@bufbuild/protobuf';
+import { createApi, fakeBaseQuery } from '@reduxjs/toolkit/query/react';
+import {
+  RuntimeEventAppendedSchema,
+  RuntimeEventEntitySchema,
+} from '../pb/proto/scraper/runtime/sessionstream/v1/runtime_stream_pb';
 import { RuntimeEventV1Schema, type RuntimeEventV1 } from '../pb/proto/scraper/runtime/v1/events_pb';
 
 // ── types ────────────────────────────────────────────────────────────
-
-interface RuntimeEventsResponse {
-  events: JsonValue[];
-}
 
 export interface RuntimeEventsParams {
   workflowId?: string;
@@ -22,6 +22,34 @@ export interface RuntimeEventsParams {
 
 export type RuntimeEventJson = JsonValue;
 
+type ServerFrameJson = JsonObject & {
+  hello?: JsonObject;
+  snapshot?: {
+    sessionId?: string;
+    snapshotOrdinal?: string | number | bigint;
+    entities?: SnapshotEntityJson[];
+  };
+  subscribed?: JsonObject;
+  uiEvent?: {
+    sessionId?: string;
+    eventOrdinal?: string | number | bigint;
+    name?: string;
+    payload?: JsonValue;
+  };
+  error?: JsonObject;
+};
+
+interface SnapshotEntityJson {
+  kind?: string;
+  id?: string;
+  payload?: JsonValue;
+  tombstone?: boolean;
+}
+
+const UI_EVENT_RUNTIME_EVENT_APPENDED = 'scraper.runtime.RuntimeEventAppended';
+const ENTITY_RUNTIME_EVENT = 'scraper.runtime.RuntimeEvent';
+const MAX_CACHED_EVENTS = 500;
+
 // ── helpers ──────────────────────────────────────────────────────────
 
 export function decodeRuntimeEvent(json: JsonValue): RuntimeEventV1 {
@@ -35,32 +63,71 @@ export function runtimeEventOccurredAtMillis(event: RuntimeEventV1): number {
   );
 }
 
-function buildRuntimeEventQuery(params: RuntimeEventsParams): string {
-  const searchParams = new URLSearchParams();
-  if (params.workflowId) searchParams.set('workflowId', params.workflowId);
-  if (params.opId) searchParams.set('opId', params.opId);
-  if (params.site) searchParams.set('site', params.site);
-  if (params.workerId) searchParams.set('workerId', params.workerId);
-  if (params.limit) searchParams.set('limit', String(params.limit));
-  if (params.since) searchParams.set('since', params.since);
-  if (params.until) searchParams.set('until', params.until);
-  if (params.offset) searchParams.set('offset', String(params.offset));
-  return `/runtime-events?${searchParams.toString()}`;
+function runtimeEventToJson(event: RuntimeEventV1): RuntimeEventJson {
+  return toJson(RuntimeEventV1Schema, event);
 }
 
-function buildSSEUrl(params: RuntimeEventsParams): string {
-  const searchParams = new URLSearchParams();
-  if (params.workflowId) searchParams.set('workflowId', params.workflowId);
-  if (params.opId) searchParams.set('opId', params.opId);
-  if (params.site) searchParams.set('site', params.site);
-  if (params.workerId) searchParams.set('workerId', params.workerId);
-  const search = searchParams.toString();
-  return search
-    ? `/api/v1/runtime-events/stream?${search}`
-    : '/api/v1/runtime-events/stream';
+function runtimeEventSession(params: RuntimeEventsParams): string {
+  if (params.workflowId) return `workflow:${params.workflowId}`;
+  return 'runtime:global';
 }
 
-const MAX_CACHED_EVENTS = 500;
+function runtimeEventsWebSocketUrl(): string {
+  if (typeof window === 'undefined') return '/api/v1/runtime-events/ws';
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/api/v1/runtime-events/ws`;
+}
+
+function subscribeFrame(sessionId: string): string {
+  return JSON.stringify({ subscribe: { sessionId, sinceSnapshotOrdinal: '0' } });
+}
+
+function stripAnyType(payload: JsonValue | undefined): JsonValue | undefined {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  const { ['@type']: _type, ...rest } = payload as JsonObject;
+  return rest as JsonObject;
+}
+
+function runtimeEventFromSnapshotEntity(entity: SnapshotEntityJson): RuntimeEventV1 | undefined {
+  if (entity.kind !== ENTITY_RUNTIME_EVENT || entity.tombstone || !entity.payload) return undefined;
+  const decoded = fromJson(RuntimeEventEntitySchema, stripAnyType(entity.payload) as JsonValue);
+  return decoded.event;
+}
+
+function runtimeEventFromUIEvent(frame: ServerFrameJson['uiEvent']): RuntimeEventV1 | undefined {
+  if (!frame || frame.name !== UI_EVENT_RUNTIME_EVENT_APPENDED || !frame.payload) return undefined;
+  const decoded = fromJson(RuntimeEventAppendedSchema, stripAnyType(frame.payload) as JsonValue);
+  return decoded.event;
+}
+
+function matchesParams(event: RuntimeEventV1, params: RuntimeEventsParams): boolean {
+  if (params.workflowId && event.workflowId !== params.workflowId) return false;
+  if (params.opId && event.opId !== params.opId) return false;
+  if (params.site && event.site !== params.site) return false;
+  if (params.workerId && event.workerId !== params.workerId) return false;
+  return true;
+}
+
+function mergeRuntimeEventJson(current: RuntimeEventJson[], incoming: RuntimeEventV1[], params: RuntimeEventsParams): RuntimeEventJson[] {
+  const byId = new Map<string, RuntimeEventV1>();
+  for (const raw of current) {
+    try {
+      const event = decodeRuntimeEvent(raw);
+      if (event.id) byId.set(event.id, event);
+    } catch {
+      // ignore malformed cached entries
+    }
+  }
+  for (const event of incoming) {
+    if (!matchesParams(event, params)) continue;
+    if (event.id) byId.set(event.id, event);
+  }
+  const limit = params.limit && params.limit > 0 ? params.limit : MAX_CACHED_EVENTS;
+  return [...byId.values()]
+    .sort((a, b) => runtimeEventOccurredAtMillis(b) - runtimeEventOccurredAtMillis(a))
+    .slice(0, limit)
+    .map(runtimeEventToJson);
+}
 
 function isStorybookEnvironment(): boolean {
   return (
@@ -73,12 +140,11 @@ function isStorybookEnvironment(): boolean {
 
 export const runtimeEventsApi = createApi({
   reducerPath: 'runtimeEventsApi',
-  baseQuery: fetchBaseQuery({ baseUrl: '/api/v1' }),
+  baseQuery: fakeBaseQuery(),
   tagTypes: ['RuntimeEvents'],
   endpoints: (builder) => ({
     getRecentRuntimeEvents: builder.query<RuntimeEventJson[], RuntimeEventsParams>({
-      query: (params) => buildRuntimeEventQuery(params),
-      transformResponse: (response: RuntimeEventsResponse) => response.events,
+      queryFn: () => ({ data: [] }),
       providesTags: ['RuntimeEvents'],
       keepUnusedDataFor: 30,
 
@@ -86,58 +152,48 @@ export const runtimeEventsApi = createApi({
         arg,
         { updateCachedData, cacheDataLoaded, cacheEntryRemoved },
       ) {
-        // Wait for the initial REST fetch to resolve.
-        // If there is no backend, cacheDataLoaded rejects and we return early —
-        // no SSE connection is opened, no infinite loop.
-        try {
-          await cacheDataLoaded;
-        } catch {
-          return;
-        }
+        await cacheDataLoaded;
 
-        // Storybook only needs the mocked REST payload. Skip live SSE there to
-        // avoid noisy 404s from the unmocked stream endpoint.
-        if (isStorybookEnvironment()) {
+        if (typeof window === 'undefined' || isStorybookEnvironment()) {
           await cacheEntryRemoved;
           return;
         }
 
-        // Open SSE stream with the same scoping filters
-        const sseUrl = buildSSEUrl(arg);
-        const eventSource = new EventSource(sseUrl);
+        const socket = new WebSocket(runtimeEventsWebSocketUrl());
+        const sessionId = runtimeEventSession(arg);
 
-        const onMessage = (event: MessageEvent<string>) => {
-          try {
-            const decoded = JSON.parse(event.data) as RuntimeEventJson;
-            updateCachedData((draft) => {
-              // Dedupe
-              const exists = draft.some((e) => {
-                if (!e || typeof e !== 'object' || !decoded || typeof decoded !== 'object') {
-                  return false;
-                }
-                return 'id' in e && 'id' in decoded && e.id === decoded.id;
-              });
-              if (!exists) draft.unshift(decoded);
-              // Trim to max
-              if (draft.length > MAX_CACHED_EVENTS) {
-                draft.length = MAX_CACHED_EVENTS;
-              }
-            });
-          } catch {
-            // ignore malformed event payloads
-          }
-        };
-
-        eventSource.addEventListener('runtime-event', onMessage as EventListener);
-
-        // Close SSE on error to prevent browser auto-reconnect
-        eventSource.addEventListener('error', () => {
-          eventSource.close();
+        socket.addEventListener('open', () => {
+          socket.send(subscribeFrame(sessionId));
         });
 
-        // Auto-cleanup when no subscribers remain
+        socket.addEventListener('message', (message: MessageEvent<string>) => {
+          try {
+            const frame = JSON.parse(message.data) as ServerFrameJson;
+            if (frame.snapshot?.entities) {
+              const events = frame.snapshot.entities
+                .map(runtimeEventFromSnapshotEntity)
+                .filter((event): event is RuntimeEventV1 => Boolean(event));
+              updateCachedData((draft) => {
+                const merged = mergeRuntimeEventJson([], events, arg);
+                draft.splice(0, draft.length, ...merged);
+              });
+              return;
+            }
+            const event = runtimeEventFromUIEvent(frame.uiEvent);
+            if (!event) return;
+            updateCachedData((draft) => {
+              const merged = mergeRuntimeEventJson(draft as RuntimeEventJson[], [event], arg);
+              draft.splice(0, draft.length, ...merged);
+            });
+          } catch {
+            // Ignore malformed websocket frames. The websocket close/error path
+            // below controls lifecycle; individual bad frames should not tear
+            // down the RTK Query cache entry.
+          }
+        });
+
         await cacheEntryRemoved;
-        eventSource.close();
+        socket.close();
       },
     }),
   }),
