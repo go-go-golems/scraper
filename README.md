@@ -55,6 +55,35 @@ Example CLI usage:
 go run ./cmd/scraper --sites-manifest-dir ./sites site js-demo run seed --help
 ```
 
+## Dev environment with devctl
+
+From the `scraper/` directory, start the full local development stack with:
+
+```bash
+devctl up
+```
+
+This launches:
+
+- `redis` via Docker on `127.0.0.1:6379` for cross-process runtime event transport;
+- the scraper API on `http://127.0.0.1:8080`;
+- a scraper worker connected to the same engine/site state;
+- the Vite frontend on `http://127.0.0.1:5173`.
+
+Useful commands:
+
+```bash
+devctl plugins list
+devctl validate
+devctl plan
+devctl status --tail-lines 10
+devctl logs --service api --follow
+devctl logs --service web --follow
+devctl down
+```
+
+Devctl stores local runtime databases under `state/devctl/` and process logs under `.devctl/logs/`; both are ignored by git.
+
 ## Quickstart
 
 ### 1. Run the test suite

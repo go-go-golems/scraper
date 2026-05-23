@@ -1,0 +1,6 @@
+plugins:
+  - id: scraper-dev-stack
+    path: python3
+    args:
+      - ./devctl/scraper_plugin.py
+    priority: 10

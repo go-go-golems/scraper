@@ -19,3 +19,7 @@ dist/
 .env
 .envrc
 .history
+
+# Local devctl runtime state and scraper dev databases
+.devctl/
+state/
