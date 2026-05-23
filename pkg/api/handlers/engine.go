@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"bytes"
 	"net/http"
 	"strconv"
+	"time"
 
 	apitypes "github.com/go-go-golems/scraper/pkg/api/types"
 	"github.com/go-go-golems/scraper/pkg/engine/model"
@@ -220,9 +222,9 @@ func (h *EngineHandler) ArtifactDownload(w http.ResponseWriter, r *http.Request)
 		ct = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", ct)
-	w.Header().Set("Content-Disposition", "inline; filename=\""+artifact.Name+"\"")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(artifact.Body)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+artifact.Name+"\"")
+	http.ServeContent(w, r, artifact.Name, time.Time{}, bytes.NewReader(artifact.Body))
 }
 
 func (h *EngineHandler) RetryOp(w http.ResponseWriter, r *http.Request) {

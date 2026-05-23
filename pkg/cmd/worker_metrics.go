@@ -20,8 +20,9 @@ func maybeStartWorkerMetricsServer(ctx context.Context, addr string, path string
 	mux := http.NewServeMux()
 	mux.Handle(path, metricsRegistry.Handler())
 	server := &http.Server{
-		Addr:    addr,
-		Handler: mux,
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -30,7 +31,7 @@ func maybeStartWorkerMetricsServer(ctx context.Context, addr string, path string
 	actualAddr := listener.Addr().String()
 	go func() {
 		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
 	}()
