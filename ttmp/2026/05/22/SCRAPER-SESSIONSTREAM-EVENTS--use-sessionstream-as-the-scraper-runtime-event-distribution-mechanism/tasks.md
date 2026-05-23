@@ -1,0 +1,51 @@
+# Tasks
+
+## Completed setup/documentation
+
+- [x] Create ticket workspace and initial docs
+- [x] Gather file inventory and line-referenced evidence from scraper and sessionstream
+- [x] Write intern-oriented design and implementation guide
+- [x] Write investigation diary
+- [x] Run docmgr validation
+- [x] Upload bundled docs to reMarkable
+
+## Implementation phases
+
+### Phase 1 — Define scraper sessionstream protobuf contracts and adapter core
+
+- [ ] Add `proto/scraper/runtime/sessionstream/v1/runtime_stream.proto` with command/event/UI/entity wrapper messages around `RuntimeEventV1`.
+- [ ] Regenerate Go and TypeScript protobuf bindings with `buf generate`.
+- [ ] Add `github.com/go-go-golems/sessionstream` to scraper dependencies.
+- [ ] Add `pkg/runtimeevents/sessionstream` adapter package with names, schema registration, session routing, publisher, projections, and server/producer hub wiring.
+- [ ] Add unit tests for schema registration, routing, projection output, local hub snapshots, and Watermill/gochannel fanout.
+- [ ] Validate Phase 1 with `go test ./pkg/runtimeevents/... -count=1`.
+- [ ] Commit Phase 1.
+
+### Phase 2 — Replace backend runtime-event infrastructure with sessionstream
+
+- [ ] Update API server construction to create the sessionstream runtime, register only websocket runtime-event routes, and close hub/resources on shutdown.
+- [ ] Update worker, submit-verb, submission, request middleware, and runner/scheduler producers to use the context-aware sessionstream publisher.
+- [ ] Delete old in-memory runtime event hub, old runtime event REST/SSE handler, and old runtime event router.
+- [ ] Replace or remove old Watermill protobuf-byte runtime event codec tests.
+- [ ] Add/adjust API integration tests for websocket snapshot and live runtime-event delivery.
+- [ ] Validate Phase 2 with focused Go tests.
+- [ ] Commit Phase 2.
+
+### Phase 3 — Move frontend runtime-event feed to sessionstream websocket only
+
+- [ ] Replace `EventSource`/REST runtime event API usage with a sessionstream websocket client.
+- [ ] Decode `sessionstream.v1.ServerFrame` and scraper `RuntimeEventAppended`/`RuntimeEventEntity` protobuf `Any` payloads in TypeScript.
+- [ ] Update global runtime events, workflow detail, and op runtime tab consumers to use websocket snapshots/live UI events.
+- [ ] Remove MSW/runtime-events REST mocks or rewrite them around websocket-independent component stories/tests.
+- [ ] Validate Phase 3 with frontend tests/build.
+- [ ] Commit Phase 3.
+
+### Phase 4 — Final validation, docs, diary, and reMarkable refresh
+
+- [ ] Run `go test ./... -count=1` in `scraper` or document any pre-existing failures.
+- [ ] Run frontend validation (`pnpm test`/build) or document any pre-existing failures.
+- [ ] Update the design guide with implementation notes and final file references.
+- [ ] Update the diary with each implementation step, commands, failures, commits, and review instructions.
+- [ ] Run `docmgr doctor --ticket SCRAPER-SESSIONSTREAM-EVENTS --stale-after 30`.
+- [ ] Upload the final bundle to reMarkable.
+- [ ] Commit final docs.
