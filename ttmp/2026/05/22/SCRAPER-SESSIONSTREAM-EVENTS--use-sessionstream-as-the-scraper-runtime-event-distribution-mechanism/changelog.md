@@ -65,3 +65,15 @@ Phase 1: added scraper sessionstream protobuf contracts, generated bindings, ada
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/runtimeevents/sessionstream/runtime_test.go — Local and gochannel integration coverage
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/proto/scraper/runtime/sessionstream/v1/runtime_stream.proto — New scraper sessionstream protobuf contracts
 
+
+## 2026-05-22
+
+Phase 2: replaced backend REST/SSE runtime-event infrastructure with sessionstream websocket runtime and context-aware producers (commit ee5f4ba936ee0f5ce49d7d9f7d988855518ae567).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/api/server/routes_runtime_events.go — Runtime events route now registers only websocket endpoint
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/api/server/server.go — API now creates sessionstream runtime and websocket route
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/api/server/server_test.go — Websocket snapshot/live runtime event integration test
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/runtimeevents/publisher.go — Context-aware runtime event publisher interface
+

@@ -509,3 +509,111 @@ cd scraper && buf generate
 cd scraper && go test ./pkg/runtimeevents/sessionstream -count=1
 cd scraper && go test ./pkg/runtimeevents/... -count=1
 ```
+
+## Step 5: Replace backend REST/SSE runtime events with sessionstream websocket runtime
+
+I implemented Phase 2 by wiring the API and worker-side producers through the new sessionstream runtime adapter and deleting the old runtime-event REST/SSE backend pieces. The API server now constructs a sessionstream runtime with hydration storage and websocket fanout, and runtime-event producers use a context-aware publisher interface.
+
+This step is intentionally a breaking backend change. The old `runtimeevents.Hub`, REST recent-event handler, SSE handler, and Watermill protobuf-byte runtime-event codec were removed from the Go backend. The frontend still has old EventSource/REST code at this point; replacing that is Phase 3.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 4)
+
+**Assistant interpretation:** Continue implementing the ticket phases, commit the backend replacement independently, and record validation/failures.
+
+**Inferred user intent:** The user wants the old event backend removed rather than bridged, with the backend switched to sessionstream before frontend migration.
+
+**Commit (code):** `ee5f4ba936ee0f5ce49d7d9f7d988855518ae567` — "Runtime events: replace REST SSE backend with sessionstream"
+
+### What I did
+
+- Changed `runtimeevents.Publisher` into a context-aware interface:
+  - `Publish(ctx context.Context, event *RuntimeEventV1) error`
+- Updated runner, scheduler, submission, request middleware, worker, and submit-verb producers to pass context into runtime-event publishing.
+- Updated `pkg/cmd/worker_runtime.go` to construct `runtimestream.NewProducerRuntime` instead of the old Watermill protobuf publisher.
+- Updated `pkg/api/server/server.go` to construct `runtimestream.NewServerRuntime` and register only the websocket route.
+- Replaced `routes_runtime_events.go` with a websocket-only route at:
+  - `GET /api/v1/runtime-events/ws`
+- Deleted old backend files:
+  - `pkg/api/handlers/runtime_events.go`
+  - `pkg/api/server/runtime_event_router.go`
+  - `pkg/runtimeevents/hub.go`
+  - `pkg/runtimeevents/hub_test.go`
+  - `pkg/runtimeevents/watermill.go`
+  - `pkg/runtimeevents/watermill_test.go`
+- Added/updated tests:
+  - backend resource tests now validate Watermill resources only;
+  - API server runtime-event integration test now dials websocket, subscribes to a workflow session, runs a worker, and waits for `OP_SUCCEEDED` plus runner log events.
+- Adjusted `pkg/cmd/app_config.go` to avoid a missing `glazed/pkg/config.ResolveAppConfigPath` symbol exposed by the current workspace dependency state.
+
+### Why
+
+- The old in-memory hub and SSE handler duplicated sessionstream fanout/hydration behavior.
+- A context-aware publisher is a better fit for request, worker, and command execution paths.
+- The API integration test needed to prove the new websocket-only path before frontend migration.
+
+### What worked
+
+- Focused backend validation passed:
+
+```bash
+cd scraper && go test ./pkg/runtimeevents/... ./pkg/api/server ./pkg/cmd ./pkg/services/submission ./pkg/sites/submitverbs -count=1
+```
+
+- The new API test confirmed that runtime events published from a worker process over a shared gochannel backend are consumed by the API sessionstream runtime and delivered over the websocket UI-event path.
+
+### What didn't work
+
+- First API server test compile failed because `pkg/cmd` referenced a missing Glazed symbol:
+
+```text
+pkg/cmd/app_config.go:20:34: undefined: glazedconfig.ResolveAppConfigPath
+```
+
+- I fixed this by replacing that call with local app config path discovery for `$XDG_CONFIG_HOME/<app>/config.yaml` and `$HOME/.<app>/config.yaml`, preserving the existing command tests' expected behavior.
+- The first websocket test run failed with a bad handshake:
+
+```text
+websocket: bad handshake
+```
+
+- The cause was `requestLogger` wrapping the response writer in `statusRecorder`, which did not expose the hijacking behavior required by Gorilla websocket upgrades. I fixed it by bypassing the status-recorder path for requests with `Upgrade: websocket`.
+
+### What I learned
+
+- The sessionstream websocket route must avoid middleware wrappers that hide `http.Hijacker` from Gorilla websocket.
+- The old backend's Watermill resource configuration remains useful, but the old runtime-event message codec does not; sessionstream now owns the bus envelope.
+- Backend and frontend can be split into separate commits, but after Phase 2 the frontend still references removed REST/SSE endpoints until Phase 3 lands.
+
+### What was tricky to build
+
+- The key ordering issue was test setup: the API server has to own the sessionstream consumer runtime, the test worker has to create a producer runtime against the same gochannel, and the websocket subscription has to target the workflow session. Once that was aligned, sessionstream's projection and fanout path delivered events as expected.
+- Middleware behavior was also tricky because ordinary HTTP metric wrapping is not automatically safe for websocket upgrades.
+
+### What warrants a second pair of eyes
+
+- Review the `requestLogger` websocket bypass and decide whether websocket requests should still emit a terminal served metric through a websocket-aware wrapper.
+- Review the `pkg/cmd/app_config.go` local replacement for the missing Glazed helper because it is adjacent to, but not conceptually part of, runtime-event migration.
+- Review whether deleting `runtimeevents/watermill.go` removes any operator-visible diagnostic helper that should be reintroduced on top of sessionstream instead.
+
+### What should be done in the future
+
+- Phase 3 must update the frontend runtime-event feed because old REST/SSE endpoints are now removed on the backend.
+- Final docs should mention the middleware websocket upgrade constraint.
+
+### Code review instructions
+
+- Start with `pkg/api/server/server.go` and `routes_runtime_events.go`.
+- Then review `pkg/runtimeevents/publisher.go`, `runner.go`, and `scheduler_observer.go`.
+- Then review deletions of `pkg/runtimeevents/hub.go`, `pkg/runtimeevents/watermill.go`, `pkg/api/handlers/runtime_events.go`, and `pkg/api/server/runtime_event_router.go`.
+- Validate Phase 2 with:
+  - `cd scraper && go test ./pkg/runtimeevents/... ./pkg/api/server ./pkg/cmd ./pkg/services/submission ./pkg/sites/submitverbs -count=1`
+
+### Technical details
+
+New websocket endpoint:
+
+```text
+GET /api/v1/runtime-events/ws
+```

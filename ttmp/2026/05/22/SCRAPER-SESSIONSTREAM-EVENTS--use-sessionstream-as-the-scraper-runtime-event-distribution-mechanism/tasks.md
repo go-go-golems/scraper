@@ -23,13 +23,13 @@
 
 ### Phase 2 — Replace backend runtime-event infrastructure with sessionstream
 
-- [ ] Update API server construction to create the sessionstream runtime, register only websocket runtime-event routes, and close hub/resources on shutdown.
-- [ ] Update worker, submit-verb, submission, request middleware, and runner/scheduler producers to use the context-aware sessionstream publisher.
-- [ ] Delete old in-memory runtime event hub, old runtime event REST/SSE handler, and old runtime event router.
-- [ ] Replace or remove old Watermill protobuf-byte runtime event codec tests.
-- [ ] Add/adjust API integration tests for websocket snapshot and live runtime-event delivery.
-- [ ] Validate Phase 2 with focused Go tests.
-- [ ] Commit Phase 2.
+- [x] Update API server construction to create the sessionstream runtime, register only websocket runtime-event routes, and close hub/resources on shutdown.
+- [x] Update worker, submit-verb, submission, request middleware, and runner/scheduler producers to use the context-aware sessionstream publisher.
+- [x] Delete old in-memory runtime event hub, old runtime event REST/SSE handler, and old runtime event router.
+- [x] Replace or remove old Watermill protobuf-byte runtime event codec tests.
+- [x] Add/adjust API integration tests for websocket snapshot and live runtime-event delivery.
+- [x] Validate Phase 2 with focused Go tests.
+- [x] Commit Phase 2.
 
 ### Phase 3 — Move frontend runtime-event feed to sessionstream websocket only
 
