@@ -12,14 +12,14 @@ Created: 2026-05-22
 - [x] 1. Capture the current `pnpm build` failure log and symbol inventory.
 - [x] 2. Write the frontend cleanup guide with concrete locations, rationale, and cleanup sketches.
 - [x] 3. Write the initial cleanup diary entry.
-- [ ] 4. Commit the planning artifacts.
+- [x] 4. Commit the planning artifacts.
 
 ## Phase 1: Low-risk TypeScript and story cleanup
 
-- [ ] 5. Remove unused imports/constants/locals reported by `tsc`.
-- [ ] 6. Update stale component stories to match current component APIs.
-- [ ] 7. Fix MUI/React type errors that do not change product behavior.
-- [ ] 8. Validate Phase 1 with `pnpm build` or record remaining failures.
+- [x] 5. Remove unused imports/constants/locals reported by `tsc`.
+- [x] 6. Update stale component stories to match current component APIs.
+- [x] 7. Fix MUI/React type errors that do not change product behavior.
+- [x] 8. Validate Phase 1 with `pnpm build` or record remaining failures.
 - [ ] 9. Commit Phase 1.
 
 ## Phase 2: Fixtures, mocks, and deprecated API cleanup

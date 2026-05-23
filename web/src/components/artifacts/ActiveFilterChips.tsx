@@ -8,13 +8,6 @@ interface ActiveFilterChipsProps {
   onClearAll: () => void;
 }
 
-const FIELD_LABELS: Record<keyof ArtifactFilters, string> = {
-  opId: 'Op',
-  kind: 'Kind',
-  contentType: 'Type',
-  search: 'Search',
-};
-
 export function ActiveFilterChips({ filters, opNames, onRemove, onClearAll }: ActiveFilterChipsProps) {
   const chips: { field: keyof ArtifactFilters; label: string }[] = [];
 

@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { Box } from '@mui/material';
 import { ResultFilterBar, type ResultFilters } from './ResultFilterBar';
 import { defaultResultsHandlers, STORY_WORKFLOW_ID } from '../../stories/msw/handlers';
-import type { WorkflowOp } from '../../api/types';
 
 const meta: Meta<typeof ResultFilterBar> = {
   title: 'Results/ResultFilterBar',

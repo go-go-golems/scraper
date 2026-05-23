@@ -1,7 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import type { ArtifactSummary } from '../api/types';
-import type { WorkflowOp } from '../api/types';
-import type { WorkflowResultSummary } from '../api/types';
+import type { ArtifactSummary, WorkflowOp, WorkflowResultSummary } from '../../api/types';
 
 // ─── Shared fixture data ─────────────────────────────────────────────────────
 
@@ -59,7 +57,7 @@ export const STORY_ARTIFACTS: ArtifactSummary[] = [
   }),
 ];
 
-export function makeWorkflowOp(overrides: Partial<import('../api/types').WorkflowOp['op']> = {}): WorkflowOp['op'] {
+export function makeWorkflowOp(overrides: Partial<WorkflowOp['op']> = {}): WorkflowOp['op'] {
   return {
     ID: `${STORY_WORKFLOW_ID}:extract`,
     WorkflowID: STORY_WORKFLOW_ID,
@@ -152,7 +150,7 @@ export const emptyArtifactHandlers = [
 
 
   // Ops list (needed by FilterBar's op dropdown)
-  http.get('/api/v1/workflows/:workflowId/ops', ({ params }) => {
+  http.get('/api/v1/workflows/:workflowId/ops', () => {
     return HttpResponse.json({ ops: [] });
   }),
 ];
@@ -219,7 +217,7 @@ export const defaultResultsHandlers = [
   }),
 
   // Workflow ops (needed by ResultFilterBar's op dropdown)
-  http.get('/api/v1/workflows/:workflowId/ops', ({ params }) => {
+  http.get('/api/v1/workflows/:workflowId/ops', () => {
     return HttpResponse.json({
       ops: STORY_RESULTS.map((r) => ({
         op: makeWorkflowOp({ ID: r.opID, Kind: r.kind }),
@@ -290,7 +288,7 @@ export const emptyResultsHandlers = [
       results: [],
     });
   }),
-  http.get('/api/v1/workflows/:workflowId/ops', ({ params }) => {
+  http.get('/api/v1/workflows/:workflowId/ops', () => {
     return HttpResponse.json({ ops: [] });
   }),
 ];

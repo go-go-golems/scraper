@@ -32,7 +32,7 @@ export function mockEvent(overrides: Partial<RuntimeEventV1> = {}): RuntimeEvent
     },
     source: RuntimeEventSource.WORKER,
     severity: RuntimeEventSeverity.INFO,
-    kind: RuntimeEventKind.OP_COMPLETED,
+    kind: RuntimeEventKind.OP_SUCCEEDED,
     message: `Event ${id}`,
     workflowId: 'wf-test-001',
     opId: `op-${nextId}`,
@@ -58,11 +58,11 @@ const SOURCES = [
 ];
 
 const KINDS = [
-  RuntimeEventKind.WORKFLOW_STARTED,
-  RuntimeEventKind.OP_DISPATCHED,
-  RuntimeEventKind.OP_COMPLETED,
+  RuntimeEventKind.WORKFLOW_CREATED,
+  RuntimeEventKind.OP_LEASED,
+  RuntimeEventKind.OP_SUCCEEDED,
   RuntimeEventKind.OP_FAILED,
-  RuntimeEventKind.OP_ERROR,
+  RuntimeEventKind.LOG_LINE,
 ];
 
 const MESSAGES = [

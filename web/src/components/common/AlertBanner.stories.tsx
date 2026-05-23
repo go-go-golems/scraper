@@ -1,17 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
 import { AlertBanner } from './AlertBanner';
-import { Box } from '@mui/material';
 
 function DismissibleDemo() {
-  const [show, setShow] = useState(true);
-  if (!show) return <em>Dismissed — refresh story to see banner again.</em>;
   return (
     <AlertBanner
       severity="error"
       message="7 ops failed in the last hour"
       action={{ label: 'View Failed Ops', onClick: () => alert('navigating…') }}
-      onDismiss={() => setShow(false)}
     />
   );
 }

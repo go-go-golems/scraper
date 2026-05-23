@@ -1,8 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { useState } from 'react';
-import { Box } from '@mui/material';
 import { ResultsTable } from './ResultsTable';
-import { defaultResultsHandlers, STORY_RESULTS } from '../../stories/msw/handlers';
+import { defaultResultsHandlers, STORY_RESULTS, STORY_WORKFLOW_ID } from '../../stories/msw/handlers';
 
 const meta: Meta<typeof ResultsTable> = {
   title: 'Results/ResultsTable',
