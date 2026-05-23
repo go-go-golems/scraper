@@ -5,8 +5,8 @@ Status: active
 Topics:
     - frontend
     - cleanup
-    - typescript
-    - storybook
+    - react
+    - developer-tools
 DocType: analysis
 Intent: implementation-guide
 Owners: []
@@ -301,6 +301,27 @@ const KINDS = [
 - Run `pnpm test:unit -- --runInBand`.
 - Update the diary with exact errors and commits.
 - Run docmgr doctor.
+
+## Final implementation status
+
+The cleanup landed in commit:
+
+```text
+3232fc0acc1f87541f878247a2419c5d9bc87b51 Frontend: clean stale TypeScript and story code
+```
+
+Final validation passed:
+
+```bash
+cd scraper/web && pnpm test:unit -- --runInBand
+cd scraper/web && pnpm build
+```
+
+The production build now completes. The only remaining message is a non-fatal Vite chunk size warning for the main JavaScript bundle:
+
+```text
+(!) Some chunks are larger than 500 kB after minification.
+```
 
 ## Review guidance
 

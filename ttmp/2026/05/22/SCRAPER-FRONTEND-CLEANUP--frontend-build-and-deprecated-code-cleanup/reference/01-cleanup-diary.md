@@ -5,8 +5,8 @@ Status: active
 Topics:
     - frontend
     - cleanup
-    - typescript
-    - storybook
+    - react
+    - developer-tools
 DocType: reference
 Intent: implementation-diary
 Owners: []
@@ -124,7 +124,7 @@ After the cleanup, `pnpm build` succeeds and reaches the Vite production bundle 
 
 **Inferred user intent:** The user wants build health restored first so the later report describes a completed, validated implementation state.
 
-**Commit (code):** Pending — frontend cleanup changes are staged for a Phase 1/2 commit after diary update.
+**Commit (code):** `3232fc0acc1f87541f878247a2419c5d9bc87b51` — "Frontend: clean stale TypeScript and story code"
 
 ### What I did
 

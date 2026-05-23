@@ -5,8 +5,8 @@ Status: active
 Topics:
     - frontend
     - cleanup
-    - typescript
-    - storybook
+    - react
+    - developer-tools
 DocType: index
 Intent: long-term
 Owners: []
@@ -37,8 +37,8 @@ Current status: **active**
 
 - frontend
 - cleanup
-- typescript
-- storybook
+- react
+- developer-tools
 
 ## Tasks
 
