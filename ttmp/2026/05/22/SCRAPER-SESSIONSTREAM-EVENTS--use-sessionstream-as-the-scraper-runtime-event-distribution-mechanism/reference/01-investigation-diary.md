@@ -12,13 +12,17 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
-    - Path: scraper/ttmp/2026/05/22/SCRAPER-SESSIONSTREAM-EVENTS--use-sessionstream-as-the-scraper-runtime-event-distribution-mechanism/sources/01-file-inventory.txt
+    - Path: pkg/runtimeevents/sessionstream
+      Note: Phase 1 adapter package
+    - Path: proto/scraper/runtime/sessionstream/v1/runtime_stream.proto
+      Note: Phase 1 implementation artifact
+    - Path: ttmp/2026/05/22/SCRAPER-SESSIONSTREAM-EVENTS--use-sessionstream-as-the-scraper-runtime-event-distribution-mechanism/sources/01-file-inventory.txt
       Note: Inventory gathered during the investigation
-    - Path: scraper/ttmp/2026/05/22/SCRAPER-SESSIONSTREAM-EVENTS--use-sessionstream-as-the-scraper-runtime-event-distribution-mechanism/sources/02-key-symbol-search.txt
+    - Path: ttmp/2026/05/22/SCRAPER-SESSIONSTREAM-EVENTS--use-sessionstream-as-the-scraper-runtime-event-distribution-mechanism/sources/02-key-symbol-search.txt
       Note: Symbol search evidence for runtime events
-    - Path: scraper/ttmp/2026/05/22/SCRAPER-SESSIONSTREAM-EVENTS--use-sessionstream-as-the-scraper-runtime-event-distribution-mechanism/sources/03-line-referenced-excerpts.txt
+    - Path: ttmp/2026/05/22/SCRAPER-SESSIONSTREAM-EVENTS--use-sessionstream-as-the-scraper-runtime-event-distribution-mechanism/sources/03-line-referenced-excerpts.txt
       Note: Line-referenced excerpts used by the design document
-    - Path: scraper/ttmp/2026/05/22/SCRAPER-SESSIONSTREAM-EVENTS--use-sessionstream-as-the-scraper-runtime-event-distribution-mechanism/sources/04-pinocchio-sessionstream-reference-excerpts.txt
+    - Path: ttmp/2026/05/22/SCRAPER-SESSIONSTREAM-EVENTS--use-sessionstream-as-the-scraper-runtime-event-distribution-mechanism/sources/04-pinocchio-sessionstream-reference-excerpts.txt
       Note: Line-referenced Pinocchio excerpts used to revise the design
 ExternalSources: []
 Summary: Chronological diary for the sessionstream-backed scraper runtime events analysis and design package.
@@ -26,6 +30,7 @@ LastUpdated: 2026-05-22T21:55:00-04:00
 WhatFor: Use to understand how the analysis was produced, what evidence was gathered, and what remains to review.
 WhenToUse: When resuming implementation from this ticket or reviewing the design document.
 ---
+
 
 
 
@@ -383,4 +388,124 @@ Updated reMarkable bundle:
 
 ```text
 OK: uploaded SCRAPER SESSIONSTREAM EVENTS Guide.pdf -> /ai/2026/05/22/SCRAPER-SESSIONSTREAM-EVENTS
+```
+
+## Step 4: Add detailed implementation phases and implement Phase 1 sessionstream adapter
+
+I expanded the ticket task list into concrete implementation phases, then implemented Phase 1. This phase adds the scraper-specific sessionstream protobuf contract, generated Go/TypeScript bindings, the Go adapter package, and focused unit tests. It does not yet delete the old REST/SSE runtime-event stack; that is Phase 2.
+
+The important implementation decision was to follow the Pinocchio-style typed application pattern. Scraper now has `PublishRuntimeEventCommand`, `RuntimeEventObserved`, `RuntimeEventAppended`, and `RuntimeEventEntity` wrapper protobuf messages around the existing `RuntimeEventV1`, plus a `pkg/runtimeevents/sessionstream` package that registers those contracts with sessionstream and wires commands, projections, routing, and hub setup.
+
+### Prompt Context
+
+**User prompt (verbatim):** "add detailed phases and tasks to the ticket, then implement them one by one, committing at appropriate intervals, keeping a detailed diary as you work."
+
+**Assistant interpretation:** Expand the ticket into actionable implementation phases, then start implementing those phases incrementally with commits and diary updates.
+
+**Inferred user intent:** The user wants the design to turn into working code in reviewable slices, with documentation that records exactly what changed and how it was validated.
+
+**Commit (code):** `0ea7c29071279544366f5878edf34ac79c63d0db` — "Runtime events: add sessionstream adapter"
+
+### What I did
+
+- Rewrote `tasks.md` with detailed phases for backend protobuf/adapter work, backend replacement, frontend websocket migration, and final validation/docs.
+- Added `proto/scraper/runtime/sessionstream/v1/runtime_stream.proto` defining:
+  - `PublishRuntimeEventCommand`
+  - `RuntimeEventObserved`
+  - `RuntimeEventAppended`
+  - `RuntimeEventEntity`
+- Ran `buf generate`, which produced:
+  - `gen/proto/scraper/runtime/sessionstream/v1/runtime_stream.pb.go`
+  - `web/src/pb/proto/scraper/runtime/sessionstream/v1/runtime_stream_pb.js`
+  - `web/src/pb/proto/scraper/runtime/sessionstream/v1/runtime_stream_pb.d.ts`
+- Added `github.com/go-go-golems/sessionstream v0.0.5` to `scraper/go.mod` and ran `go mod tidy`.
+- Added `pkg/runtimeevents/sessionstream` with:
+  - logical names and session id helpers;
+  - schema registration;
+  - runtime event session routing;
+  - context-aware publisher;
+  - command handler;
+  - UI and timeline projections;
+  - producer/server runtime wiring;
+  - SQLite hydration store setup;
+  - sessionstream websocket server setup;
+  - tests for routing, schema registration, projections, local snapshots, and gochannel bus flow.
+
+### Why
+
+- The new proto file makes scraper's sessionstream application contract explicit instead of using one bare message for every role.
+- The adapter package isolates sessionstream wiring from existing scheduler/runner/submission code, so Phase 2 can replace producers without scattering command names everywhere.
+- The tests prove the new package works before deleting the old event stack.
+
+### What worked
+
+- `buf generate` succeeded after correcting the proto import path.
+- `go test ./pkg/runtimeevents/sessionstream -count=1` passed.
+- `go test ./pkg/runtimeevents/... -count=1` passed.
+- The gochannel integration test proved that a producer runtime can publish through sessionstream's Watermill path and a server runtime can consume into a hydratable workflow snapshot.
+
+### What didn't work
+
+- First `buf generate` attempt failed because I used the wrong import path:
+
+```text
+proto/scraper/runtime/sessionstream/v1/runtime_stream.proto:5:8:import "scraper/runtime/v1/events.proto": file does not exist
+```
+
+- I fixed it by changing the import to:
+
+```proto
+import "proto/scraper/runtime/v1/events.proto";
+```
+
+- First `go test ./pkg/runtimeevents/sessionstream -count=1` failed because `scraper/go.mod` did not require sessionstream yet:
+
+```text
+no required module provides package github.com/go-go-golems/sessionstream/pkg/sessionstream; to add it:
+	go get github.com/go-go-golems/sessionstream/pkg/sessionstream
+```
+
+- I fixed it with:
+
+```bash
+cd scraper && go get github.com/go-go-golems/sessionstream@v0.0.5 && go mod tidy
+```
+
+### What I learned
+
+- Buf's source root for this repo expects imports with the `proto/...` prefix.
+- Sessionstream's `WithEventBus` requires both a publisher and subscriber, even for producer-only hubs. The producer runtime therefore uses a no-op subscriber because only the publisher side is used unless `Hub.Run` is called.
+- The sessionstream SQLite hydration store can be used directly for runtime-event snapshots once `RuntimeEventEntity` is registered.
+
+### What was tricky to build
+
+- The trickiest piece was producer/server runtime wiring. A server runtime needs a websocket server as `UIFanout`, but `ws.NewServer` needs a snapshot provider, and the snapshot provider needs the hub. I solved the cycle with a small mutable `snapshotProvider` that is created before the hub and receives the hub pointer immediately after `sessionstream.NewHub` succeeds.
+- Another tricky part was retention. The timeline projection gets the pre-event view, so retention tombstones must account for `len(existing)+1` and skip the newly inserted id if it already exists.
+
+### What warrants a second pair of eyes
+
+- Review `pkg/runtimeevents/sessionstream/runtime.go`, especially producer-only `noopSubscriber` and server runtime lifecycle/close ordering.
+- Review whether `TopicRuntimeEventsSessionstreamV1 = "scraper.runtime.sessionstream.v1.events"` is the final desired topic name.
+- Review whether Phase 1's wrapper-message approach should be kept or whether Phase 2 should split major runtime event kinds into separate protobuf messages.
+
+### What should be done in the future
+
+- Phase 2 should replace API/worker/submission producers with the new context-aware publisher and delete old REST/SSE/in-memory runtime-event code.
+- Phase 3 should replace frontend EventSource/REST consumption with sessionstream websocket snapshots and `RuntimeEventAppended` UI events.
+
+### Code review instructions
+
+- Start with `proto/scraper/runtime/sessionstream/v1/runtime_stream.proto`.
+- Then review `pkg/runtimeevents/sessionstream/runtime.go`, `publisher.go`, and `projections.go`.
+- Validate Phase 1 with:
+  - `cd scraper && go test ./pkg/runtimeevents/... -count=1`
+
+### Technical details
+
+Validation commands run:
+
+```bash
+cd scraper && buf generate
+cd scraper && go test ./pkg/runtimeevents/sessionstream -count=1
+cd scraper && go test ./pkg/runtimeevents/... -count=1
 ```

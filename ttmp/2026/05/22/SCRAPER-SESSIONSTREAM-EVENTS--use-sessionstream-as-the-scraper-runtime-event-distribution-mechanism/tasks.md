@@ -13,13 +13,13 @@
 
 ### Phase 1 — Define scraper sessionstream protobuf contracts and adapter core
 
-- [ ] Add `proto/scraper/runtime/sessionstream/v1/runtime_stream.proto` with command/event/UI/entity wrapper messages around `RuntimeEventV1`.
-- [ ] Regenerate Go and TypeScript protobuf bindings with `buf generate`.
-- [ ] Add `github.com/go-go-golems/sessionstream` to scraper dependencies.
-- [ ] Add `pkg/runtimeevents/sessionstream` adapter package with names, schema registration, session routing, publisher, projections, and server/producer hub wiring.
-- [ ] Add unit tests for schema registration, routing, projection output, local hub snapshots, and Watermill/gochannel fanout.
-- [ ] Validate Phase 1 with `go test ./pkg/runtimeevents/... -count=1`.
-- [ ] Commit Phase 1.
+- [x] Add `proto/scraper/runtime/sessionstream/v1/runtime_stream.proto` with command/event/UI/entity wrapper messages around `RuntimeEventV1`.
+- [x] Regenerate Go and TypeScript protobuf bindings with `buf generate`.
+- [x] Add `github.com/go-go-golems/sessionstream` to scraper dependencies.
+- [x] Add `pkg/runtimeevents/sessionstream` adapter package with names, schema registration, session routing, publisher, projections, and server/producer hub wiring.
+- [x] Add unit tests for schema registration, routing, projection output, local hub snapshots, and Watermill/gochannel fanout.
+- [x] Validate Phase 1 with `go test ./pkg/runtimeevents/... -count=1`.
+- [x] Commit Phase 1.
 
 ### Phase 2 — Replace backend runtime-event infrastructure with sessionstream
 

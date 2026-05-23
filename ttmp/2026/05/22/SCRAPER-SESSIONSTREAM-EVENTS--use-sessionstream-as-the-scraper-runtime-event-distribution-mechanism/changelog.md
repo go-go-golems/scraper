@@ -52,3 +52,16 @@ Re-uploaded the revised no-compatibility Pinocchio-informed bundle to reMarkable
 
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/05/22/SCRAPER-SESSIONSTREAM-EVENTS--use-sessionstream-as-the-scraper-runtime-event-distribution-mechanism/reference/01-investigation-diary.md — Updated delivery evidence for revised bundle
 
+
+## 2026-05-22
+
+Phase 1: added scraper sessionstream protobuf contracts, generated bindings, adapter package, and tests (commit 0ea7c29071279544366f5878edf34ac79c63d0db).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/runtimeevents/sessionstream/projections.go — Runtime event UI/timeline projections
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/runtimeevents/sessionstream/publisher.go — Context-aware runtime event publisher and command handler
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/runtimeevents/sessionstream/runtime.go — Producer/server sessionstream runtime wiring
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/runtimeevents/sessionstream/runtime_test.go — Local and gochannel integration coverage
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/proto/scraper/runtime/sessionstream/v1/runtime_stream.proto — New scraper sessionstream protobuf contracts
+
