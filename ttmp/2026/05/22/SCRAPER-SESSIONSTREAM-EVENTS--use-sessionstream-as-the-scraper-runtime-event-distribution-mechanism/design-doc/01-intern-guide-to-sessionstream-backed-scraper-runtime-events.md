@@ -1127,6 +1127,57 @@ Read in this order:
 7. `sessionstream/pkg/sessionstream/transport/ws/server.go` and `sessionstream/proto/sessionstream/v1/transport.proto` to understand websocket frames and hydration.
 8. Implement the adapter package with tests before touching API/server or frontend code.
 
+## Implementation notes from completed work
+
+The implementation completed the breaking migration in three code commits:
+
+1. `0ea7c29071279544366f5878edf34ac79c63d0db` — added scraper sessionstream protobuf contracts, generated Go/TypeScript bindings, and the `pkg/runtimeevents/sessionstream` adapter package.
+2. `ee5f4ba936ee0f5ce49d7d9f7d988855518ae567` — replaced the backend REST/SSE runtime-event infrastructure with the sessionstream runtime and websocket endpoint.
+3. `d00312f93f504427fd381e5a9d4dc5f50bdd102d` — moved the frontend runtime-event RTK Query endpoint from REST/EventSource to sessionstream websocket snapshots and live UI events.
+
+The implemented backend endpoint is now:
+
+```text
+GET /api/v1/runtime-events/ws
+```
+
+The old backend routes are gone:
+
+```text
+GET /api/v1/runtime-events
+GET /api/v1/runtime-events/stream
+```
+
+The implemented scraper-specific sessionstream protobuf file is:
+
+```text
+proto/scraper/runtime/sessionstream/v1/runtime_stream.proto
+```
+
+It defines wrapper messages around `RuntimeEventV1` for the first implementation. This keeps scraper's current runtime event schema intact while giving sessionstream separate typed contracts for commands, backend events, UI events, and timeline entities.
+
+Important implementation files added or changed:
+
+- `pkg/runtimeevents/sessionstream/names.go`
+- `pkg/runtimeevents/sessionstream/schema.go`
+- `pkg/runtimeevents/sessionstream/routing.go`
+- `pkg/runtimeevents/sessionstream/publisher.go`
+- `pkg/runtimeevents/sessionstream/projections.go`
+- `pkg/runtimeevents/sessionstream/runtime.go`
+- `pkg/runtimeevents/publisher.go`
+- `pkg/api/server/server.go`
+- `pkg/api/server/routes_runtime_events.go`
+- `pkg/api/server/middleware_request.go`
+- `pkg/api/server/server_test.go`
+- `web/src/api/runtimeEventsApi.ts`
+
+Implementation caveats:
+
+- `pkg/api/server/middleware_request.go` bypasses the normal status-recorder wrapper for websocket upgrade requests because Gorilla websocket needs the underlying response writer's hijacking support.
+- `pkg/cmd/app_config.go` now performs local app config path discovery instead of calling the missing `glazed/pkg/config.ResolveAppConfigPath` symbol in the current workspace state.
+- The frontend currently hand-parses the small subset of `sessionstream.v1.ServerFrame` JSON it needs, while using generated protobuf TypeScript bindings for scraper-specific `RuntimeEventAppended` and `RuntimeEventEntity` payloads.
+- Full `pnpm build` still fails on pre-existing TypeScript/story issues unrelated to the runtime-event websocket migration; `pnpm test:unit -- --runInBand` passes.
+
 ## Open questions
 
 1. What retention policy is correct for `runtime:global`: fixed count, fixed age, or both?

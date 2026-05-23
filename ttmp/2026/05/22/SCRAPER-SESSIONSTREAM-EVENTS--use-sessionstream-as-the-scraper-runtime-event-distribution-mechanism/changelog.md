@@ -87,3 +87,30 @@ Phase 3: moved frontend runtime-event cache updates from REST/SSE EventSource to
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/api/runtimeEventsApi.ts — Sessionstream websocket runtime event client and RTK Query integration
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/mocks/runtimeEventsHandlers.ts — Removed stale REST runtime-events MSW mock
 
+
+## 2026-05-22
+
+Phase 4: ran final Go and frontend validation and updated the design guide with implementation notes.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/05/22/SCRAPER-SESSIONSTREAM-EVENTS--use-sessionstream-as-the-scraper-runtime-event-distribution-mechanism/design-doc/01-intern-guide-to-sessionstream-backed-scraper-runtime-events.md — Implementation notes and final file references
+
+
+## 2026-05-22
+
+Final docmgr validation passed after implementation notes and diary updates.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/05/22/SCRAPER-SESSIONSTREAM-EVENTS--use-sessionstream-as-the-scraper-runtime-event-distribution-mechanism/reference/01-investigation-diary.md — Final validation diary entry
+
+
+## 2026-05-22
+
+Uploaded final implemented design/diary/tasks/changelog bundle to reMarkable.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/ttmp/2026/05/22/SCRAPER-SESSIONSTREAM-EVENTS--use-sessionstream-as-the-scraper-runtime-event-distribution-mechanism/design-doc/01-intern-guide-to-sessionstream-backed-scraper-runtime-events.md — Final reMarkable bundle source
+

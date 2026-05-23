@@ -42,10 +42,10 @@
 
 ### Phase 4 — Final validation, docs, diary, and reMarkable refresh
 
-- [ ] Run `go test ./... -count=1` in `scraper` or document any pre-existing failures.
-- [ ] Run frontend validation (`pnpm test`/build) or document any pre-existing failures.
-- [ ] Update the design guide with implementation notes and final file references.
-- [ ] Update the diary with each implementation step, commands, failures, commits, and review instructions.
-- [ ] Run `docmgr doctor --ticket SCRAPER-SESSIONSTREAM-EVENTS --stale-after 30`.
-- [ ] Upload the final bundle to reMarkable.
-- [ ] Commit final docs.
+- [x] Run `go test ./... -count=1` in `scraper` or document any pre-existing failures.
+- [x] Run frontend validation (`pnpm test`/build) or document any pre-existing failures.
+- [x] Update the design guide with implementation notes and final file references.
+- [x] Update the diary with each implementation step, commands, failures, commits, and review instructions.
+- [x] Run `docmgr doctor --ticket SCRAPER-SESSIONSTREAM-EVENTS --stale-after 30`.
+- [x] Upload the final bundle to reMarkable.
+- [x] Commit final docs.

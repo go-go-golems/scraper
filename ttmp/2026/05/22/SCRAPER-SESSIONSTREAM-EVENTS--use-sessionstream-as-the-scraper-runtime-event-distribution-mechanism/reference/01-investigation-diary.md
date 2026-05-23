@@ -714,3 +714,125 @@ The frontend now sends subscribe frames like:
 ```json
 {"subscribe":{"sessionId":"workflow:example","sinceSnapshotOrdinal":"0"}}
 ```
+
+## Step 7: Final validation and implementation-guide update
+
+I ran final validation, updated the design document with implementation notes, and prepared the ticket for final handoff. The Go test suite passes across the scraper module. Frontend unit tests pass, while the full frontend build still reports unrelated pre-existing TypeScript/story errors.
+
+This step closes the implementation loop for the ticket: the backend now uses sessionstream as the only runtime-event distribution mechanism, the frontend runtime-event API uses the websocket path, and the docs record the implementation commits and validation caveats.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 4)
+
+**Assistant interpretation:** Finish the implementation phases, validate broadly, update docs, and prepare a final committed handoff.
+
+**Inferred user intent:** The user wants a complete implementation trail with code commits, test evidence, and updated docs that reflect the final code rather than just the initial design.
+
+**Commit (code):** N/A — this step updates documentation after code commits `0ea7c290`, `ee5f4ba`, and `d00312f`.
+
+### What I did
+
+- Ran the full scraper Go test suite:
+
+```bash
+cd scraper && go test ./... -count=1
+```
+
+- Ran frontend unit tests:
+
+```bash
+cd scraper/web && pnpm test:unit -- --runInBand
+```
+
+- Ran frontend build to check TypeScript/build health:
+
+```bash
+cd scraper/web && pnpm build
+```
+
+- Updated the design guide with an `Implementation notes from completed work` section listing code commits, endpoint changes, deleted routes, new protobuf contracts, key files, and caveats.
+- Marked final validation/design-update tasks complete.
+
+### Why
+
+- The original guide was design-oriented; after implementation it needed to say what actually landed.
+- Broad Go validation is important because the backend migration deleted shared runtime-event infrastructure and changed producer-facing types.
+- The frontend build failure needed to be recorded explicitly rather than hidden.
+
+### What worked
+
+- Full Go validation passed:
+
+```text
+cd scraper && go test ./... -count=1
+```
+
+- Frontend unit validation passed:
+
+```text
+cd scraper/web && pnpm test:unit -- --runInBand
+```
+
+### What didn't work
+
+- Full frontend build failed:
+
+```text
+cd scraper/web && pnpm build
+```
+
+- The errors appear pre-existing/unrelated to this runtime-event migration. Representative errors include:
+
+```text
+src/api/workflowApi.ts(9,3): error TS6196: 'WorkflowResultSummary' is declared but never used.
+src/components/common/AlertBanner.stories.tsx(14,7): error TS2322: Property 'onDismiss' does not exist on type 'AlertBannerProps'.
+src/stories/msw/handlers.ts(2,38): error TS2307: Cannot find module '../api/types' or its corresponding type declarations.
+src/test-utils/mockRuntimeEvents.ts(35,28): error TS2339: Property 'OP_COMPLETED' does not exist on type 'typeof RuntimeEventKind'.
+```
+
+### What I learned
+
+- The backend migration is covered by the full Go test suite, including the websocket runtime-event integration path.
+- The frontend runtime-event unit tests do not cover the websocket client directly yet; they still cover helper behavior around timestamps, merge, and client-side filters.
+
+### What was tricky to build
+
+- Distinguishing migration-related frontend issues from existing build issues required running both targeted unit tests and full build. The targeted unit tests passed, while the full build failed in many files outside the runtime-event API change.
+
+### What warrants a second pair of eyes
+
+- Review the frontend websocket client manually because it is not yet covered by a dedicated websocket-frame unit test.
+- Review the full TypeScript build failures and decide whether they should be fixed in this branch or handled as a separate cleanup ticket.
+
+### What should be done in the future
+
+- Add a small dedicated unit test for `runtimeEventsApi` frame decoding helpers if they are exported or moved into a testable helper module.
+- Fix the broader frontend TypeScript/story errors so `pnpm build` can become a reliable validation gate.
+
+### Code review instructions
+
+- Review commits in order:
+  1. `0ea7c29071279544366f5878edf34ac79c63d0db`
+  2. `ee5f4ba936ee0f5ce49d7d9f7d988855518ae567`
+  3. `d00312f93f504427fd381e5a9d4dc5f50bdd102d`
+- Validate with:
+  - `cd scraper && go test ./... -count=1`
+  - `cd scraper/web && pnpm test:unit -- --runInBand`
+- Known frontend build caveat:
+  - `cd scraper/web && pnpm build` currently fails on unrelated existing TypeScript/story issues.
+
+### Technical details
+
+Implemented backend runtime-event websocket endpoint:
+
+```text
+GET /api/v1/runtime-events/ws
+```
+
+Removed backend endpoints:
+
+```text
+GET /api/v1/runtime-events
+GET /api/v1/runtime-events/stream
+```
