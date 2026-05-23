@@ -17,6 +17,7 @@ type runtimeEventOptions struct {
 	redisConsumerGroup string
 	redisStreamMaxLen  int64
 	recentEventLimit   int
+	sessionstreamDB    string
 }
 
 func addRuntimeEventFlags(cmd *cobra.Command, options *runtimeEventOptions, includeConsumerGroup bool, includeRecentLimit bool) {
@@ -31,7 +32,8 @@ func addRuntimeEventFlags(cmd *cobra.Command, options *runtimeEventOptions, incl
 		cmd.Flags().StringVar(&options.redisConsumerGroup, "events-redis-consumer-group", runtimeevents.DefaultRedisConsumerGroup, "Redis consumer group used by the API runtime event subscriber")
 	}
 	if includeRecentLimit {
-		cmd.Flags().IntVar(&options.recentEventLimit, "events-recent-limit", runtimeevents.DefaultRecentEventLimit, "Recent runtime events kept in the in-memory API buffer")
+		cmd.Flags().IntVar(&options.recentEventLimit, "events-recent-limit", runtimeevents.DefaultRecentEventLimit, "Recent runtime events kept per sessionstream snapshot")
+		cmd.Flags().StringVar(&options.sessionstreamDB, "events-sessionstream-db", "state/runtime-events-sessionstream.db", "SQLite database path for runtime event sessionstream hydration snapshots")
 	}
 }
 

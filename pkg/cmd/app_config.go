@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	glazedconfig "github.com/go-go-golems/glazed/pkg/config"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -17,12 +16,32 @@ type AppConfig struct {
 }
 
 func loadAppConfig(appName string) (*AppConfig, error) {
-	configPath, err := glazedconfig.ResolveAppConfigPath(appName, "")
-	if err != nil {
-		return nil, errors.Wrap(err, "could not resolve app config path")
+	for _, configPath := range appConfigCandidatePaths(appName) {
+		if configPath == "" {
+			continue
+		}
+		if _, err := os.Stat(configPath); err == nil {
+			return loadAppConfigFromPath(configPath)
+		} else if err != nil && !os.IsNotExist(err) {
+			return nil, errors.Wrap(err, "could not stat app config")
+		}
 	}
+	return &AppConfig{}, nil
+}
 
-	return loadAppConfigFromPath(configPath)
+func appConfigCandidatePaths(appName string) []string {
+	appName = strings.TrimSpace(appName)
+	if appName == "" {
+		return nil
+	}
+	paths := make([]string, 0, 2)
+	if xdg, err := os.UserConfigDir(); err == nil && xdg != "" {
+		paths = append(paths, filepath.Join(xdg, appName, "config.yaml"))
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		paths = append(paths, filepath.Join(home, "."+appName, "config.yaml"))
+	}
+	return paths
 }
 
 func loadAppConfigFromPath(configPath string) (*AppConfig, error) {

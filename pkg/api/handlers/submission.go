@@ -14,10 +14,10 @@ type SubmissionHandler struct {
 	service  *submission.Service
 	engineDB string
 	sitesDir string
-	events   *runtimeevents.Publisher
+	events   runtimeevents.Publisher
 }
 
-func NewSubmissionHandler(service *submission.Service, engineDB string, sitesDir string, events *runtimeevents.Publisher) *SubmissionHandler {
+func NewSubmissionHandler(service *submission.Service, engineDB string, sitesDir string, events runtimeevents.Publisher) *SubmissionHandler {
 	return &SubmissionHandler{
 		service:  service,
 		engineDB: engineDB,
@@ -30,7 +30,7 @@ func (h *SubmissionHandler) Submit(w http.ResponseWriter, r *http.Request) {
 	request := apitypes.SubmitRequest{}
 	if r.Body != nil {
 		if err := decodeJSON(r, &request); err != nil {
-			_ = runtimeevents.EmitSimpleEvent(h.events, &runtimev1.RuntimeEventV1{
+			_ = runtimeevents.EmitSimpleEvent(r.Context(), h.events, &runtimev1.RuntimeEventV1{
 				Source:    runtimev1.RuntimeEventSource_RUNTIME_EVENT_SOURCE_SERVER,
 				Component: "submission-handler",
 				Kind:      runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_SUBMISSION_REJECTED,
@@ -58,7 +58,7 @@ func (h *SubmissionHandler) Submit(w http.ResponseWriter, r *http.Request) {
 		Sections:   request.Sections,
 	})
 	if err != nil {
-		_ = runtimeevents.EmitSimpleEvent(h.events, &runtimev1.RuntimeEventV1{
+		_ = runtimeevents.EmitSimpleEvent(r.Context(), h.events, &runtimev1.RuntimeEventV1{
 			Source:    runtimev1.RuntimeEventSource_RUNTIME_EVENT_SOURCE_SERVER,
 			Component: "submission-handler",
 			Kind:      runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_SUBMISSION_REJECTED,

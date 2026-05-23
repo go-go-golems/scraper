@@ -8,7 +8,7 @@ import (
 	"github.com/go-go-golems/scraper/pkg/runtimeevents"
 )
 
-func newWorkerObserver(eventPublisher *runtimeevents.Publisher, metricsRegistry *metrics.Registry, workerID string) scheduler.Observer {
+func newWorkerObserver(eventPublisher runtimeevents.Publisher, metricsRegistry *metrics.Registry, workerID string) scheduler.Observer {
 	return composeSchedulerObservers(
 		runtimeevents.NewSchedulerObserver(eventPublisher, "worker-scheduler", workerID),
 		metrics.NewSchedulerObserver(metricsRegistry),

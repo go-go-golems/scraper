@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -11,7 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func requestLogger(next http.Handler, eventPublisher *runtimeevents.Publisher, metricsRegistry *metrics.Registry) http.Handler {
+func requestLogger(next http.Handler, eventPublisher runtimeevents.Publisher, metricsRegistry *metrics.Registry) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := r.Header.Get("X-Request-Id")
 		if requestID == "" {
@@ -19,7 +20,7 @@ func requestLogger(next http.Handler, eventPublisher *runtimeevents.Publisher, m
 		}
 		r = r.WithContext(runtimeevents.ContextWithRequestID(r.Context(), requestID))
 
-		_ = runtimeevents.EmitSimpleEvent(eventPublisher, &runtimev1.RuntimeEventV1{
+		_ = runtimeevents.EmitSimpleEvent(r.Context(), eventPublisher, &runtimev1.RuntimeEventV1{
 			Source:    runtimev1.RuntimeEventSource_RUNTIME_EVENT_SOURCE_REQUEST,
 			Component: "http-api",
 			Kind:      runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_REQUEST_RECEIVED,
@@ -32,6 +33,11 @@ func requestLogger(next http.Handler, eventPublisher *runtimeevents.Publisher, m
 			}),
 		})
 
+		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		started := time.Now()
 		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
@@ -42,7 +48,7 @@ func requestLogger(next http.Handler, eventPublisher *runtimeevents.Publisher, m
 		}
 		metricsRegistry.ObserveHTTPRequest(r.Method, route, recorder.status, duration)
 
-		_ = runtimeevents.EmitSimpleEvent(eventPublisher, &runtimev1.RuntimeEventV1{
+		_ = runtimeevents.EmitSimpleEvent(r.Context(), eventPublisher, &runtimev1.RuntimeEventV1{
 			Source:    runtimev1.RuntimeEventSource_RUNTIME_EVENT_SOURCE_REQUEST,
 			Component: "http-api",
 			Kind:      runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_REQUEST_SERVED,

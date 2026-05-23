@@ -1,12 +1,14 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/go-go-golems/scraper/pkg/api/handlers"
 	"github.com/go-go-golems/scraper/pkg/metrics"
 	"github.com/go-go-golems/scraper/pkg/runtimeevents"
+	runtimestream "github.com/go-go-golems/scraper/pkg/runtimeevents/sessionstream"
 	"github.com/go-go-golems/scraper/pkg/services/catalog"
 	"github.com/go-go-golems/scraper/pkg/services/engineview"
 	"github.com/go-go-golems/scraper/pkg/services/submission"
@@ -21,32 +23,30 @@ type Config struct {
 	WriteTimeout     time.Duration
 	Version          string
 	RuntimeEvents    runtimeevents.Config
+	RuntimeEventsDB  string
 	RecentEventLimit int
 }
 
 func New(cfg Config, siteRegistry *siteregistry.Registry) (*http.Server, error) {
-	eventResources, err := runtimeevents.OpenPublisherSubscriber(cfg.RuntimeEvents)
+	runtimeStream, err := runtimestream.NewServerRuntime(context.Background(), runtimestream.Config{
+		Events:      cfg.RuntimeEvents,
+		TimelineDB:  cfg.RuntimeEventsDB,
+		RecentLimit: cfg.RecentEventLimit,
+	})
 	if err != nil {
 		return nil, err
 	}
-	eventPublisher := eventResources.EventPublisher()
-	eventHub := runtimeevents.NewHub(cfg.RecentEventLimit)
-
-	router, err := startRuntimeEventRouter(eventResources, eventHub)
-	if err != nil {
-		_ = eventResources.Close()
-		return nil, err
-	}
+	eventPublisher := runtimeStream.Publisher
 
 	catalogService := catalog.NewService(siteRegistry)
 	engineService := engineview.NewService(cfg.EngineDB)
 	metricsRegistry, err := metrics.NewRegistry()
 	if err != nil {
-		_ = eventResources.Close()
+		_ = runtimeStream.Close(context.Background())
 		return nil, err
 	}
 	if err := metricsRegistry.RegisterCollector(metrics.NewSnapshotCollector(engineService, 2*time.Second)); err != nil {
-		_ = eventResources.Close()
+		_ = runtimeStream.Close(context.Background())
 		return nil, err
 	}
 	submissionService := submission.NewService(siteRegistry, eventPublisher, metricsRegistry)
@@ -54,12 +54,11 @@ func New(cfg Config, siteRegistry *siteregistry.Registry) (*http.Server, error) 
 	catalogHandler := handlers.NewCatalogHandler(catalogService, cfg.Version, cfg.Address, cfg.EngineDB, cfg.SitesDir)
 	submissionHandler := handlers.NewSubmissionHandler(submissionService, cfg.EngineDB, cfg.SitesDir, eventPublisher)
 	engineHandler := handlers.NewEngineHandler(engineService, catalogService)
-	runtimeEventsHandler := handlers.NewRuntimeEventsHandler(eventHub)
 
 	mux := http.NewServeMux()
 	registerCatalogRoutes(mux, catalogHandler, submissionHandler)
 	registerEngineRoutes(mux, engineHandler, metricsRegistry)
-	registerRuntimeEventRoutes(mux, runtimeEventsHandler)
+	registerRuntimeEventRoutes(mux, runtimeStream.WSServer)
 
 	server := &http.Server{
 		Addr:         cfg.Address,
@@ -68,10 +67,7 @@ func New(cfg Config, siteRegistry *siteregistry.Registry) (*http.Server, error) 
 		WriteTimeout: cfg.WriteTimeout,
 	}
 	server.RegisterOnShutdown(func() {
-		if router != nil {
-			_ = router.Close()
-		}
-		_ = eventResources.Close()
+		_ = runtimeStream.Close(context.Background())
 	})
 	return server, nil
 }

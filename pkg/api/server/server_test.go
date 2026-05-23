@@ -1,7 +1,6 @@
 package server_test
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"database/sql"
@@ -9,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +16,8 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
 	databasemod "github.com/go-go-golems/go-go-goja/modules/database"
+	streamv1 "github.com/go-go-golems/scraper/gen/proto/scraper/runtime/sessionstream/v1"
+	runtimev1 "github.com/go-go-golems/scraper/gen/proto/scraper/runtime/v1"
 	apiserver "github.com/go-go-golems/scraper/pkg/api/server"
 	scrapercmd "github.com/go-go-golems/scraper/pkg/cmd"
 	"github.com/go-go-golems/scraper/pkg/engine/config"
@@ -27,12 +27,16 @@ import (
 	storecontract "github.com/go-go-golems/scraper/pkg/engine/store"
 	sqlitestore "github.com/go-go-golems/scraper/pkg/engine/store/sqlite"
 	"github.com/go-go-golems/scraper/pkg/runtimeevents"
+	runtimestream "github.com/go-go-golems/scraper/pkg/runtimeevents/sessionstream"
 	"github.com/go-go-golems/scraper/pkg/sites/defaults"
-	"github.com/go-go-golems/scraper/pkg/testfixtures"
 	sitemigrate "github.com/go-go-golems/scraper/pkg/sites/migrate"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
+	"github.com/go-go-golems/scraper/pkg/testfixtures"
+	sessionstreamv1 "github.com/go-go-golems/sessionstream/pkg/sessionstream/pb/proto/sessionstream/v1"
+	"github.com/gorilla/websocket"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // sitesRegistry returns a registry with all sites loaded from the repo's sites/ directory.
@@ -375,7 +379,7 @@ func TestServerArtifactAndOpResultEndpoints(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, notFoundResp.StatusCode)
 }
 
-func TestServerRuntimeEventsHistoryAndStream(t *testing.T) {
+func TestServerRuntimeEventsWebsocketSnapshotAndLiveEvents(t *testing.T) {
 	registry := sitesRegistry(t)
 
 	sitesDir := t.TempDir()
@@ -396,8 +400,6 @@ func TestServerRuntimeEventsHistoryAndStream(t *testing.T) {
 
 	ts := httptest.NewServer(server.Handler)
 	defer ts.Close()
-
-	waitForRuntimeEventRouter(t, ts.URL)
 
 	body := bytes.NewBufferString(`{
 		"workflowID": "event-js-demo",
@@ -420,18 +422,12 @@ func TestServerRuntimeEventsHistoryAndStream(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&submitPayload))
 	require.Equal(t, "event-js-demo", submitPayload.Workflow.ID)
 
-	streamCtx, cancelStream := context.WithCancel(context.Background())
-	defer cancelStream()
-	streamURL := ts.URL + "/api/v1/runtime-events/stream?workflowId=" + url.QueryEscape(submitPayload.Workflow.ID)
-	streamReq, err := http.NewRequestWithContext(streamCtx, http.MethodGet, streamURL, nil)
-	require.NoError(t, err)
-	streamResp, err := http.DefaultClient.Do(streamReq)
-	require.NoError(t, err)
-	defer streamResp.Body.Close()
-	require.Equal(t, http.StatusOK, streamResp.StatusCode)
+	conn := dialRuntimeEventsWebsocket(t, ts.URL)
+	defer conn.Close()
+	require.NoError(t, sendRuntimeEventsSubscribe(conn, string(runtimestream.WorkflowSessionID(submitPayload.Workflow.ID))))
 
-	streamEvents := make(chan *runtimeeventsEventEnvelope, 32)
-	go collectRuntimeEvents(streamResp.Body, streamEvents)
+	events := make(chan *runtimev1.RuntimeEventV1, 64)
+	go collectRuntimeEventsWebsocket(t, conn, events)
 
 	require.NoError(t, runWorkerWithRuntimeEvents(context.Background(), registry, engineDB, sitesDir, pubSub))
 
@@ -441,42 +437,19 @@ func TestServerRuntimeEventsHistoryAndStream(t *testing.T) {
 	for !(succeededSeen && runnerLogSeen) {
 		select {
 		case <-timeout:
-			t.Fatalf("timed out waiting for streamed runtime events")
-		case event := <-streamEvents:
+			t.Fatalf("timed out waiting for websocket runtime events")
+		case event := <-events:
 			if event == nil {
 				continue
 			}
-			if event.Kind == "RUNTIME_EVENT_KIND_OP_SUCCEEDED" {
+			if event.Kind == runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_OP_SUCCEEDED {
 				succeededSeen = true
 			}
-			if event.Kind == "RUNTIME_EVENT_KIND_LOG_LINE" && event.Source == "RUNTIME_EVENT_SOURCE_RUNNER" {
+			if event.Kind == runtimev1.RuntimeEventKind_RUNTIME_EVENT_KIND_LOG_LINE && event.Source == runtimev1.RuntimeEventSource_RUNTIME_EVENT_SOURCE_RUNNER {
 				runnerLogSeen = true
 			}
 		}
 	}
-
-	historyResp, err := http.Get(ts.URL + "/api/v1/runtime-events?workflowId=" + url.QueryEscape(submitPayload.Workflow.ID) + "&limit=64")
-	require.NoError(t, err)
-	defer historyResp.Body.Close()
-	require.Equal(t, http.StatusOK, historyResp.StatusCode)
-
-	historyPayload := struct {
-		Events []json.RawMessage `json:"events"`
-	}{}
-	require.NoError(t, json.NewDecoder(historyResp.Body).Decode(&historyPayload))
-	require.NotEmpty(t, historyPayload.Events)
-
-	kinds := map[string]bool{}
-	for _, raw := range historyPayload.Events {
-		event, err := runtimeevents.UnmarshalJSON(raw)
-		require.NoError(t, err)
-		kinds[event.Kind.String()] = true
-	}
-
-	require.True(t, kinds["RUNTIME_EVENT_KIND_SUBMISSION_ACCEPTED"])
-	require.True(t, kinds["RUNTIME_EVENT_KIND_WORKFLOW_CREATED"])
-	require.True(t, kinds["RUNTIME_EVENT_KIND_OP_SUCCEEDED"])
-	require.True(t, kinds["RUNTIME_EVENT_KIND_LOG_LINE"])
 }
 
 func completeServerTestOp(
@@ -521,45 +494,51 @@ func completeServerTestOp(
 	})
 }
 
-type runtimeeventsEventEnvelope struct {
-	Kind   string `json:"kind"`
-	Source string `json:"source"`
+func dialRuntimeEventsWebsocket(t *testing.T, baseURL string) *websocket.Conn {
+	t.Helper()
+	wsURL := "ws" + strings.TrimPrefix(baseURL, "http") + "/api/v1/runtime-events/ws"
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	require.NoError(t, err)
+	return conn
 }
 
-func collectRuntimeEvents(body io.Reader, events chan<- *runtimeeventsEventEnvelope) {
-	reader := bufio.NewReader(body)
+func sendRuntimeEventsSubscribe(conn *websocket.Conn, sid string) error {
+	frame := &sessionstreamv1.ClientFrame{Frame: &sessionstreamv1.ClientFrame_Subscribe{Subscribe: &sessionstreamv1.SubscribeRequest{SessionId: sid}}}
+	raw, err := protojson.Marshal(frame)
+	if err != nil {
+		return err
+	}
+	return conn.WriteMessage(websocket.TextMessage, raw)
+}
+
+func collectRuntimeEventsWebsocket(t *testing.T, conn *websocket.Conn, events chan<- *runtimev1.RuntimeEventV1) {
+	t.Helper()
+	unmarshalOptions := protojson.UnmarshalOptions{DiscardUnknown: false}
 	for {
-		line, err := reader.ReadString('\n')
+		_, raw, err := conn.ReadMessage()
 		if err != nil {
 			close(events)
 			return
 		}
-		if !strings.HasPrefix(line, "data: ") {
+		frame := &sessionstreamv1.ServerFrame{}
+		if err := unmarshalOptions.Unmarshal(raw, frame); err != nil {
 			continue
 		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data: "))
-		event := &runtimeeventsEventEnvelope{}
-		if err := json.Unmarshal([]byte(payload), event); err != nil {
+		uiEvent := frame.GetUiEvent()
+		if uiEvent == nil || uiEvent.GetName() != runtimestream.UIEventRuntimeEventAppended || uiEvent.GetPayload() == nil {
 			continue
 		}
-		events <- event
-	}
-}
-
-func waitForRuntimeEventRouter(t *testing.T, baseURL string) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		resp, err := http.Get(baseURL + "/api/v1/runtime-events?limit=1")
-		if err == nil {
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return
-			}
+		payload := &streamv1.RuntimeEventAppended{}
+		if err := uiEvent.GetPayload().UnmarshalTo(payload); err != nil {
+			continue
 		}
-		time.Sleep(20 * time.Millisecond)
+		if payload.GetEvent() != nil {
+			events <- payload.GetEvent()
+		}
 	}
-	t.Fatalf("runtime event router did not become ready")
 }
 
 func runWorkerWithRuntimeEvents(
@@ -585,7 +564,12 @@ func runWorkerWithRuntimeEvents(
 	}
 	defer func() { _ = scraperDB.Close() }()
 
-	eventPublisher := runtimeevents.NewPublisher(pubSub, "")
+	eventRuntime, err := runtimestream.NewProducerRuntime(runtimestream.Config{Events: runtimeevents.Config{Backend: runtimeevents.BackendGoChannel, GoChannel: pubSub}})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = eventRuntime.Close(context.Background()) }()
+	eventPublisher := eventRuntime.Publisher
 	runners := runner.NewRegistry()
 
 	httpRunner, err := runner.NewHTTPRunner(config.HTTP{Timeout: 5 * time.Second}, nil)
