@@ -1,0 +1,53 @@
+
+> web@0.0.0 build /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web
+> tsc -b && vite build
+
+src/api/workflowApi.ts(9,3): error TS6196: 'WorkflowResultSummary' is declared but never used.
+src/components/artifacts/ActiveFilterChips.tsx(11,7): error TS6133: 'FIELD_LABELS' is declared but its value is never read.
+src/components/common/AlertBanner.stories.tsx(4,1): error TS6133: 'Box' is declared but its value is never read.
+src/components/common/AlertBanner.stories.tsx(14,7): error TS2322: Type '{ severity: "error"; message: string; action: { label: string; onClick: () => void; }; onDismiss: () => void; }' is not assignable to type 'IntrinsicAttributes & AlertBannerProps'.
+  Property 'onDismiss' does not exist on type 'IntrinsicAttributes & AlertBannerProps'.
+src/components/common/AppErrorBoundary.stories.tsx(6,15): error TS2351: This expression is not constructable.
+  Type 'BaseAnnotations<ReactRenderer, AppErrorBoundaryProps> & { name?: string | undefined; storyName?: string | undefined; play?: PlayFunction<...> | undefined; globals?: Globals | undefined; story?: Omit<...> | undefined; } & { ...; }' has no construct signatures.
+src/components/common/CodeViewPanel.tsx(36,7): error TS6133: 'THEME' is declared but its value is never read.
+src/components/common/CodeViewPanel.tsx(108,9): error TS6133: 'handleFormatChange' is declared but its value is never read.
+src/components/common/CodeViewPanel.tsx(145,18): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(props: { href: string; } & ToggleButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<DetailedHTMLProps<AnchorHTMLAttributes<HTMLAnchorElement>, HTMLAnchorElement>, "children" | ... 23 more ... | "selected">): Element', gave the following error.
+    Property 'href' is missing in type '{ children: string; key: DataFormat; selected: boolean; onClick: () => void; sx: { py: number; px: number; fontSize: string; textTransform: "none"; }; }' but required in type '{ href: string; }'.
+  Overload 2 of 3, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & ToggleButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: string; key: DataFormat; selected: boolean; onClick: () => void; sx: { py: number; px: number; fontSize: string; textTransform: "none"; }; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 3 of 3, '(props: DefaultComponentProps<ExtendButtonBaseTypeMap<ToggleButtonTypeMap<{}, "button">>>): Element | null', gave the following error.
+    Property 'value' is missing in type '{ children: string; key: DataFormat; selected: boolean; onClick: () => void; sx: { py: number; px: number; fontSize: string; textTransform: "none"; }; }' but required in type 'ToggleButtonOwnProps'.
+src/components/results/ActiveResultFilterChips.tsx(10,7): error TS6133: 'FIELD_LABELS' is declared but its value is never read.
+src/components/results/ResultFilterBar.stories.tsx(6,1): error TS6133: 'WorkflowOp' is declared but its value is never read.
+src/components/results/ResultFilterBar.tsx(1,10): error TS6133: 'useState' is declared but its value is never read.
+src/components/results/ResultFilterBar.tsx(1,33): error TS6133: 'useRef' is declared but its value is never read.
+src/components/results/ResultFilterBar.tsx(4,3): error TS6133: 'Chip' is declared but its value is never read.
+src/components/results/ResultFilterBar.tsx(10,3): error TS6133: 'Typography' is declared but its value is never read.
+src/components/results/ResultPreviewPanel.tsx(178,13): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & BoxOwnProps<Theme> & Omit<any, keyof BoxOwnProps<Theme>>): Element | null', gave the following error.
+    Type 'unknown' is not assignable to type 'ReactNode'.
+  Overload 2 of 2, '(props: DefaultComponentProps<BoxTypeMap<{}, "div", Theme>>): Element | null', gave the following error.
+    Type 'unknown' is not assignable to type 'ReactNode'.
+src/components/results/ResultsPanel.tsx(14,1): error TS6133: 'WorkflowOp' is declared but its value is never read.
+src/components/results/ResultsTable.stories.tsx(2,1): error TS6133: 'useState' is declared but its value is never read.
+src/components/results/ResultsTable.stories.tsx(3,1): error TS6133: 'Box' is declared but its value is never read.
+src/components/results/ResultsTable.stories.tsx(30,20): error TS2304: Cannot find name 'STORY_WORKFLOW_ID'.
+src/components/workflows/RuntimeEventTable.stories.tsx(33,25): error TS2339: Property 'getAllByRole' does not exist on type 'Canvas'.
+src/stories/__fixtures__/factories.ts(235,3): error TS2322: Type '{ id: string; opID: string; workflowID: string; name: string; kind: string; contentType: string; metadata?: Record<string, string> | undefined; size: number; createdAt: string; previewable?: boolean | undefined; previewKind?: string | undefined; }' is not assignable to type 'ArtifactSummary'.
+  Types of property 'previewable' are incompatible.
+    Type 'boolean | undefined' is not assignable to type 'boolean'.
+      Type 'undefined' is not assignable to type 'boolean'.
+src/stories/msw/handlers.ts(2,38): error TS2307: Cannot find module '../api/types' or its corresponding type declarations.
+src/stories/msw/handlers.ts(3,33): error TS2307: Cannot find module '../api/types' or its corresponding type declarations.
+src/stories/msw/handlers.ts(4,44): error TS2307: Cannot find module '../api/types' or its corresponding type declarations.
+src/stories/msw/handlers.ts(62,58): error TS2307: Cannot find module '../api/types' or its corresponding type declarations.
+src/stories/msw/handlers.ts(155,50): error TS6133: 'params' is declared but its value is never read.
+src/stories/msw/handlers.ts(222,50): error TS6133: 'params' is declared but its value is never read.
+src/stories/msw/handlers.ts(293,50): error TS6133: 'params' is declared but its value is never read.
+src/test-utils/mockRuntimeEvents.ts(35,28): error TS2339: Property 'OP_COMPLETED' does not exist on type 'typeof RuntimeEventKind'.
+src/test-utils/mockRuntimeEvents.ts(61,20): error TS2551: Property 'WORKFLOW_STARTED' does not exist on type 'typeof RuntimeEventKind'. Did you mean 'WORKFLOW_CREATED'?
+src/test-utils/mockRuntimeEvents.ts(62,20): error TS2339: Property 'OP_DISPATCHED' does not exist on type 'typeof RuntimeEventKind'.
+src/test-utils/mockRuntimeEvents.ts(63,20): error TS2339: Property 'OP_COMPLETED' does not exist on type 'typeof RuntimeEventKind'.
+src/test-utils/mockRuntimeEvents.ts(65,20): error TS2339: Property 'OP_ERROR' does not exist on type 'typeof RuntimeEventKind'.
+ ELIFECYCLE  Command failed with exit code 2.

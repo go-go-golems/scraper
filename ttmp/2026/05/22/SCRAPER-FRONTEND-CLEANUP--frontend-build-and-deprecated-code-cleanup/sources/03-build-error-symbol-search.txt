@@ -1,0 +1,99 @@
+web/src/test-utils/mockRuntimeEvents.ts:35:    kind: RuntimeEventKind.OP_COMPLETED,
+web/src/test-utils/mockRuntimeEvents.ts:61:  RuntimeEventKind.WORKFLOW_STARTED,
+web/src/test-utils/mockRuntimeEvents.ts:62:  RuntimeEventKind.OP_DISPATCHED,
+web/src/test-utils/mockRuntimeEvents.ts:63:  RuntimeEventKind.OP_COMPLETED,
+web/src/test-utils/mockRuntimeEvents.ts:65:  RuntimeEventKind.OP_ERROR,
+web/src/stories/msw/handlers.ts:2:import type { ArtifactSummary } from '../api/types';
+web/src/stories/msw/handlers.ts:3:import type { WorkflowOp } from '../api/types';
+web/src/stories/msw/handlers.ts:4:import type { WorkflowResultSummary } from '../api/types';
+web/src/stories/msw/handlers.ts:8:export const STORY_WORKFLOW_ID = 'story-workflow-000';
+web/src/stories/msw/handlers.ts:13:    opID: `${STORY_WORKFLOW_ID}:extract`,
+web/src/stories/msw/handlers.ts:14:    workflowID: STORY_WORKFLOW_ID,
+web/src/stories/msw/handlers.ts:20:    previewable: true,
+web/src/stories/msw/handlers.ts:33:    previewable: true,
+web/src/stories/msw/handlers.ts:49:    previewable: true,
+web/src/stories/msw/handlers.ts:58:    previewable: false,
+web/src/stories/msw/handlers.ts:62:export function makeWorkflowOp(overrides: Partial<import('../api/types').WorkflowOp['op']> = {}): WorkflowOp['op'] {
+web/src/stories/msw/handlers.ts:64:    ID: `${STORY_WORKFLOW_ID}:extract`,
+web/src/stories/msw/handlers.ts:65:    WorkflowID: STORY_WORKFLOW_ID,
+web/src/stories/msw/handlers.ts:162:export const STORY_RESULTS: WorkflowResultSummary[] = [
+web/src/stories/msw/handlers.ts:164:    opID: `${STORY_WORKFLOW_ID}:fetch`,
+web/src/stories/msw/handlers.ts:174:    opID: `${STORY_WORKFLOW_ID}:extract`,
+web/src/stories/msw/handlers.ts:184:    opID: `${STORY_WORKFLOW_ID}:page-2-fetch`,
+web/src/stories/msw/handlers.ts:194:    opID: `${STORY_WORKFLOW_ID}:page-2-extract`,
+web/src/stories/msw/handlers.ts:234:  http.get(`/api/v1/workflows/${STORY_WORKFLOW_ID}/ops/${STORY_WORKFLOW_ID}:extract/result`, () => {
+web/src/stories/msw/handlers.ts:237:        OpID: `${STORY_WORKFLOW_ID}:extract`,
+web/src/stories/msw/handlers.ts:261:  http.get(`/api/v1/workflows/${STORY_WORKFLOW_ID}/ops/${STORY_WORKFLOW_ID}:page-2-extract/result`, () => {
+web/src/stories/msw/handlers.ts:264:        OpID: `${STORY_WORKFLOW_ID}:page-2-extract`,
+web/src/stories/__fixtures__/factories.ts:14:} from '../../api/types';
+web/src/api/workflowApi.ts:9:  WorkflowResultSummary,
+web/src/api/types.ts:207:  previewable: boolean;
+web/src/api/types.ts:217:export interface WorkflowResultSummary {
+web/src/api/types.ts:231:  results: WorkflowResultSummary[];
+web/src/pages/SitesListPage.tsx:5:import type { SiteSummary } from '../api/types';
+web/src/components/results/ResultsTable.stories.tsx:30:    selectedId: `${STORY_WORKFLOW_ID}:extract`,
+web/src/components/results/ResultsPanel.stories.tsx:3:import { defaultResultsHandlers, emptyResultsHandlers, STORY_WORKFLOW_ID } from '../../stories/msw/handlers';
+web/src/components/results/ResultsPanel.stories.tsx:20:    workflowId: STORY_WORKFLOW_ID,
+web/src/components/results/ResultsPanel.stories.tsx:31:    workflowId: STORY_WORKFLOW_ID,
+web/src/components/results/ResultFilterBar.tsx:14:import type { WorkflowOp } from '../../api/types';
+web/src/components/sites/SiteCard.tsx:2:import type { SiteDetail } from '../../api/types';
+web/src/components/results/ResultFilterBar.stories.tsx:5:import { defaultResultsHandlers, STORY_WORKFLOW_ID } from '../../stories/msw/handlers';
+web/src/components/results/ResultFilterBar.stories.tsx:6:import type { WorkflowOp } from '../../api/types';
+web/src/components/results/ResultFilterBar.stories.tsx:41:      opId: `${STORY_WORKFLOW_ID}:extract`,
+web/src/components/results/ResultsTable.tsx:15:import type { WorkflowResultSummary } from '../../api/types';
+web/src/components/results/ResultsTable.tsx:18:  results: WorkflowResultSummary[];
+web/src/components/results/ResultsPanel.tsx:14:import type { WorkflowOp } from '../../api/types';
+web/src/components/results/ActiveResultFilterChips.tsx:10:const FIELD_LABELS: Record<keyof ResultFilters, string> = {
+web/src/components/sites/SiteVerbList.tsx:16:import type { VerbSummary } from '../../api/types';
+web/src/components/results/ResultPreviewPanel.tsx:13:import type { OpResult, WorkflowResultSummary } from '../../api/types';
+web/src/components/results/ResultPreviewPanel.tsx:17:  result: WorkflowResultSummary | null;
+web/src/components/overview/StatCardRow.tsx:3:import type { EngineStatus } from '../../api/types';
+web/src/components/overview/QueueHealthPreview.tsx:2:import type { QueueStatus } from '../../api/types';
+web/src/components/overview/OpStatusBreakdown.tsx:2:import type { OpStatus } from '../../api/types';
+web/src/components/artifacts/FilterBar.tsx:14:import type { WorkflowOp } from '../../api/types';
+web/src/components/artifacts/ArtifactTable.tsx:21:import type { ArtifactSummary } from '../../api/types';
+web/src/components/submit/VerbParameterForm.tsx:13:import type { VerbSummary, FieldSummary } from '../../api/types';
+web/src/components/artifacts/ArtifactPreviewPanel.stories.tsx:44:      previewable: true,
+web/src/components/artifacts/ArtifactPreviewPanel.stories.tsx:66:  name: 'Binary artifact (non-previewable)',
+web/src/components/artifacts/ArtifactPreviewPanel.stories.tsx:74:      previewable: false,
+web/src/components/submit/VerbParameterForm.stories.tsx:3:import type { VerbSummary } from '../../api/types';
+web/src/components/artifacts/ArtifactTable.stories.tsx:2:import type { ArtifactSummary } from '../../api/types';
+web/src/components/artifacts/ArtifactTable.stories.tsx:28:    previewable: true,
+web/src/components/common/CodeViewPanel.tsx:2:import { Box, Button, Collapse, IconButton, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
+web/src/components/common/CodeViewPanel.tsx:143:            <ToggleButtonGroup size="small">
+web/src/components/common/CodeViewPanel.tsx:145:                <ToggleButton
+web/src/components/common/CodeViewPanel.tsx:152:                </ToggleButton>
+web/src/components/common/CodeViewPanel.tsx:154:            </ToggleButtonGroup>
+web/src/components/artifacts/ArtifactsPanel.stories.tsx:6:  STORY_WORKFLOW_ID,
+web/src/components/artifacts/ArtifactsPanel.stories.tsx:26:    workflowId: STORY_WORKFLOW_ID,
+web/src/components/artifacts/ArtifactsPanel.stories.tsx:36:    workflowId: STORY_WORKFLOW_ID,
+web/src/components/common/AlertBanner.stories.tsx:14:      onDismiss={() => setShow(false)}
+web/src/components/common/AlertBanner.stories.tsx:58:export const NonDismissible: Story = {
+web/src/components/submit/SitePicker.tsx:1:import { ToggleButton, ToggleButtonGroup } from '@mui/material';
+web/src/components/submit/SitePicker.tsx:2:import type { SiteSummary } from '../../api/types';
+web/src/components/submit/SitePicker.tsx:12:    <ToggleButtonGroup
+web/src/components/submit/SitePicker.tsx:23:        <ToggleButton key={site.name} value={site.name} sx={{ textTransform: 'none' }}>
+web/src/components/submit/SitePicker.tsx:25:        </ToggleButton>
+web/src/components/submit/SitePicker.tsx:27:    </ToggleButtonGroup>
+web/src/components/workflows/RuntimeEventTable.stories.tsx:33:    const rows = canvas.getAllByRole('row');
+web/src/components/submit/VerbPicker.tsx:10:import type { VerbSummary } from '../../api/types';
+web/src/components/artifacts/ArtifactPreviewPanel.tsx:15:import type { ArtifactSummary } from '../../api/types';
+web/src/components/artifacts/ArtifactPreviewPanel.tsx:60:    if (!artifact.previewable) {
+web/src/components/artifacts/ArtifactPreviewPanel.tsx:104:  const isPreviewable = artifact.previewable && (artifact.contentType === 'text/html' || artifact.contentType === 'text/plain' || artifact.contentType === 'application/json');
+web/src/components/workflows/WorkflowProgressBar.tsx:2:import type { WorkflowStats } from '../../api/types';
+web/src/components/artifacts/FilterBar.stories.tsx:5:import type { WorkflowOp } from '../../api/types';
+web/src/components/workflows/WorkflowTable.tsx:15:import type { WorkflowListItem } from '../../api/types';
+web/src/components/artifacts/ArtifactList.tsx:6:import type { ArtifactSummary } from '../../api/types';
+web/src/components/workflows/OpDetailDrawer.tsx:14:import type { WorkflowOp, OpResult, ArtifactSummary } from '../../api/types';
+web/src/components/common/StatusChip.tsx:2:import type { WorkflowStatus, OpStatus } from '../../api/types';
+web/src/components/artifacts/ActiveFilterChips.tsx:11:const FIELD_LABELS: Record<keyof ArtifactFilters, string> = {
+web/src/components/workflows/CancelWorkflowButton.tsx:3:import type { WorkflowStatus } from '../../api/types';
+web/src/components/workflows/WorkflowHeader.tsx:2:import type { WorkflowSummary } from '../../api/types';
+web/src/components/artifacts/ArtifactsPanel.tsx:7:import type { WorkflowOp } from '../../api/types';
+web/src/components/workflows/WorkflowTable.stories.tsx:4:import type { WorkflowStatus } from '../../api/types';
+web/src/components/workflows/OpTable.tsx:12:import type { WorkflowOp } from '../../api/types';
+web/src/components/queues/QueueDetailPanel.tsx:2:import type { QueueStatus } from '../../api/types';
+web/src/components/queues/QueueStatusTable.tsx:14:import type { QueueStatus } from '../../api/types';
+web/src/components/workflows/op-detail/OpArtifactsTab.tsx:2:import type { ArtifactSummary } from '../../../api/types';
+web/src/components/workflows/op-detail/OpDepsTab.tsx:9:import type { Dependency } from '../../../api/types';
+web/src/components/workflows/op-detail/OpResultTab.tsx:2:import type { OpResult, WorkflowOp } from '../../../api/types';
