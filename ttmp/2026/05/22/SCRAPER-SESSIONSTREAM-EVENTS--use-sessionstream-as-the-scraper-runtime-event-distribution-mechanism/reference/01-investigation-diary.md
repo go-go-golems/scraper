@@ -617,3 +617,100 @@ New websocket endpoint:
 ```text
 GET /api/v1/runtime-events/ws
 ```
+
+## Step 6: Move the frontend runtime-event feed to sessionstream websocket
+
+I implemented Phase 3 by replacing the frontend runtime-event RTK Query endpoint's REST/SSE behavior with a sessionstream websocket subscriber. The cache now starts empty, subscribes to either `runtime:global` or `workflow:<id>`, hydrates from sessionstream snapshot entities, and applies live `RuntimeEventAppended` UI events.
+
+This keeps the existing page/component consumers mostly stable because the API still exposes `useGetRecentRuntimeEventsQuery` and `decodeRuntimeEvent`, but the transport underneath is no longer REST/EventSource. Op-, site-, and worker-level query parameters are applied client-side against the subscribed global/workflow session.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 4)
+
+**Assistant interpretation:** Continue the incremental implementation by replacing the frontend event stream transport and recording validation status.
+
+**Inferred user intent:** The user wants the old frontend REST/SSE dependency removed so the whole runtime-event path runs through sessionstream.
+
+**Commit (code):** `d00312f93f504427fd381e5a9d4dc5f50bdd102d` — "Runtime events: use sessionstream websocket in frontend"
+
+### What I did
+
+- Rewrote `web/src/api/runtimeEventsApi.ts` to use `fakeBaseQuery` plus `onCacheEntryAdded` websocket lifecycle management.
+- Added manual JSON handling for sessionstream websocket frames:
+  - subscribe frame to `runtime:global` or `workflow:<workflowId>`;
+  - snapshot frames containing `RuntimeEventEntity` payloads;
+  - UI event frames named `scraper.runtime.RuntimeEventAppended`.
+- Decoded scraper wrapper protobufs with generated Buf TypeScript schemas:
+  - `RuntimeEventEntitySchema`
+  - `RuntimeEventAppendedSchema`
+  - existing `RuntimeEventV1Schema`
+- Kept cache values as protobuf JSON so existing page code that calls `decodeRuntimeEvent` remains compatible.
+- Removed the stale MSW REST runtime-events handler by turning `runtimeEventsHandlers` into an empty handler list with an explanatory comment.
+
+### Why
+
+- The backend no longer serves REST or SSE runtime-event routes after Phase 2.
+- Sessionstream snapshots replace the old initial REST fetch.
+- Sessionstream UI events replace the old EventSource live stream.
+
+### What worked
+
+- Frontend unit tests passed:
+
+```bash
+cd scraper/web && pnpm test:unit -- --runInBand
+```
+
+### What didn't work
+
+- Full frontend build still fails, but the failures appear pre-existing and unrelated to the runtime-event websocket change. The command was:
+
+```bash
+cd scraper/web && pnpm build
+```
+
+- The reported failures include unused imports, story type errors, missing story fixture imports, and stale mock enum values such as `RuntimeEventKind.OP_COMPLETED` and `RuntimeEventKind.WORKFLOW_STARTED`, which do not exist in the generated enum. Example errors:
+
+```text
+src/api/workflowApi.ts(9,3): error TS6196: 'WorkflowResultSummary' is declared but never used.
+src/components/common/AlertBanner.stories.tsx(14,7): error TS2322: Type ... Property 'onDismiss' does not exist on type 'AlertBannerProps'.
+src/test-utils/mockRuntimeEvents.ts(35,28): error TS2339: Property 'OP_COMPLETED' does not exist on type 'typeof RuntimeEventKind'.
+src/test-utils/mockRuntimeEvents.ts(61,20): error TS2551: Property 'WORKFLOW_STARTED' does not exist on type 'typeof RuntimeEventKind'. Did you mean 'WORKFLOW_CREATED'?
+```
+
+### What I learned
+
+- The sessionstream websocket transport is easy to consume as protobuf JSON without generated transport TypeScript bindings, but the payload `Any` needs the `@type` field stripped before decoding the concrete wrapper message with `fromJson`.
+- Keeping the RTK Query cache as `RuntimeEventV1` JSON minimized changes to existing pages and tables.
+
+### What was tricky to build
+
+- The main frontend tradeoff was transport typing. The scraper repo now generates TypeScript for scraper wrapper protobufs, but not for `sessionstream.v1.ServerFrame`. I used a small local frame JSON type for transport shape and generated protobuf schemas for all scraper payloads. This avoids copying sessionstream transport proto into scraper while still keeping scraper-specific data protobuf-defined.
+- Another tricky point was preserving op-detail behavior. Since the backend currently publishes global and workflow sessions, the frontend subscribes to `workflow:<id>` when available and applies `opId`, `site`, and `workerId` filters client-side.
+
+### What warrants a second pair of eyes
+
+- Review whether scraper should generate TypeScript bindings for `sessionstream.v1.transport.proto` instead of using local JSON frame types.
+- Review whether op-, worker-, and site-specific session IDs should be added before relying on client-side filtering for those views.
+- Review storybook behavior because REST runtime event MSW mocks were removed and page-level stories may now render an empty websocket-backed cache.
+
+### What should be done in the future
+
+- Fix or separately ticket the pre-existing TypeScript build failures.
+- Consider generating sessionstream transport TypeScript bindings if the websocket client grows beyond the current small frame subset.
+
+### Code review instructions
+
+- Start with `web/src/api/runtimeEventsApi.ts`.
+- Review snapshot decoding (`RuntimeEventEntity`) and live UI-event decoding (`RuntimeEventAppended`).
+- Validate with:
+  - `cd scraper/web && pnpm test:unit -- --runInBand`
+
+### Technical details
+
+The frontend now sends subscribe frames like:
+
+```json
+{"subscribe":{"sessionId":"workflow:example","sinceSnapshotOrdinal":"0"}}
+```

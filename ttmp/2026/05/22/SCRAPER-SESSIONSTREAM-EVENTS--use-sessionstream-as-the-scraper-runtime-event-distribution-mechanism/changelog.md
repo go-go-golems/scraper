@@ -77,3 +77,13 @@ Phase 2: replaced backend REST/SSE runtime-event infrastructure with sessionstre
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/api/server/server_test.go — Websocket snapshot/live runtime event integration test
 - /home/manuel/workspaces/2026-03-23/js-scraper/scraper/pkg/runtimeevents/publisher.go — Context-aware runtime event publisher interface
 
+
+## 2026-05-22
+
+Phase 3: moved frontend runtime-event cache updates from REST/SSE EventSource to sessionstream websocket snapshots and UI events (commit d00312f93f504427fd381e5a9d4dc5f50bdd102d).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/api/runtimeEventsApi.ts — Sessionstream websocket runtime event client and RTK Query integration
+- /home/manuel/workspaces/2026-03-23/js-scraper/scraper/web/src/mocks/runtimeEventsHandlers.ts — Removed stale REST runtime-events MSW mock
+

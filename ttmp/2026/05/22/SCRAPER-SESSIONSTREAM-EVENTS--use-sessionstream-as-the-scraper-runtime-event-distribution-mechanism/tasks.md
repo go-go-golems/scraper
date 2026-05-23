@@ -33,12 +33,12 @@
 
 ### Phase 3 — Move frontend runtime-event feed to sessionstream websocket only
 
-- [ ] Replace `EventSource`/REST runtime event API usage with a sessionstream websocket client.
-- [ ] Decode `sessionstream.v1.ServerFrame` and scraper `RuntimeEventAppended`/`RuntimeEventEntity` protobuf `Any` payloads in TypeScript.
-- [ ] Update global runtime events, workflow detail, and op runtime tab consumers to use websocket snapshots/live UI events.
-- [ ] Remove MSW/runtime-events REST mocks or rewrite them around websocket-independent component stories/tests.
-- [ ] Validate Phase 3 with frontend tests/build.
-- [ ] Commit Phase 3.
+- [x] Replace `EventSource`/REST runtime event API usage with a sessionstream websocket client.
+- [x] Decode `sessionstream.v1.ServerFrame` and scraper `RuntimeEventAppended`/`RuntimeEventEntity` protobuf `Any` payloads in TypeScript.
+- [x] Update global runtime events, workflow detail, and op runtime tab consumers to use websocket snapshots/live UI events.
+- [x] Remove MSW/runtime-events REST mocks or rewrite them around websocket-independent component stories/tests.
+- [x] Validate Phase 3 with frontend tests/build.
+- [x] Commit Phase 3.
 
 ### Phase 4 — Final validation, docs, diary, and reMarkable refresh
 
