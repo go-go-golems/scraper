@@ -14,11 +14,13 @@ import (
 	"github.com/go-go-golems/scraper/pkg/engine/scheduler"
 	storecontract "github.com/go-go-golems/scraper/pkg/engine/store"
 	sqlitestore "github.com/go-go-golems/scraper/pkg/engine/store/sqlite"
+	"github.com/go-go-golems/scraper/pkg/services/engineview"
 )
 
 // StoreConfig opens the durable runtime store used by Runtime.
 type StoreConfig interface {
 	Open(context.Context) (storecontract.Store, func() error, error)
+	OperatorService() OperatorService
 }
 
 type sqliteStoreConfig struct {
@@ -28,6 +30,13 @@ type sqliteStoreConfig struct {
 // SQLiteStore configures Runtime to use the existing SQLite engine store.
 func SQLiteStore(path string) StoreConfig {
 	return sqliteStoreConfig{path: path}
+}
+
+func (c sqliteStoreConfig) OperatorService() OperatorService {
+	if c.path == "" {
+		return nil
+	}
+	return engineview.NewService(c.path)
 }
 
 func (c sqliteStoreConfig) Open(ctx context.Context) (storecontract.Store, func() error, error) {
@@ -71,6 +80,7 @@ type Runtime struct {
 	closeStore func() error
 	runners    *runner.Registry
 	scheduler  *scheduler.Scheduler
+	operators  OperatorService
 	packages   map[string]*Package
 	queues     map[model.QueueKey]QueueConfig
 }
@@ -99,6 +109,7 @@ func NewRuntime(ctx context.Context, cfg Config) (*Runtime, error) {
 		closeStore: closeStore,
 		runners:    runners,
 		scheduler:  s,
+		operators:  cfg.Store.OperatorService(),
 		packages:   map[string]*Package{},
 		queues:     cfg.Queues,
 	}
@@ -239,6 +250,40 @@ func (rt *Runtime) RunOnce(ctx context.Context) (*scheduler.CycleResult, error) 
 		return nil, fmt.Errorf("workflow runtime scheduler is not configured")
 	}
 	return rt.scheduler.RunOnce(ctx)
+}
+
+// StartWorkers runs scheduler cycles until ctx is canceled. It is intentionally
+// context-driven so embedded applications can use their own lifecycle manager.
+func (rt *Runtime) StartWorkers(ctx context.Context, opts ...WorkerOption) error {
+	if rt == nil || rt.scheduler == nil {
+		return fmt.Errorf("workflow runtime scheduler is not configured")
+	}
+	options := workerOptions{PollInterval: 250 * time.Millisecond}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&options)
+		}
+	}
+	if options.PollInterval <= 0 {
+		options.PollInterval = 250 * time.Millisecond
+	}
+	for {
+		if options.MaxCycles > 0 && options.cycles >= options.MaxCycles {
+			return nil
+		}
+		if _, err := rt.RunOnce(ctx); err != nil {
+			return err
+		}
+		options.cycles++
+		if options.MaxCycles > 0 && options.cycles >= options.MaxCycles {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(options.PollInterval):
+		}
+	}
 }
 
 func (rt *Runtime) Result(ctx context.Context, runID model.WorkflowID, stepID model.OpID) (*model.OpResult, error) {

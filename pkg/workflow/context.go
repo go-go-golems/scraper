@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -64,6 +65,35 @@ func (s *StepContext) Input(out any) error {
 // RawInput returns a copy of the raw JSON input for advanced executors.
 func (s *StepContext) RawInput() json.RawMessage {
 	return append(json.RawMessage(nil), s.run.Op.Input...)
+}
+
+// DependencyResult loads a completed dependency result by step/op ID.
+func (s *StepContext) DependencyResult(opID model.OpID) (*model.OpResult, error) {
+	if s.run.Dependencies == nil {
+		return nil, fmt.Errorf("dependency resolver is not configured")
+	}
+	return s.run.Dependencies.Result(context.Background(), s.run.Op.WorkflowID, opID)
+}
+
+// DependencyData decodes a dependency result's Data field into out.
+func (s *StepContext) DependencyData(opID model.OpID, out any) error {
+	if out == nil {
+		return fmt.Errorf("dependency data target is nil")
+	}
+	result, err := s.DependencyResult(opID)
+	if err != nil {
+		return err
+	}
+	if result == nil {
+		return fmt.Errorf("dependency result %s not found", opID)
+	}
+	if len(result.Data) == 0 || string(result.Data) == "null" {
+		return nil
+	}
+	if err := json.Unmarshal(result.Data, out); err != nil {
+		return fmt.Errorf("decode dependency result %s data: %w", opID, err)
+	}
+	return nil
 }
 
 // Result stores structured step result data. It is serialized into the engine

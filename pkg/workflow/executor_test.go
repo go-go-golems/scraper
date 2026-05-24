@@ -79,6 +79,34 @@ func TestTypedExecutorAdapterBuildsOpResult(t *testing.T) {
 	require.Equal(t, []model.OpID{"wf-1:child"}, result.EmittedIDs)
 }
 
+type staticDependencyResolver struct {
+	results map[model.OpID]*model.OpResult
+}
+
+func (r staticDependencyResolver) Result(ctx context.Context, workflowID model.WorkflowID, opID model.OpID) (*model.OpResult, error) {
+	return r.results[opID], nil
+}
+
+func TestStepContextDependencyData(t *testing.T) {
+	exec := NewExecutor("example/dep", func(ctx context.Context, step *StepContext) error {
+		var dep exampleInput
+		require.NoError(t, step.DependencyData("dep-1", &dep))
+		require.Equal(t, "from dependency", dep.Message)
+		return step.Result(map[string]any{"dep": dep.Message})
+	})
+
+	result, err := ToRunner(exec).Run(context.Background(), runner.RunContext{
+		Workflow: model.WorkflowRun{ID: "wf-1"},
+		Op:       model.OpSpec{ID: "op-1", WorkflowID: "wf-1"},
+		Now:      time.Now().UTC(),
+		Dependencies: staticDependencyResolver{results: map[model.OpID]*model.OpResult{
+			"dep-1": {OpID: "dep-1", Data: json.RawMessage(`{"message":"from dependency","count":7}`)},
+		}},
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"dep":"from dependency"}`, string(result.Data))
+}
+
 func TestRegistryRejectsDuplicateExecutorKind(t *testing.T) {
 	registry := NewRegistry()
 	require.NoError(t, registry.Register(NewExecutor("example", func(context.Context, *StepContext) error { return nil })))

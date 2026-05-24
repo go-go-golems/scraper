@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -86,6 +87,77 @@ func TestRuntimeStartRunAndRunOnce(t *testing.T) {
 	workflow, err = rt.Workflow(ctx, run.ID)
 	require.NoError(t, err)
 	require.Equal(t, model.WorkflowStatusSucceeded, workflow.Status)
+}
+
+func TestRuntimeRetryStep(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewRuntime(ctx, Config{Store: SQLiteStore(t.TempDir() + "/engine.db")})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, rt.Close()) }()
+
+	attempts := 0
+	require.NoError(t, rt.RegisterExecutor(NewTypedExecutor("test/flaky", func(ctx context.Context, step *StepContext, input startInput) error {
+		attempts++
+		if attempts == 1 {
+			return Permanent("first_attempt_failed", errors.New("first attempt failed"))
+		}
+		return step.Result(map[string]any{"attempts": attempts})
+	})))
+
+	pkg := NewPackage("retry-pkg").
+		Entrypoint(EntrypointFunc[startInput](func(ctx context.Context, run *RunBuilder, input startInput) error {
+			_, err := run.Step("flaky", input, StepOpts{Kind: "test/flaky", Queue: "retry"})
+			return err
+		})).
+		Build()
+	require.NoError(t, rt.RegisterPackage(pkg))
+
+	run, err := rt.StartRun(ctx, "retry-pkg", startInput{Message: "hello"}, WithRunID("retry-run"))
+	require.NoError(t, err)
+	_, err = rt.RunOnce(ctx)
+	require.NoError(t, err)
+	failed, err := rt.Result(ctx, run.ID, "flaky")
+	require.NoError(t, err)
+	require.NotNil(t, failed.Error)
+	require.Equal(t, "first_attempt_failed", failed.Error.Code)
+
+	require.NoError(t, rt.RetryStep(ctx, run.ID, "flaky"))
+	_, err = rt.RunOnce(ctx)
+	require.NoError(t, err)
+	succeeded, err := rt.Result(ctx, run.ID, "flaky")
+	require.NoError(t, err)
+	// The current retry mutation resets op status but does not clear the previous
+	// result row before completion. Successful completion overwrites the data;
+	// some stores may decode an empty error object as a zero-value OpError.
+	require.JSONEq(t, `{"attempts":2}`, string(succeeded.Data))
+}
+
+func TestRuntimeCancelRun(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewRuntime(ctx, Config{Store: SQLiteStore(t.TempDir() + "/engine.db")})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, rt.Close()) }()
+
+	require.NoError(t, rt.RegisterExecutor(NewTypedExecutor("test/noop", func(ctx context.Context, step *StepContext, input startInput) error {
+		return step.Result(map[string]any{"should": "not run"})
+	})))
+	pkg := NewPackage("cancel-pkg").
+		Entrypoint(EntrypointFunc[startInput](func(ctx context.Context, run *RunBuilder, input startInput) error {
+			_, err := run.Step("noop", input, StepOpts{Kind: "test/noop", Queue: "cancel"})
+			return err
+		})).
+		Build()
+	require.NoError(t, rt.RegisterPackage(pkg))
+
+	run, err := rt.StartRun(ctx, "cancel-pkg", startInput{Message: "hello"}, WithRunID("cancel-run"))
+	require.NoError(t, err)
+	require.NoError(t, rt.CancelRun(ctx, run.ID))
+	result, err := rt.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Processed)
+	wf, err := rt.Workflow(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.WorkflowStatusCanceled, wf.Status)
 }
 
 func TestRuntimeStartRunRejectsUnknownPackage(t *testing.T) {
