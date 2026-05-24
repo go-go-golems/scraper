@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rs/zerolog"
+
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	"github.com/go-go-golems/scraper/pkg/workflow"
 	"github.com/go-go-golems/scraper/pkg/workflows/ocrmvp"
@@ -73,7 +75,7 @@ func printUsage() {
   ocr-mvp cancel --work-dir DIR --run-id RUN_ID
   ocr-mvp pages --work-dir DIR --book-id BOOK_ID [--status STATUS]
 
-Run flags include --book-id, --image-dir, --work-dir, --profile, --profile-registries, --dry-run, and --max-workers.
+Run flags include --book-id, --image-dir, --work-dir, --profile, --profile-registries, --prompt-version, --log-level, --dry-run, and --max-workers.
 `)
 }
 
@@ -88,12 +90,16 @@ func runWorkflow(args []string) error {
 	workDir := fs.String("work-dir", defaultWorkDir, "Directory for engine DB, artifacts, and projections")
 	profile := fs.String("profile", "", "Optional Pinocchio profile slug; empty uses Pinocchio defaults")
 	promptVersion := fs.String("prompt-version", ocrmvp.DefaultPromptVersion, "OCR prompt version to use")
+	logLevel := fs.String("log-level", "info", "zerolog level: trace, debug, info, warn, error, disabled")
 	dryRun := fs.Bool("dry-run", false, "Use deterministic dry-run OCR instead of live Geppetto inference")
 	maxWorkers := fs.Int("max-workers", 4, "Maximum concurrent workflow workers")
 	pollInterval := fs.Duration("poll-interval", 250*time.Millisecond, "Worker polling interval")
 	runID := fs.String("run-id", "", "Optional stable workflow run ID")
 	fs.Var(&registries, "profile-registries", "Pinocchio profile registry source (repeatable or comma-separated)")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := configureLogLevel(*logLevel); err != nil {
 		return err
 	}
 
@@ -345,6 +351,23 @@ func newRuntime(ctx context.Context, paths workPaths, maxWorkers int, pollInterv
 			ocrmvp.QueueAssemble: {MaxWorkers: 1},
 		},
 	})
+}
+
+func configureLogLevel(value string) error {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		value = "info"
+	}
+	if value == "disabled" || value == "off" || value == "none" {
+		zerolog.SetGlobalLevel(zerolog.Disabled)
+		return nil
+	}
+	level, err := zerolog.ParseLevel(value)
+	if err != nil {
+		return fmt.Errorf("invalid --log-level %q: %w", value, err)
+	}
+	zerolog.SetGlobalLevel(level)
+	return nil
 }
 
 func printPageRows(rows []map[string]any) {
