@@ -101,7 +101,7 @@ func (p sqliteProjection) Query(ctx context.Context, query string, args ...any) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	cols, err := rows.Columns()
 	if err != nil {
 		return nil, err
