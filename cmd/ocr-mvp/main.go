@@ -87,6 +87,7 @@ func runWorkflow(args []string) error {
 	endPage := fs.Int("end-page", 0, "Optional last page number to process")
 	workDir := fs.String("work-dir", defaultWorkDir, "Directory for engine DB, artifacts, and projections")
 	profile := fs.String("profile", "", "Optional Pinocchio profile slug; empty uses Pinocchio defaults")
+	promptVersion := fs.String("prompt-version", ocrmvp.DefaultPromptVersion, "OCR prompt version to use")
 	dryRun := fs.Bool("dry-run", false, "Use deterministic dry-run OCR instead of live Geppetto inference")
 	maxWorkers := fs.Int("max-workers", 4, "Maximum concurrent workflow workers")
 	pollInterval := fs.Duration("poll-interval", 250*time.Millisecond, "Worker polling interval")
@@ -139,7 +140,7 @@ func runWorkflow(args []string) error {
 		EndPage:           *endPage,
 		Profile:           *profile,
 		ProfileRegistries: append([]string(nil), registries...),
-		PromptVersion:     ocrmvp.DefaultPromptVersion,
+		PromptVersion:     *promptVersion,
 		DryRun:            *dryRun,
 	}, runOpts...)
 	if err != nil {
