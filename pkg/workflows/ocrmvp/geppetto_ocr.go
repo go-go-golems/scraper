@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-go-golems/geppetto/pkg/turns"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 	"github.com/go-go-golems/pinocchio/pkg/cmds/profilebootstrap"
 )
 
@@ -18,10 +19,7 @@ func NewGeppettoOCRClient() *GeppettoOCRClient {
 }
 
 func (c *GeppettoOCRClient) OCRPage(ctx context.Context, input PageOCRInput, imageBytes []byte) (OCRTextResult, error) {
-	parsed, err := profilebootstrap.NewCLISelectionValues(profilebootstrap.CLISelectionInput{
-		Profile:           input.Profile,
-		ProfileRegistries: append([]string(nil), input.ProfileRegistries...),
-	})
+	parsed, err := newPinocchioSelectionValues(input)
 	if err != nil {
 		return OCRTextResult{}, fmt.Errorf("build pinocchio profile selection: %w", err)
 	}
@@ -62,6 +60,13 @@ func (c *GeppettoOCRClient) OCRPage(ctx context.Context, input PageOCRInput, ima
 		result.RegistrySlug = resolved.ResolvedEngineProfile.RegistrySlug.String()
 	}
 	return result, nil
+}
+
+func newPinocchioSelectionValues(input PageOCRInput) (*values.Values, error) {
+	return profilebootstrap.NewCLISelectionValues(profilebootstrap.CLISelectionInput{
+		Profile:           input.Profile,
+		ProfileRegistries: append([]string(nil), input.ProfileRegistries...),
+	})
 }
 
 func mediaTypeFromPath(path string) string {
