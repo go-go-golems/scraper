@@ -88,7 +88,7 @@ func (s *Service) WorkflowOps(ctx context.Context, workflowID model.WorkflowID) 
 	if err != nil {
 		return nil, fmt.Errorf("query workflow ops: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	ret := []WorkflowOp{}
 	for rows.Next() {
@@ -214,7 +214,7 @@ func (s *Service) ListWorkflows(ctx context.Context, opts ListWorkflowsOptions) 
 	if err != nil {
 		return nil, fmt.Errorf("list workflows: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := &WorkflowListResult{Total: total, Workflows: []WorkflowListItem{}}
 	for rows.Next() {

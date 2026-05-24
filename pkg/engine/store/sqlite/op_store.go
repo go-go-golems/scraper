@@ -223,7 +223,7 @@ func (s *Store) ListQueueCandidates(ctx context.Context, now time.Time) ([]store
 	if err != nil {
 		return nil, fmt.Errorf("list queue candidates: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	ret := []storecontract.QueueCandidate{}
 	for rows.Next() {

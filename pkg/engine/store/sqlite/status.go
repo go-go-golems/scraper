@@ -117,20 +117,20 @@ func Inspect(ctx context.Context, dsn string) (*EngineStatus, error) {
 	if status.ArtifactCount, err = countTable(ctx, db, "artifacts"); err != nil {
 		return nil, err
 	}
-	if status.ActiveLeases, err = countWhere(
+	if status.ActiveLeases, err = countQuery(
 		ctx,
 		db,
-		"leases",
-		"expires_at > ?",
+		"active leases",
+		`SELECT COUNT(1) FROM leases WHERE expires_at > ?`,
 		time.Now().UTC().Format(time.RFC3339Nano),
 	); err != nil {
 		return nil, err
 	}
-	if status.ExpiredLeases, err = countWhere(
+	if status.ExpiredLeases, err = countQuery(
 		ctx,
 		db,
-		"leases",
-		"expires_at <= ?",
+		"expired leases",
+		`SELECT COUNT(1) FROM leases WHERE expires_at <= ?`,
 		time.Now().UTC().Format(time.RFC3339Nano),
 	); err != nil {
 		return nil, err
@@ -158,14 +158,24 @@ func hasTable(ctx context.Context, db *sql.DB, name string) (bool, error) {
 }
 
 func countTable(ctx context.Context, db *sql.DB, table string) (int, error) {
-	return countWhere(ctx, db, table, "1 = 1")
+	var query string
+	switch table {
+	case "workflows":
+		query = `SELECT COUNT(1) FROM workflows`
+	case "results":
+		query = `SELECT COUNT(1) FROM results`
+	case "artifacts":
+		query = `SELECT COUNT(1) FROM artifacts`
+	default:
+		return 0, fmt.Errorf("unsupported count table %q", table)
+	}
+	return countQuery(ctx, db, table, query)
 }
 
-func countWhere(ctx context.Context, db *sql.DB, table, predicate string, args ...any) (int, error) {
-	query := fmt.Sprintf("SELECT COUNT(1) FROM %s WHERE %s", table, predicate)
+func countQuery(ctx context.Context, db *sql.DB, label string, query string, args ...any) (int, error) {
 	var count int
 	if err := db.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
-		return 0, fmt.Errorf("count rows for %s: %w", table, err)
+		return 0, fmt.Errorf("count rows for %s: %w", label, err)
 	}
 	return count, nil
 }
@@ -175,7 +185,7 @@ func countOpsByStatus(ctx context.Context, db *sql.DB) (map[model.OpStatus]int, 
 	if err != nil {
 		return nil, fmt.Errorf("count ops by status: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	ret := map[model.OpStatus]int{}
 	for rows.Next() {
@@ -195,7 +205,7 @@ func countWorkflowsByStatus(ctx context.Context, db *sql.DB) (map[model.Workflow
 	if err != nil {
 		return nil, fmt.Errorf("count workflows by status: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	ret := map[model.WorkflowStatus]int{}
 	for rows.Next() {
@@ -238,7 +248,7 @@ func loadAppliedMigrationStatuses(ctx context.Context, db *sql.DB) ([]MigrationS
 	if err != nil {
 		return nil, fmt.Errorf("query applied migrations: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	appliedAtByVersion := map[int]time.Time{}
 	for rows.Next() {

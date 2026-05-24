@@ -2,7 +2,6 @@ package runtimestream
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -73,31 +72,4 @@ func newTestRuntime(t *testing.T, fanout sessionstream.UIFanout) *Runtime {
 	require.NoError(t, err)
 	require.NoError(t, Install(hub, 16))
 	return &Runtime{Registry: reg, Store: store, Hub: hub, Publisher: NewPublisher(hub), closeStore: store.Close}
-}
-
-type recordingFanout struct {
-	mu      sync.Mutex
-	events  []sessionstream.UIEvent
-	signals chan struct{}
-}
-
-func newRecordingFanout() *recordingFanout {
-	return &recordingFanout{signals: make(chan struct{}, 16)}
-}
-
-func (f *recordingFanout) PublishUI(_ context.Context, _ sessionstream.SessionId, _ uint64, events []sessionstream.UIEvent) error {
-	f.mu.Lock()
-	f.events = append(f.events, events...)
-	f.mu.Unlock()
-	select {
-	case f.signals <- struct{}{}:
-	default:
-	}
-	return nil
-}
-
-func (f *recordingFanout) Len() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.events)
 }

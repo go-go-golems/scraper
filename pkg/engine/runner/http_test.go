@@ -184,7 +184,7 @@ func TestHTTPRunnerUsesExplicitProxyURL(t *testing.T) {
 		req.RequestURI = ""
 		resp, err := http.DefaultTransport.RoundTrip(req)
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		for key, values := range resp.Header {
 			for _, value := range values {

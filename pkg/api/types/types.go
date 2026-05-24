@@ -74,9 +74,9 @@ type OpResultResponse struct {
 }
 
 type WorkflowResultsResponse struct {
-	WorkflowID model.WorkflowID       `json:"workflowID"`
-	Total     int                    `json:"total"`
-	Results   []engineview.ResultSummary `json:"results"`
+	WorkflowID model.WorkflowID           `json:"workflowID"`
+	Total      int                        `json:"total"`
+	Results    []engineview.ResultSummary `json:"results"`
 }
 
 type ScriptListResponse struct {
