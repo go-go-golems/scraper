@@ -58,7 +58,8 @@ func (c sqliteStoreConfig) Open(ctx context.Context) (storecontract.Store, func(
 
 // Config configures an embeddable workflow Runtime.
 type Config struct {
-	Store StoreConfig
+	Store         StoreConfig
+	ArtifactStore ArtifactStore
 
 	WorkerID      string
 	MaxWorkers    int
@@ -81,6 +82,7 @@ type Runtime struct {
 	runners    *runner.Registry
 	scheduler  *scheduler.Scheduler
 	operators  OperatorService
+	artifacts  ArtifactStore
 	packages   map[string]*Package
 	queues     map[model.QueueKey]QueueConfig
 }
@@ -110,6 +112,7 @@ func NewRuntime(ctx context.Context, cfg Config) (*Runtime, error) {
 		runners:    runners,
 		scheduler:  s,
 		operators:  cfg.Store.OperatorService(),
+		artifacts:  cfg.ArtifactStore,
 		packages:   map[string]*Package{},
 		queues:     cfg.Queues,
 	}
@@ -149,6 +152,9 @@ func (rt *Runtime) RegisterExecutor(executor Executor) error {
 	}
 	if executor == nil {
 		return fmt.Errorf("workflow executor is nil")
+	}
+	if rt.artifacts != nil {
+		return rt.runners.Register(toRunnerWithArtifactStore(executor, rt.artifacts))
 	}
 	return rt.runners.Register(ToRunner(executor))
 }

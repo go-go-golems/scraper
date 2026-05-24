@@ -93,7 +93,34 @@ func (r executorRunner) Run(ctx context.Context, runCtx runner.RunContext) (*mod
 	if r.executor == nil {
 		return nil, fmt.Errorf("workflow executor is nil")
 	}
-	step := newStepContext(runCtx)
+	step := newStepContext(ctx, runCtx, nil)
+	if err := r.executor.Execute(ctx, step); err != nil {
+		return nil, err
+	}
+	return step.opResult(), nil
+}
+
+func toRunnerWithArtifactStore(executor Executor, artifacts ArtifactStore) runner.Runner {
+	return executorRunnerWithArtifacts{executor: executor, artifacts: artifacts}
+}
+
+type executorRunnerWithArtifacts struct {
+	executor  Executor
+	artifacts ArtifactStore
+}
+
+func (r executorRunnerWithArtifacts) Kind() string {
+	if r.executor == nil {
+		return ""
+	}
+	return r.executor.Kind()
+}
+
+func (r executorRunnerWithArtifacts) Run(ctx context.Context, runCtx runner.RunContext) (*model.OpResult, error) {
+	if r.executor == nil {
+		return nil, fmt.Errorf("workflow executor is nil")
+	}
+	step := newStepContext(ctx, runCtx, r.artifacts)
 	if err := r.executor.Execute(ctx, step); err != nil {
 		return nil, err
 	}

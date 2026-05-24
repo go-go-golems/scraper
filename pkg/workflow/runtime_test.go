@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -87,6 +88,47 @@ func TestRuntimeStartRunAndRunOnce(t *testing.T) {
 	workflow, err = rt.Workflow(ctx, run.ID)
 	require.NoError(t, err)
 	require.Equal(t, model.WorkflowStatusSucceeded, workflow.Status)
+}
+
+func TestRuntimeExternalFileArtifactStore(t *testing.T) {
+	ctx := context.Background()
+	artifactRoot := t.TempDir() + "/artifacts"
+	rt, err := NewRuntime(ctx, Config{
+		Store:         SQLiteStore(t.TempDir() + "/engine.db"),
+		ArtifactStore: NewFileArtifactStore(artifactRoot),
+	})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, rt.Close()) }()
+
+	require.NoError(t, rt.RegisterExecutor(NewTypedExecutor("test/store-artifact", func(ctx context.Context, step *StepContext, input startInput) error {
+		ref, err := step.StoreArtifact("page.md", "text/markdown", []byte("# "+input.Message), ArtifactKind("markdown"))
+		require.NoError(t, err)
+		require.NotEmpty(t, ref.URI)
+		return step.Result(map[string]any{"artifactID": ref.ID})
+	})))
+	pkg := NewPackage("artifact-pkg").
+		Entrypoint(EntrypointFunc[startInput](func(ctx context.Context, run *RunBuilder, input startInput) error {
+			_, err := run.Step("store", input, StepOpts{Kind: "test/store-artifact", Queue: "artifact"})
+			return err
+		})).
+		Build()
+	require.NoError(t, rt.RegisterPackage(pkg))
+
+	run, err := rt.StartRun(ctx, "artifact-pkg", startInput{Message: "artifact"}, WithRunID("artifact-run"))
+	require.NoError(t, err)
+	_, err = rt.RunOnce(ctx)
+	require.NoError(t, err)
+	result, err := rt.Result(ctx, run.ID, "store")
+	require.NoError(t, err)
+	require.Len(t, result.Artifacts, 1)
+	require.Equal(t, "external-artifact-ref", result.Artifacts[0].Kind)
+	reader, ref, err := NewFileArtifactStore(artifactRoot).Open(ctx, string(result.Artifacts[0].ID))
+	require.NoError(t, err)
+	defer reader.Close()
+	body, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.Equal(t, "# artifact", string(body))
+	require.Equal(t, "page.md", ref.Name)
 }
 
 func TestRuntimeRetryStep(t *testing.T) {

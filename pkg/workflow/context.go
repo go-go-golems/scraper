@@ -16,7 +16,9 @@ import (
 // artifacts, and dynamically emitted child steps that will be persisted by the
 // existing scheduler/store completion path.
 type StepContext struct {
-	run runner.RunContext
+	ctx           context.Context
+	run           runner.RunContext
+	artifactStore ArtifactStore
 
 	data      json.RawMessage
 	records   []model.RecordWrite
@@ -24,8 +26,11 @@ type StepContext struct {
 	emitted   []model.OpSpec
 }
 
-func newStepContext(run runner.RunContext) *StepContext {
-	return &StepContext{run: run}
+func newStepContext(ctx context.Context, run runner.RunContext, artifactStore ArtifactStore) *StepContext {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return &StepContext{ctx: ctx, run: run, artifactStore: artifactStore}
 }
 
 // Workflow returns the current durable workflow run.
@@ -72,7 +77,7 @@ func (s *StepContext) DependencyResult(opID model.OpID) (*model.OpResult, error)
 	if s.run.Dependencies == nil {
 		return nil, fmt.Errorf("dependency resolver is not configured")
 	}
-	return s.run.Dependencies.Result(context.Background(), s.run.Op.WorkflowID, opID)
+	return s.run.Dependencies.Result(s.ctx, s.run.Op.WorkflowID, opID)
 }
 
 // DependencyData decodes a dependency result's Data field into out.
@@ -168,6 +173,52 @@ func (s *StepContext) Artifact(name, contentType string, body []byte, opts ...Ar
 	}
 	s.artifacts = append(s.artifacts, artifact)
 	return artifact.ID, nil
+}
+
+// StoreArtifact stores bytes in the configured external ArtifactStore and adds
+// a small reference artifact to the step result so existing result/artifact APIs
+// can still point operators to the external object.
+func (s *StepContext) StoreArtifact(name, contentType string, body []byte, opts ...ArtifactOption) (ArtifactRef, error) {
+	if s.artifactStore == nil {
+		return ArtifactRef{}, fmt.Errorf("artifact store is not configured")
+	}
+	artifact := model.ArtifactWrite{
+		ID:          model.ArtifactID(fmt.Sprintf("%s:artifact:%03d", s.run.Op.ID, len(s.artifacts)+1)),
+		Name:        strings.TrimSpace(name),
+		Kind:        inferArtifactKind(name, contentType),
+		ContentType: contentType,
+		Metadata:    map[string]string{},
+		Body:        append([]byte(nil), body...),
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&artifact)
+		}
+	}
+	ref, err := s.artifactStore.Put(s.ctx, ArtifactObject{
+		ID:          string(artifact.ID),
+		Name:        artifact.Name,
+		Kind:        artifact.Kind,
+		ContentType: artifact.ContentType,
+		Metadata:    artifact.Metadata,
+		Body:        artifact.Body,
+	})
+	if err != nil {
+		return ArtifactRef{}, err
+	}
+	refBody, err := json.Marshal(ref)
+	if err != nil {
+		return ArtifactRef{}, err
+	}
+	s.artifacts = append(s.artifacts, model.ArtifactWrite{
+		ID:          artifact.ID,
+		Name:        artifact.Name + ".ref.json",
+		Kind:        "external-artifact-ref",
+		ContentType: "application/json",
+		Metadata:    artifact.Metadata,
+		Body:        refBody,
+	})
+	return ref, nil
 }
 
 // StepOpts customizes a dynamically emitted child step.
