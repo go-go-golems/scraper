@@ -58,8 +58,9 @@ func (c sqliteStoreConfig) Open(ctx context.Context) (storecontract.Store, func(
 
 // Config configures an embeddable workflow Runtime.
 type Config struct {
-	Store         StoreConfig
-	ArtifactStore ArtifactStore
+	Store           StoreConfig
+	ArtifactStore   ArtifactStore
+	ProjectionStore ProjectionStore
 
 	WorkerID      string
 	MaxWorkers    int
@@ -77,14 +78,15 @@ type QueueConfig struct {
 // Runtime is the embeddable workflow engine facade. It wraps the existing store,
 // runner registry, and scheduler behind workflow-native concepts.
 type Runtime struct {
-	store      storecontract.Store
-	closeStore func() error
-	runners    *runner.Registry
-	scheduler  *scheduler.Scheduler
-	operators  OperatorService
-	artifacts  ArtifactStore
-	packages   map[string]*Package
-	queues     map[model.QueueKey]QueueConfig
+	store       storecontract.Store
+	closeStore  func() error
+	runners     *runner.Registry
+	scheduler   *scheduler.Scheduler
+	operators   OperatorService
+	artifacts   ArtifactStore
+	projections ProjectionStore
+	packages    map[string]*Package
+	queues      map[model.QueueKey]QueueConfig
 }
 
 func NewRuntime(ctx context.Context, cfg Config) (*Runtime, error) {
@@ -107,14 +109,15 @@ func NewRuntime(ctx context.Context, cfg Config) (*Runtime, error) {
 		return nil, err
 	}
 	rt := &Runtime{
-		store:      store,
-		closeStore: closeStore,
-		runners:    runners,
-		scheduler:  s,
-		operators:  cfg.Store.OperatorService(),
-		artifacts:  cfg.ArtifactStore,
-		packages:   map[string]*Package{},
-		queues:     cfg.Queues,
+		store:       store,
+		closeStore:  closeStore,
+		runners:     runners,
+		scheduler:   s,
+		operators:   cfg.Store.OperatorService(),
+		artifacts:   cfg.ArtifactStore,
+		projections: cfg.ProjectionStore,
+		packages:    map[string]*Package{},
+		queues:      cfg.Queues,
 	}
 	s.SetQueuePolicyProvider(rt.queuePolicy)
 	return rt, nil
@@ -140,10 +143,21 @@ func normalizeConfig(cfg Config) Config {
 }
 
 func (rt *Runtime) Close() error {
-	if rt == nil || rt.closeStore == nil {
+	if rt == nil {
 		return nil
 	}
-	return rt.closeStore()
+	var firstErr error
+	if closer, ok := rt.projections.(interface{ Close() error }); ok {
+		if err := closer.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if rt.closeStore != nil {
+		if err := rt.closeStore(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 func (rt *Runtime) RegisterExecutor(executor Executor) error {
@@ -153,8 +167,8 @@ func (rt *Runtime) RegisterExecutor(executor Executor) error {
 	if executor == nil {
 		return fmt.Errorf("workflow executor is nil")
 	}
-	if rt.artifacts != nil {
-		return rt.runners.Register(toRunnerWithArtifactStore(executor, rt.artifacts))
+	if rt.artifacts != nil || rt.projections != nil {
+		return rt.runners.Register(toRunnerWithStores(executor, rt.artifacts, rt.projections))
 	}
 	return rt.runners.Register(ToRunner(executor))
 }
@@ -290,6 +304,13 @@ func (rt *Runtime) StartWorkers(ctx context.Context, opts ...WorkerOption) error
 		case <-time.After(options.PollInterval):
 		}
 	}
+}
+
+func (rt *Runtime) Projection(ctx context.Context, name string) (Projection, error) {
+	if rt == nil || rt.projections == nil {
+		return nil, fmt.Errorf("workflow runtime projection store is not configured")
+	}
+	return rt.projections.Projection(ctx, name)
 }
 
 func (rt *Runtime) Result(ctx context.Context, runID model.WorkflowID, stepID model.OpID) (*model.OpResult, error) {

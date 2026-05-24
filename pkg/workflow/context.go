@@ -16,9 +16,10 @@ import (
 // artifacts, and dynamically emitted child steps that will be persisted by the
 // existing scheduler/store completion path.
 type StepContext struct {
-	ctx           context.Context
-	run           runner.RunContext
-	artifactStore ArtifactStore
+	ctx             context.Context
+	run             runner.RunContext
+	artifactStore   ArtifactStore
+	projectionStore ProjectionStore
 
 	data      json.RawMessage
 	records   []model.RecordWrite
@@ -26,11 +27,11 @@ type StepContext struct {
 	emitted   []model.OpSpec
 }
 
-func newStepContext(ctx context.Context, run runner.RunContext, artifactStore ArtifactStore) *StepContext {
+func newStepContext(ctx context.Context, run runner.RunContext, artifactStore ArtifactStore, projectionStore ProjectionStore) *StepContext {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return &StepContext{ctx: ctx, run: run, artifactStore: artifactStore}
+	return &StepContext{ctx: ctx, run: run, artifactStore: artifactStore, projectionStore: projectionStore}
 }
 
 // Workflow returns the current durable workflow run.
@@ -173,6 +174,14 @@ func (s *StepContext) Artifact(name, contentType string, body []byte, opts ...Ar
 	}
 	s.artifacts = append(s.artifacts, artifact)
 	return artifact.ID, nil
+}
+
+// Projection resolves a package/domain projection by name.
+func (s *StepContext) Projection(name string) (Projection, error) {
+	if s.projectionStore == nil {
+		return nil, fmt.Errorf("projection store is not configured")
+	}
+	return s.projectionStore.Projection(s.ctx, name)
 }
 
 // StoreArtifact stores bytes in the configured external ArtifactStore and adds

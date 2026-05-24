@@ -131,6 +131,50 @@ func TestRuntimeExternalFileArtifactStore(t *testing.T) {
 	require.Equal(t, "page.md", ref.Name)
 }
 
+func TestRuntimeSQLiteProjectionStore(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewRuntime(ctx, Config{
+		Store:           SQLiteStore(t.TempDir() + "/engine.db"),
+		ProjectionStore: NewSQLiteProjectionStore(t.TempDir() + "/projections"),
+	})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, rt.Close()) }()
+
+	require.NoError(t, rt.RegisterExecutor(NewTypedExecutor("test/projection", func(ctx context.Context, step *StepContext, input startInput) error {
+		projection, err := step.Projection("book-ocr")
+		require.NoError(t, err)
+		_, err = projection.Exec(ctx, `CREATE TABLE IF NOT EXISTS pages(page INTEGER PRIMARY KEY, status TEXT, message TEXT)`)
+		require.NoError(t, err)
+		_, err = projection.Exec(ctx, `INSERT OR REPLACE INTO pages(page, status, message) VALUES(?, ?, ?)`, 1, "done", input.Message)
+		require.NoError(t, err)
+		return step.Result(map[string]any{"projected": true})
+	})))
+	pkg := NewPackage("projection-pkg").
+		Entrypoint(EntrypointFunc[startInput](func(ctx context.Context, run *RunBuilder, input startInput) error {
+			_, err := run.Step("project", input, StepOpts{Kind: "test/projection", Queue: "projection"})
+			return err
+		})).
+		Build()
+	require.NoError(t, rt.RegisterPackage(pkg))
+
+	run, err := rt.StartRun(ctx, "projection-pkg", startInput{Message: "hello projection"}, WithRunID("projection-run"))
+	require.NoError(t, err)
+	_, err = rt.RunOnce(ctx)
+	require.NoError(t, err)
+	result, err := rt.Result(ctx, run.ID, "project")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"projected":true}`, string(result.Data))
+
+	projection, err := rt.Projection(ctx, "book-ocr")
+	require.NoError(t, err)
+	rows, err := projection.Query(ctx, `SELECT page, status, message FROM pages WHERE page = ?`, 1)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, int64(1), rows[0]["page"])
+	require.Equal(t, "done", rows[0]["status"])
+	require.Equal(t, "hello projection", rows[0]["message"])
+}
+
 func TestRuntimeRetryStep(t *testing.T) {
 	ctx := context.Background()
 	rt, err := NewRuntime(ctx, Config{Store: SQLiteStore(t.TempDir() + "/engine.db")})

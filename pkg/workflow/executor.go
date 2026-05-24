@@ -93,34 +93,35 @@ func (r executorRunner) Run(ctx context.Context, runCtx runner.RunContext) (*mod
 	if r.executor == nil {
 		return nil, fmt.Errorf("workflow executor is nil")
 	}
-	step := newStepContext(ctx, runCtx, nil)
+	step := newStepContext(ctx, runCtx, nil, nil)
 	if err := r.executor.Execute(ctx, step); err != nil {
 		return nil, err
 	}
 	return step.opResult(), nil
 }
 
-func toRunnerWithArtifactStore(executor Executor, artifacts ArtifactStore) runner.Runner {
-	return executorRunnerWithArtifacts{executor: executor, artifacts: artifacts}
+func toRunnerWithStores(executor Executor, artifacts ArtifactStore, projections ProjectionStore) runner.Runner {
+	return executorRunnerWithStores{executor: executor, artifacts: artifacts, projections: projections}
 }
 
-type executorRunnerWithArtifacts struct {
-	executor  Executor
-	artifacts ArtifactStore
+type executorRunnerWithStores struct {
+	executor    Executor
+	artifacts   ArtifactStore
+	projections ProjectionStore
 }
 
-func (r executorRunnerWithArtifacts) Kind() string {
+func (r executorRunnerWithStores) Kind() string {
 	if r.executor == nil {
 		return ""
 	}
 	return r.executor.Kind()
 }
 
-func (r executorRunnerWithArtifacts) Run(ctx context.Context, runCtx runner.RunContext) (*model.OpResult, error) {
+func (r executorRunnerWithStores) Run(ctx context.Context, runCtx runner.RunContext) (*model.OpResult, error) {
 	if r.executor == nil {
 		return nil, fmt.Errorf("workflow executor is nil")
 	}
-	step := newStepContext(ctx, runCtx, r.artifacts)
+	step := newStepContext(ctx, runCtx, r.artifacts, r.projections)
 	if err := r.executor.Execute(ctx, step); err != nil {
 		return nil, err
 	}
