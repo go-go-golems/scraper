@@ -13,6 +13,7 @@ import (
 )
 
 var figureMarkerLinePattern = regexp.MustCompile(`^\[FIGURE:\s*(.*?)\]\s*$`)
+var figureCaptionLinePattern = regexp.MustCompile(`^Figure\s+\d+-\d+:\s+(.+?)\s*$`)
 
 type FigureExtractionOptions struct {
 	ImageDir  string
@@ -41,6 +42,8 @@ func EmbedExtractedFigures(markdown string, opts FigureExtractionOptions) (strin
 	if err := os.MkdirAll(opts.OutputDir, 0o755); err != nil {
 		return "", nil, err
 	}
+
+	markdown = synthesizeMissingFigureMarkers(markdown)
 
 	var out strings.Builder
 	var figures []FigureExtraction
@@ -71,6 +74,107 @@ func EmbedExtractedFigures(markdown string, opts FigureExtractionOptions) (strin
 		out.WriteByte('\n')
 	}
 	return strings.TrimRight(out.String(), "\n") + "\n", figures, nil
+}
+
+func synthesizeMissingFigureMarkers(markdown string) string {
+	matches := pageMarkerPattern.FindAllStringSubmatchIndex(markdown, -1)
+	if len(matches) == 0 {
+		return markdown
+	}
+	var out strings.Builder
+	out.WriteString(markdown[:matches[0][0]])
+	for i, match := range matches {
+		marker := markdown[match[0]:match[1]]
+		start := match[1]
+		end := len(markdown)
+		if i+1 < len(matches) {
+			end = matches[i+1][0]
+		}
+		pageText := markdown[start:end]
+		out.WriteString(marker)
+		out.WriteString(addMissingFigureMarkerToPage(pageText))
+	}
+	return out.String()
+}
+
+func addMissingFigureMarkerToPage(pageText string) string {
+	if strings.Contains(pageText, "[FIGURE:") || strings.Contains(pageText, "![") {
+		return pageText
+	}
+	lines := strings.Split(pageText, "\n")
+	captionIndex := -1
+	caption := ""
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		match := figureCaptionLinePattern.FindStringSubmatch(trimmed)
+		if len(match) != 2 || strings.Contains(trimmed, "...") {
+			continue
+		}
+		captionIndex = i
+		caption = strings.TrimSpace(match[1])
+		break
+	}
+	if captionIndex < 0 || !looksLikeDiagramPage(lines, captionIndex) {
+		return pageText
+	}
+	description := "Full-page diagram showing " + strings.TrimSuffix(caption, ".")
+	insert := "[FIGURE: " + description + "]"
+	out := make([]string, 0, len(lines)+1)
+	out = append(out, lines[:captionIndex+1]...)
+	if captionIndex+1 < len(lines) && strings.TrimSpace(lines[captionIndex+1]) != "" {
+		out = append(out, "")
+	}
+	out = append(out, insert)
+	out = append(out, lines[captionIndex+1:]...)
+	return strings.Join(out, "\n")
+}
+
+func looksLikeDiagramPage(lines []string, captionIndex int) bool {
+	nonEmpty := 0
+	shortLines := 0
+	diagramCueLines := 0
+	proseLike := 0
+	for i, line := range lines {
+		if i == captionIndex {
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		nonEmpty++
+		words := strings.Fields(trimmed)
+		if len(words) <= 5 {
+			shortLines++
+		}
+		if strings.Contains(trimmed, "->") || strings.Contains(trimmed, "<-") || strings.Contains(trimmed, "---") || strings.Contains(trimmed, "- -") || isMostlyUpperOrLabel(trimmed) {
+			diagramCueLines++
+		}
+		if len(words) >= 9 && strings.ContainsAny(trimmed, ".,;:") {
+			proseLike++
+		}
+	}
+	if nonEmpty == 0 {
+		return false
+	}
+	if proseLike >= 3 {
+		return false
+	}
+	return diagramCueLines >= 2 || shortLines*2 >= nonEmpty*3
+}
+
+func isMostlyUpperOrLabel(s string) bool {
+	letters := 0
+	upper := 0
+	for _, r := range s {
+		if r >= 'A' && r <= 'Z' {
+			letters++
+			upper++
+		} else if r >= 'a' && r <= 'z' {
+			letters++
+		}
+	}
+	return letters >= 4 && upper*2 >= letters
 }
 
 func extractPageFigure(pageNumber, figureIndex int, desc string, opts FigureExtractionOptions) (string, error) {

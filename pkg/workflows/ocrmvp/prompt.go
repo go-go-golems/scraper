@@ -10,11 +10,15 @@ const PromptVersionQualityV3ListDiplomatic = "ocr-quality-v3-list-diplomatic"
 
 const PromptVersionQualityV4Report794Lexicon = "ocr-quality-v4-report794-lexicon"
 
+const PromptVersionQualityV5FigureAware = "ocr-quality-v5-figure-aware"
+
 const OCRSystemPrompt = `You are a precise OCR transcription engine. Transcribe only visible page content into clean markdown.`
 
 func RenderPagePrompt(input PageOCRInput) string {
 	version := normalizePromptVersion(input.PromptVersion)
 	switch version {
+	case PromptVersionQualityV5FigureAware:
+		return renderQualityV5FigureAwarePrompt(input, version)
 	case PromptVersionQualityV4Report794Lexicon:
 		return renderQualityV4Report794LexiconPrompt(input, version)
 	case PromptVersionQualityV3ListDiplomatic:
@@ -187,6 +191,21 @@ Book ID: %s
 Page number: %03d
 Prompt version: %s
 `, input.BookID, input.PageNumber, version)
+}
+
+func renderQualityV5FigureAwarePrompt(input PageOCRInput, version string) string {
+	return renderQualityV4Report794LexiconPrompt(input, version) + `
+
+Additional figure-awareness contract:
+- A graphical page is any target page that is primarily a diagram, flowchart, model, architecture chart, boxed component layout, full-page figure, or other non-prose visual artifact.
+- For every graphical page outside the Table of Contents and Table of Figures, preserve the visible figure caption/title exactly, then emit exactly one machine-readable figure marker immediately after it:
+  [FIGURE: concise description of the whole graphical artifact]
+- Emit the [FIGURE: ...] marker even when the diagram fills the entire page and even when you also transcribe all visible labels.
+- Emit the [FIGURE: ...] marker even when there is no surrounding prose on the page.
+- After the marker, transcribe visible diagram labels and major relationships in readable plain text. The marker is a signal for downstream image extraction, not a replacement for transcription.
+- Do not use [FIGURE: ...] on Table of Figures list pages; list entries such as "Figure 1-2: ... 13" are not themselves graphical pages.
+- For flowcharts and models, prefer a short marker such as [FIGURE: Full-page flowchart showing the Representation Shift Model].
+`
 }
 
 func normalizePromptVersion(version string) string {
