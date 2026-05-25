@@ -274,6 +274,24 @@ func EmbedFiguresExecutor() workflow.Executor {
 				return workflow.Retryable("ocr_quality_figure_artifact_failed", err)
 			}
 			imageIDs = append(imageIDs, ref.ID)
+			if strings.TrimSpace(figure.SidecarPath) != "" {
+				sidecarBytes, err := os.ReadFile(figure.SidecarPath)
+				if err != nil {
+					return workflow.Retryable("ocr_quality_figure_sidecar_read_failed", err)
+				}
+				if _, err := step.StoreArtifact(filepath.Base(figure.SidecarPath), "application/json", sidecarBytes, workflow.ArtifactKind("ocr-quality-figure-sidecar"), workflow.ArtifactMetadata(map[string]string{"page": fmt.Sprintf("%03d", figure.PageNumber)})); err != nil {
+					return workflow.Retryable("ocr_quality_figure_sidecar_artifact_failed", err)
+				}
+			}
+			if strings.TrimSpace(figure.DebugPath) != "" {
+				debugBytes, err := os.ReadFile(figure.DebugPath)
+				if err != nil {
+					return workflow.Retryable("ocr_quality_figure_debug_read_failed", err)
+				}
+				if _, err := step.StoreArtifact(filepath.Base(figure.DebugPath), "image/png", debugBytes, workflow.ArtifactKind("ocr-quality-figure-debug-overlay"), workflow.ArtifactMetadata(map[string]string{"page": fmt.Sprintf("%03d", figure.PageNumber)})); err != nil {
+					return workflow.Retryable("ocr_quality_figure_debug_artifact_failed", err)
+				}
+			}
 		}
 		return step.Result(EmbedFiguresResult{InputPath: input.MarkdownPath, OutputPath: input.OutputPath, FiguresDir: input.FiguresDir, FigureCount: len(figures), Figures: figures, OutputRefID: outRef.ID, OutputRefURI: outRef.URI, FigureImageIDs: imageIDs})
 	})
@@ -298,7 +316,7 @@ func WriteDiscoveryExecutor() workflow.Executor {
 				return workflow.Retryable("ocr_quality_discovery_embed_result_failed", err)
 			}
 			for _, fig := range embedResult.Figures {
-				state.Figures = append(state.Figures, bookprofile.DiscoveredFigure{Page: fig.PageNumber, Description: fig.Description, MarkerSource: fig.MarkerSource, ImagePath: fig.MarkdownRef})
+				state.Figures = append(state.Figures, bookprofile.DiscoveredFigure{Page: fig.PageNumber, Description: fig.Description, MarkerSource: fig.MarkerSource, ImagePath: fig.MarkdownRef, SidecarPath: fig.SidecarPath, DebugPath: fig.DebugPath, CropRect: bookprofile.CropRect{X: fig.CropRect.X, Y: fig.CropRect.Y, Width: fig.CropRect.Width, Height: fig.CropRect.Height}, Method: fig.Method, Warnings: append([]string(nil), fig.Warnings...)})
 				state.ObservedPages = append(state.ObservedPages, bookprofile.ObservedPage{Page: fig.PageNumber, InferredType: bookprofile.PageDiagram, Confidence: 0.8, Evidence: []string{"figure extraction", "markdown figure marker or synthesized diagram marker"}})
 			}
 		}

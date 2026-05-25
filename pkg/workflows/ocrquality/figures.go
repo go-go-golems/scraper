@@ -1,9 +1,11 @@
 package ocrquality
 
 import (
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/jpeg"
 	"image/png"
 	"os"
@@ -22,12 +24,24 @@ type FigureExtractionOptions struct {
 }
 
 type FigureExtraction struct {
-	PageNumber   int    `json:"page_number"`
-	FigureIndex  int    `json:"figure_index"`
-	Description  string `json:"description"`
-	ImagePath    string `json:"image_path"`
-	MarkdownRef  string `json:"markdown_ref"`
-	MarkerSource string `json:"marker_source,omitempty"`
+	PageNumber   int      `json:"page_number"`
+	FigureIndex  int      `json:"figure_index"`
+	Description  string   `json:"description"`
+	ImagePath    string   `json:"image_path"`
+	MarkdownRef  string   `json:"markdown_ref"`
+	MarkerSource string   `json:"marker_source,omitempty"`
+	CropRect     CropRect `json:"crop_rect"`
+	Method       string   `json:"method,omitempty"`
+	SidecarPath  string   `json:"sidecar_path,omitempty"`
+	DebugPath    string   `json:"debug_path,omitempty"`
+	Warnings     []string `json:"warnings,omitempty"`
+}
+
+type CropRect struct {
+	X      int `json:"x" yaml:"x"`
+	Y      int `json:"y" yaml:"y"`
+	Width  int `json:"width" yaml:"width"`
+	Height int `json:"height" yaml:"height"`
 }
 
 func EmbedExtractedFigures(markdown string, opts FigureExtractionOptions) (string, []FigureExtraction, error) {
@@ -61,18 +75,20 @@ func EmbedExtractedFigures(markdown string, opts FigureExtractionOptions) (strin
 		if match := figureMarkerLinePattern.FindStringSubmatch(strings.TrimSpace(line)); len(match) == 2 && currentPage > 0 {
 			figureIndex++
 			desc := strings.TrimSpace(match[1])
-			imagePath, err := extractPageFigure(currentPage, figureIndex, desc, opts)
+			figure, err := extractPageFigure(currentPage, figureIndex, desc, opts)
 			if err != nil {
 				return "", nil, err
 			}
-			rel := filepath.ToSlash(filepath.Base(filepath.Dir(imagePath)) + "/" + filepath.Base(imagePath))
+			rel := filepath.ToSlash(filepath.Base(filepath.Dir(figure.ImagePath)) + "/" + filepath.Base(figure.ImagePath))
 			alt := strings.NewReplacer("[", "(", "]", ")", "\n", " ").Replace(desc)
 			fmt.Fprintf(&out, "![%s](%s)\n", alt, rel)
 			markerSource := "explicit"
 			if strings.HasPrefix(desc, "Full-page diagram showing ") {
 				markerSource = "synthesized-or-explicit"
 			}
-			figures = append(figures, FigureExtraction{PageNumber: currentPage, FigureIndex: figureIndex, Description: desc, ImagePath: imagePath, MarkdownRef: rel, MarkerSource: markerSource})
+			figure.MarkdownRef = rel
+			figure.MarkerSource = markerSource
+			figures = append(figures, figure)
 			continue
 		}
 		out.WriteString(line)
@@ -182,45 +198,50 @@ func isMostlyUpperOrLabel(s string) bool {
 	return letters >= 4 && upper*2 >= letters
 }
 
-func extractPageFigure(pageNumber, figureIndex int, desc string, opts FigureExtractionOptions) (string, error) {
+func extractPageFigure(pageNumber, figureIndex int, desc string, opts FigureExtractionOptions) (FigureExtraction, error) {
 	pagePath := filepath.Join(opts.ImageDir, fmt.Sprintf("page_%03d.png", pageNumber))
 	file, err := os.Open(pagePath)
 	if err != nil {
-		return "", err
+		return FigureExtraction{}, err
 	}
 	defer func() { _ = file.Close() }()
 	img, _, err := image.Decode(file)
 	if err != nil {
-		return "", err
+		return FigureExtraction{}, err
 	}
-	crop := cropNonWhite(img, opts.Margin)
+	crop, rect := cropNonWhite(img, opts.Margin)
 	outPath := filepath.Join(opts.OutputDir, fmt.Sprintf("page_%03d_figure_%02d.png", pageNumber, figureIndex))
 	outFile, err := os.Create(outPath)
 	if err != nil {
-		return "", err
+		return FigureExtraction{}, err
 	}
 	defer func() { _ = outFile.Close() }()
 	if err := png.Encode(outFile, crop); err != nil {
-		return "", err
+		return FigureExtraction{}, err
 	}
-	return outPath, nil
+	figure := FigureExtraction{PageNumber: pageNumber, FigureIndex: figureIndex, Description: desc, ImagePath: outPath, CropRect: cropRectFromImageRect(rect), Method: "ink-band-v1", Warnings: figureCropWarnings(img.Bounds(), rect)}
+	if err := writeFigureSidecars(img, &figure, opts.OutputDir); err != nil {
+		return FigureExtraction{}, err
+	}
+	return figure, nil
 }
 
-func cropNonWhite(img image.Image, margin int) image.Image {
+func cropNonWhite(img image.Image, margin int) (image.Image, image.Rectangle) {
 	bounds := img.Bounds()
 	verticalBand, ok := meaningfulInkUnion(img)
 	if !ok {
-		return img
+		return img, bounds
 	}
 	minX, maxX, ok := horizontalInkBounds(img, verticalBand)
 	if !ok {
-		return img
+		return img, bounds
 	}
 	minY := clamp(verticalBand.Min-margin, bounds.Min.Y, bounds.Max.Y)
 	maxY := clamp(verticalBand.Max+margin+1, bounds.Min.Y, bounds.Max.Y)
 	minX = clamp(minX-margin, bounds.Min.X, bounds.Max.X)
 	maxX = clamp(maxX+margin+1, bounds.Min.X, bounds.Max.X)
-	return cropImage(img, image.Rect(minX, minY, maxX, maxY))
+	rect := image.Rect(minX, minY, maxX, maxY)
+	return cropImage(img, rect), rect
 }
 
 type intBand struct {
@@ -339,6 +360,81 @@ func horizontalInkBounds(img image.Image, band intBand) (int, int, bool) {
 		}
 	}
 	return minX, maxX, found
+}
+
+func cropRectFromImageRect(rect image.Rectangle) CropRect {
+	return CropRect{X: rect.Min.X, Y: rect.Min.Y, Width: rect.Dx(), Height: rect.Dy()}
+}
+
+func figureCropWarnings(page image.Rectangle, crop image.Rectangle) []string {
+	warnings := []string{}
+	if crop.Dx() <= 0 || crop.Dy() <= 0 {
+		return []string{"empty crop"}
+	}
+	pageArea := page.Dx() * page.Dy()
+	cropArea := crop.Dx() * crop.Dy()
+	if pageArea > 0 {
+		ratio := float64(cropArea) / float64(pageArea)
+		if ratio > 0.85 {
+			warnings = append(warnings, "crop covers more than 85 percent of page")
+		}
+		if ratio < 0.02 {
+			warnings = append(warnings, "crop covers less than 2 percent of page")
+		}
+	}
+	if crop.Max.Y > page.Max.Y-page.Dy()/10 {
+		warnings = append(warnings, "crop extends into bottom page-furniture zone")
+	}
+	return warnings
+}
+
+func writeFigureSidecars(page image.Image, figure *FigureExtraction, outputDir string) error {
+	base := strings.TrimSuffix(filepath.Base(figure.ImagePath), filepath.Ext(figure.ImagePath))
+	sidecarPath := filepath.Join(outputDir, base+".json")
+	debugPath := filepath.Join(outputDir, base+".debug.png")
+	figure.SidecarPath = sidecarPath
+	figure.DebugPath = debugPath
+	body, err := json.MarshalIndent(figure, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(sidecarPath, append(body, '\n'), 0o644); err != nil {
+		return err
+	}
+	return writeDebugOverlay(page, image.Rect(figure.CropRect.X, figure.CropRect.Y, figure.CropRect.X+figure.CropRect.Width, figure.CropRect.Y+figure.CropRect.Height), debugPath)
+}
+
+func writeDebugOverlay(page image.Image, rect image.Rectangle, path string) error {
+	bounds := page.Bounds()
+	out := image.NewRGBA(bounds)
+	draw.Draw(out, bounds, page, bounds.Min, draw.Src)
+	red := color.RGBA{R: 255, A: 255}
+	for x := rect.Min.X; x < rect.Max.X; x++ {
+		for dy := 0; dy < 4; dy++ {
+			if rect.Min.Y+dy < bounds.Max.Y {
+				out.Set(x, rect.Min.Y+dy, red)
+			}
+			if rect.Max.Y-1-dy >= bounds.Min.Y {
+				out.Set(x, rect.Max.Y-1-dy, red)
+			}
+		}
+	}
+	for y := rect.Min.Y; y < rect.Max.Y; y++ {
+		for dx := 0; dx < 4; dx++ {
+			if rect.Min.X+dx < bounds.Max.X {
+				out.Set(rect.Min.X+dx, y, red)
+			}
+			if rect.Max.X-1-dx >= bounds.Min.X {
+				out.Set(rect.Max.X-1-dx, y, red)
+			}
+		}
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = file.Close() }()
+	return png.Encode(file, out)
 }
 
 func isNonWhite(c color.Color) bool {

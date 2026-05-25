@@ -31,6 +31,15 @@ func TestEmbedExtractedFigures(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(figDir, "page_013_figure_01.png")); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := os.Stat(filepath.Join(figDir, "page_013_figure_01.json")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(figDir, "page_013_figure_01.debug.png")); err != nil {
+		t.Fatal(err)
+	}
+	if figures[0].CropRect.Width == 0 || figures[0].CropRect.Height == 0 {
+		t.Fatalf("expected crop metadata: %+v", figures[0])
+	}
 }
 
 func TestEmbedExtractedFiguresSynthesizesDiagramPageMarkers(t *testing.T) {

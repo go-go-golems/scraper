@@ -31,7 +31,18 @@ type DiscoveredFigure struct {
 	Description  string   `yaml:"description,omitempty" json:"description,omitempty"`
 	MarkerSource string   `yaml:"marker_source,omitempty" json:"marker_source,omitempty"`
 	ImagePath    string   `yaml:"image_path,omitempty" json:"image_path,omitempty"`
+	SidecarPath  string   `yaml:"sidecar_path,omitempty" json:"sidecar_path,omitempty"`
+	DebugPath    string   `yaml:"debug_path,omitempty" json:"debug_path,omitempty"`
+	CropRect     CropRect `yaml:"crop_rect,omitempty" json:"crop_rect,omitempty"`
+	Method       string   `yaml:"method,omitempty" json:"method,omitempty"`
 	Warnings     []string `yaml:"warnings,omitempty" json:"warnings,omitempty"`
+}
+
+type CropRect struct {
+	X      int `yaml:"x" json:"x"`
+	Y      int `yaml:"y" json:"y"`
+	Width  int `yaml:"width" json:"width"`
+	Height int `yaml:"height" json:"height"`
 }
 
 type VocabularyCandidate struct {
