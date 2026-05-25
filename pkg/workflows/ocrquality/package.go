@@ -278,6 +278,7 @@ func AssembleReportExecutor() workflow.Executor {
 		var after QAResult
 		_ = step.DependencyData("qa-after", &after)
 		var b strings.Builder
+		b.WriteString("---\ndocType: reference\nstatus: active\nintent: short-term\ntopics:\n  - ocr\n  - experiments\ncreated: 2026-05-24\nupdated: 2026-05-24\n---\n\n")
 		b.WriteString("# OCR Quality Pass Report\n\n")
 		if input.BookID != "" {
 			fmt.Fprintf(&b, "Book ID: `%s`\n\n", input.BookID)
