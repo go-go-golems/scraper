@@ -196,6 +196,8 @@ func runQualityPass(args []string) error {
 	bookID := fs.String("book-id", "", "Optional book identifier for report metadata")
 	expectedPages := fs.Int("expected-pages", 30, "Expected page marker count")
 	logPath := fs.String("log", "", "Optional OCR run log to import into SQLite")
+	imageDir := fs.String("image-dir", "", "Optional page image directory for embedded figure extraction")
+	embedFigures := fs.Bool("embed-figures", false, "Extract figure images from source pages and embed markdown image links")
 	maxWorkers := fs.Int("max-workers", 2, "Maximum concurrent workflow workers")
 	pollInterval := fs.Duration("poll-interval", 250*time.Millisecond, "Worker polling interval")
 	runID := fs.String("run-id", "", "Optional stable workflow run ID")
@@ -235,7 +237,7 @@ func runQualityPass(args []string) error {
 	if strings.TrimSpace(*runID) != "" {
 		runOpts = append(runOpts, workflow.WithRunID(*runID))
 	}
-	handle, err := rt.StartRun(ctx, ocrquality.PackageName, ocrquality.RunInput{BookID: *bookID, MarkdownPath: absMarkdown, OutputDir: absOutputDir, ExpectedPages: *expectedPages, LogPath: *logPath}, runOpts...)
+	handle, err := rt.StartRun(ctx, ocrquality.PackageName, ocrquality.RunInput{BookID: *bookID, MarkdownPath: absMarkdown, OutputDir: absOutputDir, ExpectedPages: *expectedPages, LogPath: *logPath, ImageDir: *imageDir, EmbedFigures: *embedFigures}, runOpts...)
 	if err != nil {
 		return err
 	}
@@ -255,6 +257,9 @@ func runQualityPass(args []string) error {
 				return fmt.Errorf("workflow finished with status %s", wf.Status)
 			}
 			fmt.Printf("quality output: %s\n", filepath.Join(absOutputDir, "normalized.md"))
+			if *embedFigures {
+				fmt.Printf("quality embedded output: %s\n", filepath.Join(absOutputDir, "embedded-figures.md"))
+			}
 			fmt.Printf("quality diff: %s\n", filepath.Join(absOutputDir, "cleanup.diff"))
 			return nil
 		}

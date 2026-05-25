@@ -23,6 +23,7 @@ func Register(rt *workflow.Runtime) error {
 		NormalizeExecutor(),
 		QAAfterExecutor(),
 		ImportLogExecutor(),
+		EmbedFiguresExecutor(),
 		AssembleReportExecutor(),
 	} {
 		if err := rt.RegisterExecutor(executor); err != nil {
@@ -64,14 +65,31 @@ func Package() *workflow.Package {
 			if err != nil {
 				return err
 			}
+			qaAfterPath := normalizedPath
+			qaAfterDepends := workflow.Require(normalized)
+			embeddedPath := ""
+			if input.EmbedFigures {
+				embeddedPath = filepath.Join(input.OutputDir, "embedded-figures.md")
+				embedded, err := run.Step("embed-figures", EmbedFiguresInput{
+					MarkdownPath: normalizedPath,
+					ImageDir:     input.ImageDir,
+					OutputPath:   embeddedPath,
+					FiguresDir:   filepath.Join(input.OutputDir, "figures"),
+				}, workflow.StepOpts{Kind: KindEmbedFigures, Queue: QueueQuality, DependsOn: workflow.Require(normalized), Retry: model.RetryPolicy{MaxAttempts: 1}})
+				if err != nil {
+					return err
+				}
+				qaAfterPath = embeddedPath
+				qaAfterDepends = workflow.Require(embedded)
+			}
 			after, err := run.Step("qa-after", QAInput{
-				MarkdownPath:    normalizedPath,
+				MarkdownPath:    qaAfterPath,
 				ExpectedPages:   input.ExpectedPages,
 				KnownBadTerms:   input.KnownBadTerms,
 				ExpectedStrings: input.ExpectedStrings,
 				ListPages:       input.ListPages,
 				ReportName:      "qa-after.md",
-			}, workflow.StepOpts{Kind: KindQAAfter, Queue: QueueQuality, DependsOn: workflow.Require(normalized), Retry: model.RetryPolicy{MaxAttempts: 1}})
+			}, workflow.StepOpts{Kind: KindQAAfter, Queue: QueueQuality, DependsOn: qaAfterDepends, Retry: model.RetryPolicy{MaxAttempts: 1}})
 			if err != nil {
 				return err
 			}
@@ -90,7 +108,7 @@ func Package() *workflow.Package {
 			if logStep.ID != "" {
 				deps = append(deps, workflow.Require(logStep)...)
 			}
-			_, err = run.Step("assemble-quality-report", ReportInput{BookID: input.BookID, RawMarkdownPath: input.MarkdownPath, NormalizedPath: normalizedPath}, workflow.StepOpts{Kind: KindAssembleReport, Queue: QueueQuality, DependsOn: deps, Retry: model.RetryPolicy{MaxAttempts: 1}})
+			_, err = run.Step("assemble-quality-report", ReportInput{BookID: input.BookID, RawMarkdownPath: input.MarkdownPath, NormalizedPath: normalizedPath, EmbeddedPath: embeddedPath}, workflow.StepOpts{Kind: KindAssembleReport, Queue: QueueQuality, DependsOn: deps, Retry: model.RetryPolicy{MaxAttempts: 1}})
 			return err
 		})).
 		Build()
@@ -111,6 +129,10 @@ func normalizeRunInput(input RunInput) RunInput {
 	}
 	if len(input.ListPages) == 0 {
 		input.ListPages = defaultListPages()
+	}
+	input.ImageDir = strings.TrimSpace(input.ImageDir)
+	if input.EmbedFigures && input.ImageDir == "" {
+		input.EmbedFigures = false
 	}
 	if input.OutputDir == "" && input.MarkdownPath != "" {
 		input.OutputDir = filepath.Join(filepath.Dir(input.MarkdownPath), "quality-pass")
@@ -190,6 +212,43 @@ func NormalizeExecutor() workflow.Executor {
 	})
 }
 
+func EmbedFiguresExecutor() workflow.Executor {
+	return workflow.NewTypedExecutor(KindEmbedFigures, func(ctx context.Context, step *workflow.StepContext, input EmbedFiguresInput) error {
+		body, err := os.ReadFile(input.MarkdownPath)
+		if err != nil {
+			return workflow.Permanent("ocr_quality_embed_read_failed", err)
+		}
+		embedded, figures, err := EmbedExtractedFigures(string(body), FigureExtractionOptions{ImageDir: input.ImageDir, OutputDir: input.FiguresDir})
+		if err != nil {
+			return workflow.Permanent("ocr_quality_embed_extract_failed", err)
+		}
+		if err := os.MkdirAll(filepath.Dir(input.OutputPath), 0o755); err != nil {
+			return workflow.Retryable("ocr_quality_embed_output_dir_failed", err)
+		}
+		// #nosec G703 -- output path is explicit operator/workflow input for local artifact export.
+		if err := os.WriteFile(input.OutputPath, []byte(embedded), 0o644); err != nil {
+			return workflow.Retryable("ocr_quality_embed_write_failed", err)
+		}
+		outRef, err := step.StoreArtifact("embedded-figures.md", "text/markdown", []byte(embedded), workflow.ArtifactKind("ocr-quality-embedded-markdown"))
+		if err != nil {
+			return workflow.Retryable("ocr_quality_embed_artifact_failed", err)
+		}
+		imageIDs := make([]string, 0, len(figures))
+		for _, figure := range figures {
+			imageBytes, err := os.ReadFile(figure.ImagePath)
+			if err != nil {
+				return workflow.Retryable("ocr_quality_figure_read_failed", err)
+			}
+			ref, err := step.StoreArtifact(filepath.Base(figure.ImagePath), "image/png", imageBytes, workflow.ArtifactKind("ocr-quality-extracted-figure"), workflow.ArtifactMetadata(map[string]string{"page": fmt.Sprintf("%03d", figure.PageNumber), "description": figure.Description}))
+			if err != nil {
+				return workflow.Retryable("ocr_quality_figure_artifact_failed", err)
+			}
+			imageIDs = append(imageIDs, ref.ID)
+		}
+		return step.Result(EmbedFiguresResult{InputPath: input.MarkdownPath, OutputPath: input.OutputPath, FiguresDir: input.FiguresDir, FigureCount: len(figures), Figures: figures, OutputRefID: outRef.ID, OutputRefURI: outRef.URI, FigureImageIDs: imageIDs})
+	})
+}
+
 func ImportLogExecutor() workflow.Executor {
 	return workflow.NewTypedExecutor(KindImportLog, func(ctx context.Context, step *workflow.StepContext, input LogImportInput) error {
 		result, err := ImportLogFile(input)
@@ -225,6 +284,9 @@ func AssembleReportExecutor() workflow.Executor {
 		}
 		fmt.Fprintf(&b, "Raw markdown: `%s`\n\n", input.RawMarkdownPath)
 		fmt.Fprintf(&b, "Normalized markdown: `%s`\n\n", input.NormalizedPath)
+		if input.EmbeddedPath != "" {
+			fmt.Fprintf(&b, "Embedded-figure markdown: `%s`\n\n", input.EmbeddedPath)
+		}
 		fmt.Fprintf(&b, "QA before passed: `%t`\n\n", before.Passed)
 		fmt.Fprintf(&b, "QA after passed: `%t`\n\n", after.Passed)
 		fmt.Fprintf(&b, "Changed lines: `%d`\n\n", normalized.ChangedLines)

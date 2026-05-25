@@ -7,6 +7,7 @@ const (
 	KindNormalize      = "ocr-quality/normalize-markdown"
 	KindQAAfter        = "ocr-quality/qa-after"
 	KindImportLog      = "ocr-quality/import-log"
+	KindEmbedFigures   = "ocr-quality/embed-figures"
 	KindAssembleReport = "ocr-quality/assemble-report"
 
 	QueueQuality = "ocr-quality"
@@ -21,6 +22,8 @@ type RunInput struct {
 	ExpectedStrings []string `json:"expected_strings,omitempty"`
 	ListPages       []int    `json:"list_pages,omitempty"`
 	LogPath         string   `json:"log_path,omitempty"`
+	ImageDir        string   `json:"image_dir,omitempty"`
+	EmbedFigures    bool     `json:"embed_figures,omitempty"`
 }
 
 type QAInput struct {
@@ -95,6 +98,24 @@ type NormalizeResult struct {
 	NormalizedBytes int    `json:"normalized_bytes"`
 }
 
+type EmbedFiguresInput struct {
+	MarkdownPath string `json:"markdown_path"`
+	ImageDir     string `json:"image_dir"`
+	OutputPath   string `json:"output_path,omitempty"`
+	FiguresDir   string `json:"figures_dir,omitempty"`
+}
+
+type EmbedFiguresResult struct {
+	InputPath      string             `json:"input_path"`
+	OutputPath     string             `json:"output_path"`
+	FiguresDir     string             `json:"figures_dir"`
+	FigureCount    int                `json:"figure_count"`
+	Figures        []FigureExtraction `json:"figures,omitempty"`
+	OutputRefID    string             `json:"output_ref_id,omitempty"`
+	OutputRefURI   string             `json:"output_ref_uri,omitempty"`
+	FigureImageIDs []string           `json:"figure_image_ids,omitempty"`
+}
+
 type LogImportInput struct {
 	LogPath    string `json:"log_path"`
 	SQLitePath string `json:"sqlite_path,omitempty"`
@@ -119,6 +140,7 @@ type ReportInput struct {
 	BookID              string `json:"book_id,omitempty"`
 	RawMarkdownPath     string `json:"raw_markdown_path"`
 	NormalizedPath      string `json:"normalized_path,omitempty"`
+	EmbeddedPath        string `json:"embedded_path,omitempty"`
 	BeforeQARefURI      string `json:"before_qa_ref_uri,omitempty"`
 	AfterQARefURI       string `json:"after_qa_ref_uri,omitempty"`
 	NormalizeDiffRefURI string `json:"normalize_diff_ref_uri,omitempty"`
