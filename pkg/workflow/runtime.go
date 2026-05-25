@@ -256,6 +256,7 @@ func (rt *Runtime) StartRun(ctx context.Context, packageName string, input any, 
 	if err := pkg.Entrypoint.Start(ctx, builder, rawInput); err != nil {
 		return nil, err
 	}
+	workflow = builder.workflow
 	if err := rt.scheduler.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
 		Workflow: workflow,
 		Initial:  builder.steps,

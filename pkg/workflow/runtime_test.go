@@ -90,6 +90,33 @@ func TestRuntimeStartRunAndRunOnce(t *testing.T) {
 	require.Equal(t, model.WorkflowStatusSucceeded, workflow.Status)
 }
 
+func TestRuntimeStartRunPersistsEntrypointWorkflowMutations(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewRuntime(ctx, Config{Store: SQLiteStore(t.TempDir() + "/engine.db")})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, rt.Close()) }()
+
+	pkg := NewPackage("mutable-pkg").
+		DisplayName("Original Name").
+		Entrypoint(EntrypointFunc[startInput](func(ctx context.Context, run *RunBuilder, input startInput) error {
+			run.Name("Mutated Name")
+			run.Metadata("source", "entrypoint")
+			_, err := run.Step("root", input, StepOpts{Kind: "test/noop", Queue: "mutable"})
+			return err
+		})).
+		Build()
+	require.NoError(t, rt.RegisterPackage(pkg))
+
+	run, err := rt.StartRun(ctx, "mutable-pkg", startInput{Message: "hello"}, WithRunID("mutable-run"))
+	require.NoError(t, err)
+	require.Equal(t, "Mutated Name", run.Name)
+
+	workflow, err := rt.Workflow(ctx, run.ID)
+	require.NoError(t, err)
+	require.Equal(t, "Mutated Name", workflow.Name)
+	require.Equal(t, "entrypoint", workflow.Metadata["source"])
+}
+
 func TestRuntimeExternalFileArtifactStore(t *testing.T) {
 	ctx := context.Background()
 	artifactRoot := t.TempDir() + "/artifacts"
