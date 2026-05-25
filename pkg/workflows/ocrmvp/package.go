@@ -70,6 +70,12 @@ func normalizeRunInput(input RunInput) RunInput {
 	}
 	input.Profile = strings.TrimSpace(input.Profile)
 	input.PromptVersion = normalizePromptVersion(strings.TrimSpace(input.PromptVersion))
+	if input.ContextWindow < 0 {
+		input.ContextWindow = 0
+	}
+	if input.ContextWindow > 2 {
+		input.ContextWindow = 2
+	}
 	return input
 }
 

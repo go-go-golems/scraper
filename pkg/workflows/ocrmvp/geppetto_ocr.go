@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"mime"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -37,11 +38,11 @@ func (c *GeppettoOCRClient) OCRPage(ctx context.Context, input PageOCRInput, ima
 
 	turn := &turns.Turn{}
 	turns.AppendBlock(turn, turns.NewSystemTextBlock(OCRSystemPrompt))
-	turns.AppendBlock(turn, turns.NewUserMultimodalBlock(RenderPagePrompt(input), []map[string]any{{
-		"media_type": mediaTypeFromPath(input.ImagePath),
-		"content":    append([]byte(nil), imageBytes...),
-		"detail":     "high",
-	}}))
+	images, err := multimodalImages(input, imageBytes)
+	if err != nil {
+		return OCRTextResult{}, err
+	}
+	turns.AppendBlock(turn, turns.NewUserMultimodalBlock(RenderPagePrompt(input), images))
 	updated, err := eng.RunInference(ctx, turn)
 	if err != nil {
 		return OCRTextResult{}, fmt.Errorf("run geppetto OCR inference: %w", err)
@@ -60,6 +61,30 @@ func (c *GeppettoOCRClient) OCRPage(ctx context.Context, input PageOCRInput, ima
 		result.RegistrySlug = resolved.ResolvedEngineProfile.RegistrySlug.String()
 	}
 	return result, nil
+}
+
+func multimodalImages(input PageOCRInput, targetImageBytes []byte) ([]map[string]any, error) {
+	images := []map[string]any{{
+		"media_type": mediaTypeFromPath(input.ImagePath),
+		"content":    append([]byte(nil), targetImageBytes...),
+		"detail":     "high",
+		"role":       "target",
+		"page":       input.PageNumber,
+	}}
+	for _, ctxImage := range append(append([]PageContextImage(nil), input.ContextBefore...), input.ContextAfter...) {
+		body, err := os.ReadFile(ctxImage.ImagePath)
+		if err != nil {
+			return nil, fmt.Errorf("read %s context image for page %03d: %w", ctxImage.Relation, ctxImage.PageNumber, err)
+		}
+		images = append(images, map[string]any{
+			"media_type": mediaTypeFromPath(ctxImage.ImagePath),
+			"content":    body,
+			"detail":     "high",
+			"role":       ctxImage.Relation,
+			"page":       ctxImage.PageNumber,
+		})
+	}
+	return images, nil
 }
 
 func newPinocchioSelectionValues(input PageOCRInput) (*values.Values, error) {

@@ -17,6 +17,7 @@ import (
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	"github.com/go-go-golems/scraper/pkg/workflow"
 	"github.com/go-go-golems/scraper/pkg/workflows/ocrmvp"
+	"github.com/go-go-golems/scraper/pkg/workflows/ocrquality"
 )
 
 const defaultWorkDir = ".ocr-mvp"
@@ -57,6 +58,8 @@ func run(args []string) error {
 		return showStatus(subArgs)
 	case "pages":
 		return listPages(subArgs)
+	case "quality-pass":
+		return runQualityPass(subArgs)
 	case "help", "-h", "--help":
 		printUsage()
 		return nil
@@ -74,8 +77,9 @@ func printUsage() {
   ocr-mvp retry --work-dir DIR --run-id RUN_ID --step-id STEP_ID
   ocr-mvp cancel --work-dir DIR --run-id RUN_ID
   ocr-mvp pages --work-dir DIR --book-id BOOK_ID [--status STATUS]
+  ocr-mvp quality-pass --markdown PATH --output-dir DIR [--expected-pages N]
 
-Run flags include --book-id, --image-dir, --work-dir, --profile, --profile-registries, --prompt-version, --log-level, --dry-run, and --max-workers.
+Run flags include --book-id, --image-dir, --work-dir, --profile, --profile-registries, --prompt-version, --context-window, --log-level, --dry-run, and --max-workers.
 `)
 }
 
@@ -90,6 +94,7 @@ func runWorkflow(args []string) error {
 	workDir := fs.String("work-dir", defaultWorkDir, "Directory for engine DB, artifacts, and projections")
 	profile := fs.String("profile", "", "Optional Pinocchio profile slug; empty uses Pinocchio defaults")
 	promptVersion := fs.String("prompt-version", ocrmvp.DefaultPromptVersion, "OCR prompt version to use")
+	contextWindow := fs.Int("context-window", 0, "Optional number of previous/next page images to include as OCR continuity context (0-2)")
 	logLevel := fs.String("log-level", "info", "zerolog level: trace, debug, info, warn, error, disabled")
 	dryRun := fs.Bool("dry-run", false, "Use deterministic dry-run OCR instead of live Geppetto inference")
 	maxWorkers := fs.Int("max-workers", 4, "Maximum concurrent workflow workers")
@@ -147,6 +152,7 @@ func runWorkflow(args []string) error {
 		Profile:           *profile,
 		ProfileRegistries: append([]string(nil), registries...),
 		PromptVersion:     *promptVersion,
+		ContextWindow:     *contextWindow,
 		DryRun:            *dryRun,
 	}, runOpts...)
 	if err != nil {
@@ -172,6 +178,84 @@ func runWorkflow(args []string) error {
 			if err == nil && result != nil {
 				fmt.Printf("assemble result: %s\n", string(result.Data))
 			}
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(*pollInterval):
+		}
+	}
+}
+
+func runQualityPass(args []string) error {
+	fs := flag.NewFlagSet("quality-pass", flag.ContinueOnError)
+	markdownPath := fs.String("markdown", "", "OCR markdown file to QA and normalize")
+	outputDir := fs.String("output-dir", "", "Directory for normalized markdown and diff")
+	workDir := fs.String("work-dir", defaultWorkDir, "Directory for engine DB, artifacts, and projections")
+	bookID := fs.String("book-id", "", "Optional book identifier for report metadata")
+	expectedPages := fs.Int("expected-pages", 30, "Expected page marker count")
+	logPath := fs.String("log", "", "Optional OCR run log to import into SQLite")
+	maxWorkers := fs.Int("max-workers", 2, "Maximum concurrent workflow workers")
+	pollInterval := fs.Duration("poll-interval", 250*time.Millisecond, "Worker polling interval")
+	runID := fs.String("run-id", "", "Optional stable workflow run ID")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*markdownPath) == "" {
+		return fmt.Errorf("--markdown is required")
+	}
+	absMarkdown, err := filepath.Abs(*markdownPath)
+	if err != nil {
+		return err
+	}
+	outDir := strings.TrimSpace(*outputDir)
+	if outDir == "" {
+		outDir = filepath.Join(filepath.Dir(absMarkdown), "quality-pass")
+	}
+	absOutputDir, err := filepath.Abs(outDir)
+	if err != nil {
+		return err
+	}
+	paths, err := resolveWorkDir(*workDir, true)
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	rt, err := newRuntime(ctx, paths, *maxWorkers, *pollInterval)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rt.Close() }()
+	if err := ocrquality.Register(rt); err != nil {
+		return err
+	}
+	runOpts := []workflow.RunOption{workflow.WithRunName("OCR Quality Pass")}
+	if strings.TrimSpace(*runID) != "" {
+		runOpts = append(runOpts, workflow.WithRunID(*runID))
+	}
+	handle, err := rt.StartRun(ctx, ocrquality.PackageName, ocrquality.RunInput{BookID: *bookID, MarkdownPath: absMarkdown, OutputDir: absOutputDir, ExpectedPages: *expectedPages, LogPath: *logPath}, runOpts...)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("started quality run %s in %s\n", handle.ID, paths.root)
+	for {
+		cycle, err := rt.RunOnce(ctx)
+		if err != nil {
+			return err
+		}
+		wf, err := rt.Workflow(ctx, handle.ID)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("status=%s processed=%d succeeded=%d failed=%d retried=%d\n", wf.Status, cycle.Processed, cycle.Succeeded, cycle.Failed, cycle.Retried)
+		if isTerminal(wf.Status) {
+			if wf.Status != model.WorkflowStatusSucceeded {
+				return fmt.Errorf("workflow finished with status %s", wf.Status)
+			}
+			fmt.Printf("quality output: %s\n", filepath.Join(absOutputDir, "normalized.md"))
+			fmt.Printf("quality diff: %s\n", filepath.Join(absOutputDir, "cleanup.diff"))
 			return nil
 		}
 		select {
@@ -346,9 +430,10 @@ func newRuntime(ctx context.Context, paths workPaths, maxWorkers int, pollInterv
 		MaxWorkers:      maxWorkers,
 		PollInterval:    pollInterval,
 		Queues: map[model.QueueKey]workflow.QueueConfig{
-			ocrmvp.QueueControl:  {MaxWorkers: 1},
-			ocrmvp.QueueOCR:      {MaxWorkers: maxWorkers},
-			ocrmvp.QueueAssemble: {MaxWorkers: 1},
+			ocrmvp.QueueControl:     {MaxWorkers: 1},
+			ocrmvp.QueueOCR:         {MaxWorkers: maxWorkers},
+			ocrmvp.QueueAssemble:    {MaxWorkers: 1},
+			ocrquality.QueueQuality: {MaxWorkers: maxWorkers},
 		},
 	})
 }

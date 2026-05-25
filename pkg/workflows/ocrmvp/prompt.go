@@ -129,8 +129,8 @@ func renderQualityV4Report794LexiconPrompt(input PageOCRInput, version string) s
 	return fmt.Sprintf(`Transcribe this scanned MIT technical-report page into faithful, clean markdown.
 
 Output contract:
-1. Output only the transcription markdown. Do not explain your work.
-2. Transcribe only visible page content. Do not add summaries, comments, or inferred missing text.
+1. Output only the transcription markdown for the target page. Do not explain your work.
+2. Transcribe only visible target-page content. Do not add summaries, comments, or inferred missing text.
 3. Exclude standalone running page numbers, footer folios, scanner borders, and scanner artifacts.
 4. Preserve original spelling and historical terminology, including "data base" when visible.
 5. Preserve visible text order from top to bottom.
@@ -144,6 +144,12 @@ Book-specific vocabulary for Technical Report 794:
 - Use "Steamer" exactly, not "Streamer".
 - Use "Zmacs" exactly.
 - Use "Xerox Star" exactly.
+
+Context policy:
+- The first image is always the target page. Any additional images are previous/next context pages.
+- If surrounding context images are provided, use them only to maintain continuity of terminology, list style, page-boundary fragments, and figure/list conventions.
+- Do not transcribe text that appears only on a context page.
+- The target page number below is the only page to output.
 
 Global normalization policy:
 - Prefer readable markdown over visual line wrapping for normal prose.

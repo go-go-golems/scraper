@@ -78,6 +78,8 @@ func DiscoverPagesExecutor(projectionName string) workflow.Executor {
 				Profile:           input.Profile,
 				ProfileRegistries: append([]string(nil), input.ProfileRegistries...),
 				PromptVersion:     input.PromptVersion,
+				ContextBefore:     contextImages(pages, page.PageNumber, input.ContextWindow, -1),
+				ContextAfter:      contextImages(pages, page.PageNumber, input.ContextWindow, 1),
 				DryRun:            input.DryRun,
 			}
 			stepID := pageStepID(page.PageNumber)
@@ -106,6 +108,35 @@ func DiscoverPagesExecutor(projectionName string) workflow.Executor {
 		}
 		return step.Result(DiscoverResult{BookID: input.BookID, PageCount: len(pages), OCRStepIDs: ocrStepIDs, Pages: pages})
 	})
+}
+
+func contextImages(pages []PageSpec, pageNum int, window int, direction int) []PageContextImage {
+	if window <= 0 || direction == 0 {
+		return nil
+	}
+	byNumber := make(map[int]PageSpec, len(pages))
+	for _, page := range pages {
+		byNumber[page.PageNumber] = page
+	}
+	out := make([]PageContextImage, 0, window)
+	for offset := 1; offset <= window; offset++ {
+		candidate := pageNum + direction*offset
+		page, ok := byNumber[candidate]
+		if !ok {
+			continue
+		}
+		relation := "next"
+		if direction < 0 {
+			relation = "previous"
+		}
+		out = append(out, PageContextImage{PageNumber: page.PageNumber, ImagePath: page.ImagePath, Relation: relation})
+	}
+	if direction < 0 {
+		for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+			out[i], out[j] = out[j], out[i]
+		}
+	}
+	return out
 }
 
 func inferPageNumber(path string, fallback int) int {

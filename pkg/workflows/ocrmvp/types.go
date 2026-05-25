@@ -23,6 +23,7 @@ type RunInput struct {
 	Profile           string   `json:"profile,omitempty"`
 	ProfileRegistries []string `json:"profile_registries,omitempty"`
 	PromptVersion     string   `json:"prompt_version,omitempty"`
+	ContextWindow     int      `json:"context_window,omitempty"`
 	DryRun            bool     `json:"dry_run,omitempty"`
 }
 
@@ -39,14 +40,22 @@ type DiscoverResult struct {
 	Pages      []PageSpec `json:"pages"`
 }
 
+type PageContextImage struct {
+	PageNumber int    `json:"page_number"`
+	ImagePath  string `json:"image_path"`
+	Relation   string `json:"relation"`
+}
+
 type PageOCRInput struct {
-	BookID            string   `json:"book_id"`
-	PageNumber        int      `json:"page_number"`
-	ImagePath         string   `json:"image_path"`
-	Profile           string   `json:"profile,omitempty"`
-	ProfileRegistries []string `json:"profile_registries,omitempty"`
-	PromptVersion     string   `json:"prompt_version"`
-	DryRun            bool     `json:"dry_run,omitempty"`
+	BookID            string             `json:"book_id"`
+	PageNumber        int                `json:"page_number"`
+	ImagePath         string             `json:"image_path"`
+	Profile           string             `json:"profile,omitempty"`
+	ProfileRegistries []string           `json:"profile_registries,omitempty"`
+	PromptVersion     string             `json:"prompt_version"`
+	ContextBefore     []PageContextImage `json:"context_before,omitempty"`
+	ContextAfter      []PageContextImage `json:"context_after,omitempty"`
+	DryRun            bool               `json:"dry_run,omitempty"`
 }
 
 type PageOCRResult struct {
