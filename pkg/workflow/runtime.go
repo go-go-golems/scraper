@@ -257,6 +257,9 @@ func (rt *Runtime) StartRun(ctx context.Context, packageName string, input any, 
 		return nil, err
 	}
 	workflow = builder.workflow
+	if len(builder.steps) == 0 {
+		return nil, fmt.Errorf("workflow package %q entrypoint produced no initial steps", packageName)
+	}
 	if err := rt.scheduler.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
 		Workflow: workflow,
 		Initial:  builder.steps,

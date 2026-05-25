@@ -117,6 +117,29 @@ func TestRuntimeStartRunPersistsEntrypointWorkflowMutations(t *testing.T) {
 	require.Equal(t, "entrypoint", workflow.Metadata["source"])
 }
 
+func TestRuntimeStartRunRejectsEmptyEntrypoint(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewRuntime(ctx, Config{Store: SQLiteStore(t.TempDir() + "/engine.db")})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, rt.Close()) }()
+
+	pkg := NewPackage("empty-pkg").
+		Entrypoint(EntrypointFunc[startInput](func(ctx context.Context, run *RunBuilder, input startInput) error {
+			return nil
+		})).
+		Build()
+	require.NoError(t, rt.RegisterPackage(pkg))
+
+	run, err := rt.StartRun(ctx, "empty-pkg", startInput{Message: "hello"}, WithRunID("empty-run"))
+	require.Error(t, err)
+	require.Nil(t, run)
+	require.Contains(t, err.Error(), "produced no initial steps")
+
+	workflow, err := rt.Workflow(ctx, "empty-run")
+	require.NoError(t, err)
+	require.Nil(t, workflow)
+}
+
 func TestRuntimeExternalFileArtifactStore(t *testing.T) {
 	ctx := context.Background()
 	artifactRoot := t.TempDir() + "/artifacts"
