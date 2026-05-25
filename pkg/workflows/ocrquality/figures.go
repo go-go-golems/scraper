@@ -22,11 +22,12 @@ type FigureExtractionOptions struct {
 }
 
 type FigureExtraction struct {
-	PageNumber  int    `json:"page_number"`
-	FigureIndex int    `json:"figure_index"`
-	Description string `json:"description"`
-	ImagePath   string `json:"image_path"`
-	MarkdownRef string `json:"markdown_ref"`
+	PageNumber   int    `json:"page_number"`
+	FigureIndex  int    `json:"figure_index"`
+	Description  string `json:"description"`
+	ImagePath    string `json:"image_path"`
+	MarkdownRef  string `json:"markdown_ref"`
+	MarkerSource string `json:"marker_source,omitempty"`
 }
 
 func EmbedExtractedFigures(markdown string, opts FigureExtractionOptions) (string, []FigureExtraction, error) {
@@ -67,7 +68,11 @@ func EmbedExtractedFigures(markdown string, opts FigureExtractionOptions) (strin
 			rel := filepath.ToSlash(filepath.Base(filepath.Dir(imagePath)) + "/" + filepath.Base(imagePath))
 			alt := strings.NewReplacer("[", "(", "]", ")", "\n", " ").Replace(desc)
 			fmt.Fprintf(&out, "![%s](%s)\n", alt, rel)
-			figures = append(figures, FigureExtraction{PageNumber: currentPage, FigureIndex: figureIndex, Description: desc, ImagePath: imagePath, MarkdownRef: rel})
+			markerSource := "explicit"
+			if strings.HasPrefix(desc, "Full-page diagram showing ") {
+				markerSource = "synthesized-or-explicit"
+			}
+			figures = append(figures, FigureExtraction{PageNumber: currentPage, FigureIndex: figureIndex, Description: desc, ImagePath: imagePath, MarkdownRef: rel, MarkerSource: markerSource})
 			continue
 		}
 		out.WriteString(line)

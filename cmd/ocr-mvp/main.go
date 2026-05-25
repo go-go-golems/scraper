@@ -194,7 +194,10 @@ func runQualityPass(args []string) error {
 	outputDir := fs.String("output-dir", "", "Directory for normalized markdown and diff")
 	workDir := fs.String("work-dir", defaultWorkDir, "Directory for engine DB, artifacts, and projections")
 	bookID := fs.String("book-id", "", "Optional book identifier for report metadata")
-	expectedPages := fs.Int("expected-pages", 30, "Expected page marker count")
+	bookProfile := fs.String("book-profile", "", "Optional YAML book profile; workflow writes discoveries separately and never mutates this file")
+	discoveryPath := fs.String("discovery", "", "Optional output path for machine-updated book discovery YAML")
+	profilePatchPath := fs.String("profile-patch", "", "Optional output path for proposed profile patch YAML")
+	expectedPages := fs.Int("expected-pages", 0, "Expected page marker count; 0 uses book profile/default")
 	logPath := fs.String("log", "", "Optional OCR run log to import into SQLite")
 	imageDir := fs.String("image-dir", "", "Optional page image directory for embedded figure extraction")
 	embedFigures := fs.Bool("embed-figures", false, "Extract figure images from source pages and embed markdown image links")
@@ -237,7 +240,7 @@ func runQualityPass(args []string) error {
 	if strings.TrimSpace(*runID) != "" {
 		runOpts = append(runOpts, workflow.WithRunID(*runID))
 	}
-	handle, err := rt.StartRun(ctx, ocrquality.PackageName, ocrquality.RunInput{BookID: *bookID, MarkdownPath: absMarkdown, OutputDir: absOutputDir, ExpectedPages: *expectedPages, LogPath: *logPath, ImageDir: *imageDir, EmbedFigures: *embedFigures}, runOpts...)
+	handle, err := rt.StartRun(ctx, ocrquality.PackageName, ocrquality.RunInput{BookID: *bookID, BookProfilePath: *bookProfile, DiscoveryPath: *discoveryPath, ProfilePatchPath: *profilePatchPath, MarkdownPath: absMarkdown, OutputDir: absOutputDir, ExpectedPages: *expectedPages, LogPath: *logPath, ImageDir: *imageDir, EmbedFigures: *embedFigures}, runOpts...)
 	if err != nil {
 		return err
 	}

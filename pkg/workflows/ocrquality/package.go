@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	"github.com/go-go-golems/scraper/pkg/workflow"
+	"github.com/go-go-golems/scraper/pkg/workflows/bookprofile"
 )
 
 func Register(rt *workflow.Runtime) error {
@@ -24,6 +25,7 @@ func Register(rt *workflow.Runtime) error {
 		QAAfterExecutor(),
 		ImportLogExecutor(),
 		EmbedFiguresExecutor(),
+		WriteDiscoveryExecutor(),
 		AssembleReportExecutor(),
 	} {
 		if err := rt.RegisterExecutor(executor); err != nil {
@@ -104,7 +106,16 @@ func Package() *workflow.Package {
 					return err
 				}
 			}
-			deps := workflow.Require(before, normalized, after)
+			discoveryDeps := workflow.Require(after)
+			embeddedStepID := ""
+			if input.EmbedFigures {
+				embeddedStepID = "embed-figures"
+			}
+			discovery, err := run.Step("write-discovery", DiscoveryInput{BookID: input.BookID, BookProfilePath: input.BookProfilePath, DiscoveryPath: input.DiscoveryPath, ProfilePatchPath: input.ProfilePatchPath, MarkdownPath: qaAfterPath, EmbeddedStepID: embeddedStepID, QAAfterStepID: "qa-after"}, workflow.StepOpts{Kind: KindWriteDiscovery, Queue: QueueQuality, DependsOn: discoveryDeps, Retry: model.RetryPolicy{MaxAttempts: 1}})
+			if err != nil {
+				return err
+			}
+			deps := workflow.Require(before, normalized, after, discovery)
 			if logStep.ID != "" {
 				deps = append(deps, workflow.Require(logStep)...)
 			}
@@ -118,17 +129,36 @@ func normalizeRunInput(input RunInput) RunInput {
 	input.BookID = strings.TrimSpace(input.BookID)
 	input.MarkdownPath = strings.TrimSpace(input.MarkdownPath)
 	input.OutputDir = strings.TrimSpace(input.OutputDir)
+	profile, hasProfile, _ := bookprofile.Resolve(input.BookID, strings.TrimSpace(input.BookProfilePath))
 	if input.ExpectedPages == 0 {
-		input.ExpectedPages = 30
+		if hasProfile && profile.QA.ExpectedPages > 0 {
+			input.ExpectedPages = profile.QA.ExpectedPages
+		} else {
+			input.ExpectedPages = 30
+		}
 	}
 	if len(input.KnownBadTerms) == 0 {
-		input.KnownBadTerms = defaultKnownBadTerms()
+		if hasProfile && len(profile.QA.KnownBadTerms) > 0 {
+			input.KnownBadTerms = append([]string(nil), profile.QA.KnownBadTerms...)
+		} else if hasProfile && len(profile.Vocabulary.KnownBadTerms) > 0 {
+			input.KnownBadTerms = append([]string(nil), profile.Vocabulary.KnownBadTerms...)
+		} else {
+			input.KnownBadTerms = defaultKnownBadTerms()
+		}
 	}
 	if len(input.ExpectedStrings) == 0 {
-		input.ExpectedStrings = defaultExpectedStrings()
+		if hasProfile && len(profile.QA.ExpectedStrings) > 0 {
+			input.ExpectedStrings = append([]string(nil), profile.QA.ExpectedStrings...)
+		} else {
+			input.ExpectedStrings = defaultExpectedStrings()
+		}
 	}
 	if len(input.ListPages) == 0 {
-		input.ListPages = defaultListPages()
+		if hasProfile && len(bookprofile.ListPages(profile)) > 0 {
+			input.ListPages = bookprofile.ListPages(profile)
+		} else {
+			input.ListPages = defaultListPages()
+		}
 	}
 	input.ImageDir = strings.TrimSpace(input.ImageDir)
 	if input.EmbedFigures && input.ImageDir == "" {
@@ -246,6 +276,85 @@ func EmbedFiguresExecutor() workflow.Executor {
 			imageIDs = append(imageIDs, ref.ID)
 		}
 		return step.Result(EmbedFiguresResult{InputPath: input.MarkdownPath, OutputPath: input.OutputPath, FiguresDir: input.FiguresDir, FigureCount: len(figures), Figures: figures, OutputRefID: outRef.ID, OutputRefURI: outRef.URI, FigureImageIDs: imageIDs})
+	})
+}
+
+func WriteDiscoveryExecutor() workflow.Executor {
+	return workflow.NewTypedExecutor(KindWriteDiscovery, func(ctx context.Context, step *workflow.StepContext, input DiscoveryInput) error {
+		profile, hasProfile, err := bookprofile.Resolve(input.BookID, strings.TrimSpace(input.BookProfilePath))
+		if err != nil {
+			return workflow.Permanent("ocr_quality_profile_load_failed", err)
+		}
+		if !hasProfile {
+			profile = bookprofile.Profile{ID: strings.TrimSpace(input.BookID)}
+		}
+		if profile.ID == "" {
+			profile.ID = "unknown"
+		}
+		state := bookprofile.DiscoveryState{BookID: input.BookID, SourceProfile: profile.ID, RunID: string(step.Workflow().ID), Updated: bookprofile.NowTimestamp()}
+		var embedResult EmbedFiguresResult
+		if strings.TrimSpace(input.EmbeddedStepID) != "" {
+			if err := step.DependencyData(model.OpID(input.EmbeddedStepID), &embedResult); err != nil {
+				return workflow.Retryable("ocr_quality_discovery_embed_result_failed", err)
+			}
+			for _, fig := range embedResult.Figures {
+				state.Figures = append(state.Figures, bookprofile.DiscoveredFigure{Page: fig.PageNumber, Description: fig.Description, MarkerSource: fig.MarkerSource, ImagePath: fig.MarkdownRef})
+				state.ObservedPages = append(state.ObservedPages, bookprofile.ObservedPage{Page: fig.PageNumber, InferredType: bookprofile.PageDiagram, Confidence: 0.8, Evidence: []string{"figure extraction", "markdown figure marker or synthesized diagram marker"}})
+			}
+		}
+		var qaResult QAResult
+		if strings.TrimSpace(input.QAAfterStepID) != "" {
+			if err := step.DependencyData(model.OpID(input.QAAfterStepID), &qaResult); err != nil {
+				return workflow.Retryable("ocr_quality_discovery_qa_result_failed", err)
+			}
+			for _, finding := range qaResult.Findings {
+				state.QAFindingSummary = append(state.QAFindingSummary, bookprofile.DiscoveryQAFinding{Code: finding.Code, Page: finding.Page, Message: finding.Message})
+			}
+		}
+		patch := bookprofile.BuildPatch(profile, state)
+		discoveryPath := strings.TrimSpace(input.DiscoveryPath)
+		if discoveryPath == "" && strings.TrimSpace(input.MarkdownPath) != "" {
+			discoveryPath = filepath.Join(filepath.Dir(input.MarkdownPath), "book.discovery.yaml")
+		}
+		patchPath := strings.TrimSpace(input.ProfilePatchPath)
+		if patchPath == "" && discoveryPath != "" {
+			patchPath = filepath.Join(filepath.Dir(discoveryPath), "book.profile.patch.yaml")
+		}
+		if discoveryPath != "" {
+			if err := os.MkdirAll(filepath.Dir(discoveryPath), 0o755); err != nil {
+				return workflow.Retryable("ocr_quality_discovery_dir_failed", err)
+			}
+			// #nosec G703 -- discovery path is explicit operator/workflow input for local artifact export.
+			if err := bookprofile.SaveDiscovery(discoveryPath, state); err != nil {
+				return workflow.Retryable("ocr_quality_discovery_write_failed", err)
+			}
+		}
+		if patchPath != "" {
+			if err := os.MkdirAll(filepath.Dir(patchPath), 0o755); err != nil {
+				return workflow.Retryable("ocr_quality_patch_dir_failed", err)
+			}
+			// #nosec G703 -- patch path is explicit operator/workflow input for local artifact export.
+			if err := bookprofile.SavePatch(patchPath, patch); err != nil {
+				return workflow.Retryable("ocr_quality_patch_write_failed", err)
+			}
+		}
+		discoveryBytes, err := os.ReadFile(discoveryPath)
+		if err != nil {
+			return workflow.Retryable("ocr_quality_discovery_read_failed", err)
+		}
+		discoveryRef, err := step.StoreArtifact("book.discovery.yaml", "application/yaml", discoveryBytes, workflow.ArtifactKind("ocr-quality-book-discovery"))
+		if err != nil {
+			return workflow.Retryable("ocr_quality_discovery_artifact_failed", err)
+		}
+		patchBytes, err := os.ReadFile(patchPath)
+		if err != nil {
+			return workflow.Retryable("ocr_quality_patch_read_failed", err)
+		}
+		patchRef, err := step.StoreArtifact("book.profile.patch.yaml", "application/yaml", patchBytes, workflow.ArtifactKind("ocr-quality-profile-patch"))
+		if err != nil {
+			return workflow.Retryable("ocr_quality_patch_artifact_failed", err)
+		}
+		return step.Result(DiscoveryResult{DiscoveryPath: discoveryPath, ProfilePatchPath: patchPath, ObservedPages: len(state.ObservedPages), Figures: len(state.Figures), DiscoveryRefID: discoveryRef.ID, DiscoveryRefURI: discoveryRef.URI, PatchRefID: patchRef.ID, PatchRefURI: patchRef.URI})
 	})
 }
 

@@ -8,22 +8,26 @@ const (
 	KindQAAfter        = "ocr-quality/qa-after"
 	KindImportLog      = "ocr-quality/import-log"
 	KindEmbedFigures   = "ocr-quality/embed-figures"
+	KindWriteDiscovery = "ocr-quality/write-discovery"
 	KindAssembleReport = "ocr-quality/assemble-report"
 
 	QueueQuality = "ocr-quality"
 )
 
 type RunInput struct {
-	BookID          string   `json:"book_id,omitempty"`
-	MarkdownPath    string   `json:"markdown_path"`
-	OutputDir       string   `json:"output_dir,omitempty"`
-	ExpectedPages   int      `json:"expected_pages,omitempty"`
-	KnownBadTerms   []string `json:"known_bad_terms,omitempty"`
-	ExpectedStrings []string `json:"expected_strings,omitempty"`
-	ListPages       []int    `json:"list_pages,omitempty"`
-	LogPath         string   `json:"log_path,omitempty"`
-	ImageDir        string   `json:"image_dir,omitempty"`
-	EmbedFigures    bool     `json:"embed_figures,omitempty"`
+	BookID           string   `json:"book_id,omitempty"`
+	BookProfilePath  string   `json:"book_profile_path,omitempty"`
+	DiscoveryPath    string   `json:"discovery_path,omitempty"`
+	ProfilePatchPath string   `json:"profile_patch_path,omitempty"`
+	MarkdownPath     string   `json:"markdown_path"`
+	OutputDir        string   `json:"output_dir,omitempty"`
+	ExpectedPages    int      `json:"expected_pages,omitempty"`
+	KnownBadTerms    []string `json:"known_bad_terms,omitempty"`
+	ExpectedStrings  []string `json:"expected_strings,omitempty"`
+	ListPages        []int    `json:"list_pages,omitempty"`
+	LogPath          string   `json:"log_path,omitempty"`
+	ImageDir         string   `json:"image_dir,omitempty"`
+	EmbedFigures     bool     `json:"embed_figures,omitempty"`
 }
 
 type QAInput struct {
@@ -114,6 +118,27 @@ type EmbedFiguresResult struct {
 	OutputRefID    string             `json:"output_ref_id,omitempty"`
 	OutputRefURI   string             `json:"output_ref_uri,omitempty"`
 	FigureImageIDs []string           `json:"figure_image_ids,omitempty"`
+}
+
+type DiscoveryInput struct {
+	BookID           string `json:"book_id,omitempty"`
+	BookProfilePath  string `json:"book_profile_path,omitempty"`
+	DiscoveryPath    string `json:"discovery_path,omitempty"`
+	ProfilePatchPath string `json:"profile_patch_path,omitempty"`
+	MarkdownPath     string `json:"markdown_path"`
+	EmbeddedStepID   string `json:"embedded_step_id,omitempty"`
+	QAAfterStepID    string `json:"qa_after_step_id,omitempty"`
+}
+
+type DiscoveryResult struct {
+	DiscoveryPath    string `json:"discovery_path,omitempty"`
+	ProfilePatchPath string `json:"profile_patch_path,omitempty"`
+	ObservedPages    int    `json:"observed_pages"`
+	Figures          int    `json:"figures"`
+	DiscoveryRefID   string `json:"discovery_ref_id,omitempty"`
+	DiscoveryRefURI  string `json:"discovery_ref_uri,omitempty"`
+	PatchRefID       string `json:"patch_ref_id,omitempty"`
+	PatchRefURI      string `json:"patch_ref_uri,omitempty"`
 }
 
 type LogImportInput struct {
