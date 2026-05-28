@@ -1,0 +1,3 @@
+package scraper
+
+//go:generate go tool logcopter-gen -include-main -var zlog -area-prefix go-go-golems.scraper -strip-prefix github.com/go-go-golems/scraper ./cmd/... ./pkg/...

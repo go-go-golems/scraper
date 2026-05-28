@@ -99,3 +99,11 @@ dev-status:
 
 dev-logs:
 	devctl logs --service api --follow
+
+.PHONY: logcopter-generate
+logcopter-generate:
+	GOWORK=off go tool logcopter-gen -include-main -var zlog -area-prefix go-go-golems.scraper -strip-prefix github.com/go-go-golems/scraper ./cmd/... ./pkg/...
+
+.PHONY: logcopter-check
+logcopter-check:
+	GOWORK=off go tool logcopter-gen -include-main -var zlog -area-prefix go-go-golems.scraper -strip-prefix github.com/go-go-golems/scraper -check ./cmd/... ./pkg/...
