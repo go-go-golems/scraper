@@ -316,17 +316,17 @@ func runJSMigration(
 
 	builder := gggengine.NewBuilder().
 		WithRequireOptions(require.WithLoader(loader)).
-		WithRuntimeModuleRegistrars(scraperjsruntime.NewDatabaseRegistrar(scraperjsruntime.DatabaseRegistrarConfig{
+		WithModules(scraperjsruntime.NewDatabaseRegistrar(scraperjsruntime.DatabaseRegistrarConfig{
 			SiteDB: tx,
 		}))
-	builder = builder.WithRuntimeModuleRegistrars(def.RuntimeModuleRegistrars...)
+	builder = builder.WithModules(def.ExtraModules...)
 
 	factory, err := builder.Build()
 	if err != nil {
 		return fmt.Errorf("build js migration runtime: %w", err)
 	}
 
-	runtime, err := factory.NewRuntime(ctx)
+	runtime, err := factory.NewRuntime(gggengine.WithStartupContext(ctx))
 	if err != nil {
 		return fmt.Errorf("create js migration runtime: %w", err)
 	}

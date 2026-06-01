@@ -18,18 +18,16 @@ func IsSupportedModule(id string) bool {
 	return ok
 }
 
-func ResolveModules(ids []string) ([]gggengine.ModuleSpec, error) {
+func ResolveModules(ids []string) ([]gggengine.RuntimeModuleSpec, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	ret := make([]gggengine.ModuleSpec, 0, len(ids))
+	// The new engine implicitly includes all default-registry modules when
+	// no explicit modules are given. The "default-registry" ID is now a no-op.
 	for _, id := range ids {
-		switch id {
-		case ModuleDefaultRegistry:
-			ret = append(ret, gggengine.DefaultRegistryModules())
-		default:
+		if !IsSupportedModule(id) {
 			return nil, errors.Errorf("unsupported module %q", id)
 		}
 	}
-	return ret, nil
+	return nil, nil
 }

@@ -30,9 +30,6 @@ linters:
       - linters:
           - staticcheck
         text: 'SA1019: cli.CreateProcessorLegacy'
-      - linters:
-          - staticcheck
-        text: 'SA1019: gggengine.DefaultRegistryModules'
   settings:
     errcheck:
       exclude-functions:

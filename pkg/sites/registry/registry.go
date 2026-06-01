@@ -20,7 +20,7 @@ type Definition struct {
 	ScriptsRoot             string
 	VerbsFS                 fs.FS
 	VerbsRoot               string
-	Modules                 []gggengine.ModuleSpec
+	Modules                 []gggengine.RuntimeModuleSpec
 	SQLMigrationsFS         fs.FS
 	SQLMigrationsRoot       string
 	JSMigrationsFS          fs.FS
@@ -28,7 +28,7 @@ type Definition struct {
 	HelpFS                  fs.FS
 	HelpRoot                string
 	QueuePolicies           map[model.QueueKey]model.QueuePolicy
-	RuntimeModuleRegistrars []gggengine.RuntimeModuleRegistrar
+	ExtraModules            []gggengine.RuntimeModuleSpec
 	RegisterCLI             func(root *cobra.Command) error
 }
 

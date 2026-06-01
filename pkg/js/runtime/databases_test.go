@@ -27,14 +27,14 @@ func TestDatabaseRegistrarExposesScraperAndSiteDBs(t *testing.T) {
 	require.NoError(t, err)
 
 	factory, err := gggengine.NewBuilder().
-		WithRuntimeModuleRegistrars(NewDatabaseRegistrar(DatabaseRegistrarConfig{
+		WithModules(NewDatabaseRegistrar(DatabaseRegistrarConfig{
 			ScraperDB: scraperDB,
 			SiteDB:    siteDB,
 		})).
 		Build()
 	require.NoError(t, err)
 
-	rt, err := factory.NewRuntime(context.Background())
+	rt, err := factory.NewRuntime(gggengine.WithStartupContext(context.Background()))
 	require.NoError(t, err)
 	defer func() { require.NoError(t, rt.Close(context.Background())) }()
 

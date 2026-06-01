@@ -29,8 +29,8 @@ type DependencyResolver interface {
 type ExecutorConfig struct {
 	ScriptsFS               fs.FS
 	ScriptsRoot             string
-	Modules                 []gggengine.ModuleSpec
-	RuntimeModuleRegistrars []gggengine.RuntimeModuleRegistrar
+	Modules                 []gggengine.RuntimeModuleSpec
+	ExtraModules            []gggengine.RuntimeModuleSpec
 	ScraperDB               databasemod.QueryExecer
 	SiteDB                  databasemod.QueryExecer
 }
@@ -61,12 +61,12 @@ func (e *Executor) Execute(ctx context.Context, req ExecutionRequest) (*model.Op
 	builder := gggengine.NewBuilder().
 		WithRequireOptions(require.WithLoader(loader)).
 		WithModules(e.config.Modules...).
-		WithRuntimeModuleRegistrars(NewDatabaseRegistrar(DatabaseRegistrarConfig{
+		WithModules(NewDatabaseRegistrar(DatabaseRegistrarConfig{
 			ScraperDB: e.config.ScraperDB,
 			SiteDB:    e.config.SiteDB,
 		}))
-	if len(e.config.RuntimeModuleRegistrars) > 0 {
-		builder = builder.WithRuntimeModuleRegistrars(e.config.RuntimeModuleRegistrars...)
+	if len(e.config.ExtraModules) > 0 {
+		builder = builder.WithModules(e.config.ExtraModules...)
 	}
 
 	factory, err := builder.Build()
@@ -74,7 +74,7 @@ func (e *Executor) Execute(ctx context.Context, req ExecutionRequest) (*model.Op
 		return nil, fmt.Errorf("build js runtime: %w", err)
 	}
 
-	runtime, err := factory.NewRuntime(ctx)
+	runtime, err := factory.NewRuntime(gggengine.WithStartupContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("create js runtime: %w", err)
 	}

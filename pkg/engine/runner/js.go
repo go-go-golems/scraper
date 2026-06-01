@@ -34,12 +34,12 @@ func (r *JSRunner) Run(ctx context.Context, runCtx RunContext) (*model.OpResult,
 	}
 
 	executor := scraperjsruntime.NewExecutor(scraperjsruntime.ExecutorConfig{
-		ScriptsFS:               def.ScriptsFS,
-		ScriptsRoot:             def.ScriptsRoot,
-		Modules:                 def.Modules,
-		RuntimeModuleRegistrars: def.RuntimeModuleRegistrars,
-		ScraperDB:               runCtx.ScraperDB,
-		SiteDB:                  runCtx.SiteDB,
+		ScriptsFS:    def.ScriptsFS,
+		ScriptsRoot:  def.ScriptsRoot,
+		Modules:      def.Modules,
+		ExtraModules: def.ExtraModules,
+		ScraperDB:    runCtx.ScraperDB,
+		SiteDB:       runCtx.SiteDB,
 	})
 
 	return executor.Execute(ctx, scraperjsruntime.ExecutionRequest{

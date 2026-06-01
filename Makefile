@@ -1,4 +1,4 @@
-.PHONY: all test test-go test-web build build-go build-web generate proto lint lintmax docker-lint golangci-lint-install gosec govulncheck goreleaser tag-major tag-minor tag-patch release install version clean dev-up dev-down dev-status dev-logs validate tidy
+.PHONY: all test test-go test-web build build-go build-web generate proto lint lintmax docker-lint golangci-lint-install gosec govulncheck goreleaser tag-major tag-minor tag-patch release install version clean dev-up dev-down dev-status dev-logs validate tidy bump-go-go-golems
 
 all: test build
 
@@ -20,14 +20,14 @@ generate proto:
 	buf generate
 
 tidy:
-	go mod tidy
+	GOWORK=off go mod tidy
 
 validate: test build
 
 test: test-go test-web
 
 test-go:
-	go test $(GO_PACKAGES) -count=1
+	GOWORK=off go test $(GO_PACKAGES) -count=1
 
 test-web:
 	cd $(WEB_DIR) && pnpm test:unit -- --runInBand
@@ -35,9 +35,9 @@ test-web:
 build: build-go build-web
 
 build-go:
-	go generate ./...
+	GOWORK=off go generate ./...
 	mkdir -p $(DIST_DIR)
-	go build -tags "sqlite_fts5 embed" -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(BINARY) ./cmd/$(BINARY)
+	GOWORK=off go build -tags "sqlite_fts5 embed" -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(BINARY) ./cmd/$(BINARY)
 
 build-web:
 	cd $(WEB_DIR) && pnpm build
@@ -56,12 +56,12 @@ lintmax: golangci-lint-install
 	$(GOLANGCI_LINT_BIN) run -v --max-same-issues=100 ./cmd/... ./pkg/...
 
 gosec:
-	go install github.com/securego/gosec/v2/cmd/gosec@latest
-	gosec -exclude=G101,G304,G301,G306,G204 -exclude-dir=gen -exclude-dir=ttmp -exclude-dir=.history -exclude-dir=web/node_modules ./...
+	GOWORK=off go install github.com/securego/gosec/v2/cmd/gosec@latest
+	GOWORK=off gosec -exclude=G101,G304,G301,G306,G204 -exclude-dir=gen -exclude-dir=ttmp -exclude-dir=.history -exclude-dir=web/node_modules ./...
 
 govulncheck:
-	go install golang.org/x/vuln/cmd/govulncheck@latest
-	govulncheck ./...
+	GOWORK=off go install golang.org/x/vuln/cmd/govulncheck@latest
+	GOWORK=off govulncheck ./...
 
 goreleaser:
 	GOWORK=off goreleaser release $(GORELEASER_ARGS) $(GORELEASER_TARGET)
@@ -77,10 +77,21 @@ tag-patch:
 
 release:
 	git push origin --tags
-	GOPROXY=proxy.golang.org go list -m github.com/go-go-golems/scraper@$(shell svu current)
+	GOWORK=off GOPROXY=proxy.golang.org go list -m github.com/go-go-golems/scraper@$(shell svu current)
 
 install: build-go
-	cp $(DIST_DIR)/$(BINARY) $(shell go env GOPATH)/bin/$(BINARY)
+	cp $(DIST_DIR)/$(BINARY) $(shell GOWORK=off go env GOPATH)/bin/$(BINARY)
+
+bump-go-go-golems:
+	@deps="$$(awk '/^require[[:space:]]+github\.com\/go-go-golems\// { print $$$$2 } /^[[:space:]]*github\.com\/go-go-golems\// { print $$$$1 }' go.mod | sort -u)"; \
+	if [ -z "$$deps" ]; then \
+		echo "No github.com/go-go-golems dependencies in go.mod"; \
+	else \
+		echo "Bumping go-go-golems dependencies:"; \
+		echo "$$deps"; \
+		for dep in $$deps; do GOWORK=off go get "$${dep}@latest"; done; \
+	fi
+	GOWORK=off go mod tidy
 
 clean:
 	rm -rf $(DIST_DIR)

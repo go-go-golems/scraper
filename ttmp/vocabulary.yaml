@@ -73,6 +73,8 @@ topics:
       description: UI design and layout decisions
     - slug: cleanup
       description: Refactoring, decomposition, and codebase simplification
+    - slug: release
+      description: Release engineering, versioning, tagging, and publishing
     - slug: sqlite
       description: SQLite storage, schema, and query organization
 docTypes:

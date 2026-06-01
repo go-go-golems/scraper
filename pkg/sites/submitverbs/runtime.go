@@ -23,13 +23,13 @@ import (
 )
 
 type ExecutorConfig struct {
-	Registry                *jsverbs.Registry
-	VerbsFS                 fs.FS
-	VerbsRoot               string
-	Modules                 []gggengine.ModuleSpec
-	RuntimeModuleRegistrars []gggengine.RuntimeModuleRegistrar
-	ScraperDB               databasemod.QueryExecer
-	SiteDB                  databasemod.QueryExecer
+	Registry     *jsverbs.Registry
+	VerbsFS      fs.FS
+	VerbsRoot    string
+	Modules      []gggengine.RuntimeModuleSpec
+	ExtraModules []gggengine.RuntimeModuleSpec
+	ScraperDB    databasemod.QueryExecer
+	SiteDB       databasemod.QueryExecer
 }
 
 type ExecutionRequest struct {
@@ -76,19 +76,19 @@ func (e *Executor) Execute(ctx context.Context, req ExecutionRequest) (*Executio
 	builder := gggengine.NewBuilder().
 		WithRequireOptions(require.WithLoader(loader)).
 		WithModules(e.config.Modules...).
-		WithRuntimeModuleRegistrars(scraperjs.NewDatabaseRegistrar(scraperjs.DatabaseRegistrarConfig{
+		WithModules(scraperjs.NewDatabaseRegistrar(scraperjs.DatabaseRegistrarConfig{
 			ScraperDB: e.config.ScraperDB,
 			SiteDB:    e.config.SiteDB,
 		}))
-	if len(e.config.RuntimeModuleRegistrars) > 0 {
-		builder = builder.WithRuntimeModuleRegistrars(e.config.RuntimeModuleRegistrars...)
+	if len(e.config.ExtraModules) > 0 {
+		builder = builder.WithModules(e.config.ExtraModules...)
 	}
 
 	factory, err := builder.Build()
 	if err != nil {
 		return nil, fmt.Errorf("build submit runtime: %w", err)
 	}
-	runtime, err := factory.NewRuntime(ctx)
+	runtime, err := factory.NewRuntime(gggengine.WithStartupContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("create submit runtime: %w", err)
 	}

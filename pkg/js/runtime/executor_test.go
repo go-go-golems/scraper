@@ -190,7 +190,7 @@ func (r closingRegistrar) ID() string {
 	return "closing-registrar"
 }
 
-func (r closingRegistrar) RegisterRuntimeModules(ctx *gggengine.RuntimeModuleContext, reg *noderequire.Registry) error {
+func (r closingRegistrar) RegisterRuntimeModule(ctx *gggengine.RuntimeModuleContext, reg *noderequire.Registry) error {
 	if ctx == nil {
 		return nil
 	}
@@ -209,7 +209,7 @@ func TestExecutorClosesRuntimeClosers(t *testing.T) {
 			},
 		},
 		ScriptsRoot: "scripts",
-		RuntimeModuleRegistrars: []gggengine.RuntimeModuleRegistrar{
+		ExtraModules: []gggengine.RuntimeModuleSpec{
 			closingRegistrar{closed: &closed},
 		},
 	})

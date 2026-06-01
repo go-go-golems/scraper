@@ -61,8 +61,8 @@ queuePolicies:
 	if def.HelpFS == nil || def.HelpRoot != "help" {
 		t.Fatalf("help root not attached: %#v", def)
 	}
-	if len(def.Modules) != 1 {
-		t.Fatalf("len(def.Modules) = %d", len(def.Modules))
+	if len(def.Modules) != 0 {
+		t.Fatalf("len(def.Modules) = %d, want 0 (default-registry is implicit)", len(def.Modules))
 	}
 	policy, ok := def.QueuePolicies[model.QueueKey("site:js-demo:http")]
 	if !ok {

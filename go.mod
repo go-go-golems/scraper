@@ -7,10 +7,10 @@ require (
 	github.com/ThreeDotsLabs/watermill-redisstream v1.4.5
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
 	github.com/dop251/goja_nodejs v0.0.0-20260212111938-1f56ff5bcf14
-	github.com/go-go-golems/glazed v1.2.14
-	github.com/go-go-golems/go-go-goja v0.4.16
+	github.com/go-go-golems/glazed v1.3.6
+	github.com/go-go-golems/go-go-goja v0.7.2
 	github.com/go-go-golems/logcopter v0.1.0
-	github.com/go-go-golems/sessionstream v0.0.5
+	github.com/go-go-golems/sessionstream v0.0.6
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/mattn/go-sqlite3 v1.14.42

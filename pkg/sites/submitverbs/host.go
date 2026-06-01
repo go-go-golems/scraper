@@ -109,13 +109,13 @@ func (h *Host) Submit(
 	}
 
 	executor := NewExecutor(ExecutorConfig{
-		Registry:                h.registry,
-		VerbsFS:                 h.def.VerbsFS,
-		VerbsRoot:               h.def.VerbsRoot,
-		Modules:                 h.def.Modules,
-		RuntimeModuleRegistrars: h.def.RuntimeModuleRegistrars,
-		ScraperDB:               scraperDB,
-		SiteDB:                  siteDB,
+		Registry:     h.registry,
+		VerbsFS:      h.def.VerbsFS,
+		VerbsRoot:    h.def.VerbsRoot,
+		Modules:      h.def.Modules,
+		ExtraModules: h.def.ExtraModules,
+		ScraperDB:    scraperDB,
+		SiteDB:       siteDB,
 	})
 	execResult, err := executor.Execute(ctx, ExecutionRequest{
 		Site:         h.def.Name,

@@ -25,7 +25,7 @@ func (r *DatabaseRegistrar) ID() string {
 	return "scraper-preconfigured-databases"
 }
 
-func (r *DatabaseRegistrar) RegisterRuntimeModules(ctx *gggengine.RuntimeModuleContext, reg *require.Registry) error {
+func (r *DatabaseRegistrar) RegisterRuntimeModule(ctx *gggengine.RuntimeModuleContext, reg *require.Registry) error {
 	if reg == nil {
 		return fmt.Errorf("require registry is nil")
 	}
