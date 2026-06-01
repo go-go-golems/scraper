@@ -12,24 +12,24 @@ import (
 )
 
 type Definition struct {
-	Name                    model.SiteName
-	DatabaseFileName        string
-	Origin                  DefinitionOrigin
-	ManifestPath            string
-	ScriptsFS               fs.FS
-	ScriptsRoot             string
-	VerbsFS                 fs.FS
-	VerbsRoot               string
-	Modules                 []gggengine.RuntimeModuleSpec
-	SQLMigrationsFS         fs.FS
-	SQLMigrationsRoot       string
-	JSMigrationsFS          fs.FS
-	JSMigrationsRoot        string
-	HelpFS                  fs.FS
-	HelpRoot                string
-	QueuePolicies           map[model.QueueKey]model.QueuePolicy
-	ExtraModules            []gggengine.RuntimeModuleSpec
-	RegisterCLI             func(root *cobra.Command) error
+	Name              model.SiteName
+	DatabaseFileName  string
+	Origin            DefinitionOrigin
+	ManifestPath      string
+	ScriptsFS         fs.FS
+	ScriptsRoot       string
+	VerbsFS           fs.FS
+	VerbsRoot         string
+	Modules           []gggengine.RuntimeModuleSpec
+	SQLMigrationsFS   fs.FS
+	SQLMigrationsRoot string
+	JSMigrationsFS    fs.FS
+	JSMigrationsRoot  string
+	HelpFS            fs.FS
+	HelpRoot          string
+	QueuePolicies     map[model.QueueKey]model.QueuePolicy
+	ExtraModules      []gggengine.RuntimeModuleSpec
+	RegisterCLI       func(root *cobra.Command) error
 }
 
 type DefinitionOrigin string

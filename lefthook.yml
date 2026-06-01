@@ -5,7 +5,7 @@ pre-commit:
       run: make lint
     test:
       glob: '*.go'
-      run: make test
+      run: make test-go
   parallel: true
 
 pre-push:
@@ -15,5 +15,5 @@ pre-push:
     lint:
       run: make lint
     test:
-      run: make test
+      run: make test-go
   parallel: true

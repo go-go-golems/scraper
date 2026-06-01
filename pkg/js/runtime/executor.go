@@ -27,12 +27,12 @@ type DependencyResolver interface {
 }
 
 type ExecutorConfig struct {
-	ScriptsFS               fs.FS
-	ScriptsRoot             string
-	Modules                 []gggengine.RuntimeModuleSpec
-	ExtraModules            []gggengine.RuntimeModuleSpec
-	ScraperDB               databasemod.QueryExecer
-	SiteDB                  databasemod.QueryExecer
+	ScriptsFS    fs.FS
+	ScriptsRoot  string
+	Modules      []gggengine.RuntimeModuleSpec
+	ExtraModules []gggengine.RuntimeModuleSpec
+	ScraperDB    databasemod.QueryExecer
+	SiteDB       databasemod.QueryExecer
 }
 
 type ExecutionRequest struct {
