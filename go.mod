@@ -1,6 +1,6 @@
 module github.com/go-go-golems/scraper
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/ThreeDotsLabs/watermill v1.5.1
