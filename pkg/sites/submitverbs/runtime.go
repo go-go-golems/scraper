@@ -14,7 +14,7 @@ import (
 	"github.com/dop251/goja_nodejs/require"
 	"github.com/go-go-golems/glazed/pkg/cmds/fields"
 	"github.com/go-go-golems/glazed/pkg/cmds/values"
-	gggengine "github.com/go-go-golems/go-go-goja/engine"
+	gggengine "github.com/go-go-golems/go-go-goja/pkg/engine"
 	databasemod "github.com/go-go-golems/go-go-goja/modules/database"
 	"github.com/go-go-golems/go-go-goja/pkg/jsverbs"
 	"github.com/go-go-golems/scraper/pkg/engine/model"
@@ -26,8 +26,8 @@ type ExecutorConfig struct {
 	Registry     *jsverbs.Registry
 	VerbsFS      fs.FS
 	VerbsRoot    string
-	Modules      []gggengine.RuntimeModuleSpec
-	ExtraModules []gggengine.RuntimeModuleSpec
+	Modules      []gggengine.RuntimeModuleRegistrar
+	ExtraModules []gggengine.RuntimeModuleRegistrar
 	ScraperDB    databasemod.QueryExecer
 	SiteDB       databasemod.QueryExecer
 }
@@ -73,7 +73,7 @@ func (e *Executor) Execute(ctx context.Context, req ExecutionRequest) (*Executio
 	}
 
 	loader := e.moduleLoader()
-	builder := gggengine.NewBuilder().
+	builder := gggengine.NewRuntimeFactoryBuilder().
 		WithRequireOptions(require.WithLoader(loader)).
 		WithModules(e.config.Modules...).
 		WithModules(scraperjs.NewDatabaseRegistrar(scraperjs.DatabaseRegistrarConfig{

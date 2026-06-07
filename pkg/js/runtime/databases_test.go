@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/dop251/goja"
-	gggengine "github.com/go-go-golems/go-go-goja/engine"
+	gggengine "github.com/go-go-golems/go-go-goja/pkg/engine"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +26,7 @@ func TestDatabaseRegistrarExposesScraperAndSiteDBs(t *testing.T) {
 	_, err = siteDB.Exec(`INSERT INTO site_rows(name) VALUES (?)`, "from-site-db")
 	require.NoError(t, err)
 
-	factory, err := gggengine.NewBuilder().
+	factory, err := gggengine.NewRuntimeFactoryBuilder().
 		WithModules(NewDatabaseRegistrar(DatabaseRegistrarConfig{
 			ScraperDB: scraperDB,
 			SiteDB:    siteDB,

@@ -1,7 +1,7 @@
 package manifest
 
 import (
-	gggengine "github.com/go-go-golems/go-go-goja/engine"
+	gggengine "github.com/go-go-golems/go-go-goja/pkg/engine"
 	"github.com/pkg/errors"
 )
 
@@ -18,7 +18,7 @@ func IsSupportedModule(id string) bool {
 	return ok
 }
 
-func ResolveModules(ids []string) ([]gggengine.RuntimeModuleSpec, error) {
+func ResolveModules(ids []string) ([]gggengine.RuntimeModuleRegistrar, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}

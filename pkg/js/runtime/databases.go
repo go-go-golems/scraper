@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/dop251/goja_nodejs/require"
-	gggengine "github.com/go-go-golems/go-go-goja/engine"
+	gggengine "github.com/go-go-golems/go-go-goja/pkg/engine"
 	databasemod "github.com/go-go-golems/go-go-goja/modules/database"
 )
 
@@ -25,7 +25,7 @@ func (r *DatabaseRegistrar) ID() string {
 	return "scraper-preconfigured-databases"
 }
 
-func (r *DatabaseRegistrar) RegisterRuntimeModule(ctx *gggengine.RuntimeModuleContext, reg *require.Registry) error {
+func (r *DatabaseRegistrar) RegisterRuntimeModule(ctx *gggengine.RuntimeModuleRegistrationContext, reg *require.Registry) error {
 	if reg == nil {
 		return fmt.Errorf("require registry is nil")
 	}

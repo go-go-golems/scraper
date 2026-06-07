@@ -12,7 +12,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/require"
-	gggengine "github.com/go-go-golems/go-go-goja/engine"
+	gggengine "github.com/go-go-golems/go-go-goja/pkg/engine"
 	databasemod "github.com/go-go-golems/go-go-goja/modules/database"
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	"github.com/rs/zerolog/log"
@@ -29,8 +29,8 @@ type DependencyResolver interface {
 type ExecutorConfig struct {
 	ScriptsFS    fs.FS
 	ScriptsRoot  string
-	Modules      []gggengine.RuntimeModuleSpec
-	ExtraModules []gggengine.RuntimeModuleSpec
+	Modules      []gggengine.RuntimeModuleRegistrar
+	ExtraModules []gggengine.RuntimeModuleRegistrar
 	ScraperDB    databasemod.QueryExecer
 	SiteDB       databasemod.QueryExecer
 }
@@ -58,7 +58,7 @@ func (e *Executor) Execute(ctx context.Context, req ExecutionRequest) (*model.Op
 	}
 
 	loader := moduleLoader(e.config.ScriptsFS, e.config.ScriptsRoot)
-	builder := gggengine.NewBuilder().
+	builder := gggengine.NewRuntimeFactoryBuilder().
 		WithRequireOptions(require.WithLoader(loader)).
 		WithModules(e.config.Modules...).
 		WithModules(NewDatabaseRegistrar(DatabaseRegistrarConfig{

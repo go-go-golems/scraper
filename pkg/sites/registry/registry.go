@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"sort"
 
-	gggengine "github.com/go-go-golems/go-go-goja/engine"
+	gggengine "github.com/go-go-golems/go-go-goja/pkg/engine"
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	"github.com/spf13/cobra"
 )
@@ -20,7 +20,7 @@ type Definition struct {
 	ScriptsRoot       string
 	VerbsFS           fs.FS
 	VerbsRoot         string
-	Modules           []gggengine.RuntimeModuleSpec
+	Modules           []gggengine.RuntimeModuleRegistrar
 	SQLMigrationsFS   fs.FS
 	SQLMigrationsRoot string
 	JSMigrationsFS    fs.FS
@@ -28,7 +28,7 @@ type Definition struct {
 	HelpFS            fs.FS
 	HelpRoot          string
 	QueuePolicies     map[model.QueueKey]model.QueuePolicy
-	ExtraModules      []gggengine.RuntimeModuleSpec
+	ExtraModules      []gggengine.RuntimeModuleRegistrar
 	RegisterCLI       func(root *cobra.Command) error
 }
 
