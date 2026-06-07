@@ -28,8 +28,8 @@ function seed(ctx) {
   const values = ctx.values || {};
   const runID = String(ctx.workflow.id);
   const town = String(values.town || "Providence");
-  const baseURL = String(values.base_url || "https://data.nereval.com");
-  const maxPages = Math.max(1, Number(values.max_pages || 2));
+  const baseURL = String(values.base_url || values["base-url"] || "https://data.nereval.com");
+  const maxPages = Math.max(1, Number(values.max_pages || values["max-pages"] || 2));
   const seedID = runID + ":seed";
 
   ctx.setWorkflowName("nereval scrape workflow");
