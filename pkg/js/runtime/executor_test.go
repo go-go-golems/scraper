@@ -8,7 +8,7 @@ import (
 	"time"
 
 	noderequire "github.com/dop251/goja_nodejs/require"
-	gggengine "github.com/go-go-golems/go-go-goja/engine"
+	gggengine "github.com/go-go-golems/go-go-goja/pkg/engine"
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	"github.com/stretchr/testify/require"
 	"testing/fstest"
@@ -190,7 +190,7 @@ func (r closingRegistrar) ID() string {
 	return "closing-registrar"
 }
 
-func (r closingRegistrar) RegisterRuntimeModule(ctx *gggengine.RuntimeModuleContext, reg *noderequire.Registry) error {
+func (r closingRegistrar) RegisterRuntimeModule(ctx *gggengine.RuntimeModuleRegistrationContext, reg *noderequire.Registry) error {
 	if ctx == nil {
 		return nil
 	}
@@ -209,7 +209,7 @@ func TestExecutorClosesRuntimeClosers(t *testing.T) {
 			},
 		},
 		ScriptsRoot: "scripts",
-		ExtraModules: []gggengine.RuntimeModuleSpec{
+		ExtraModules: []gggengine.RuntimeModuleRegistrar{
 			closingRegistrar{closed: &closed},
 		},
 	})

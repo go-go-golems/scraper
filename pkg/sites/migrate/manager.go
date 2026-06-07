@@ -14,7 +14,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/require"
-	gggengine "github.com/go-go-golems/go-go-goja/engine"
+	gggengine "github.com/go-go-golems/go-go-goja/pkg/engine"
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 	scraperjsruntime "github.com/go-go-golems/scraper/pkg/js/runtime"
 	siteregistry "github.com/go-go-golems/scraper/pkg/sites/registry"
@@ -314,7 +314,7 @@ func runJSMigration(
 ) error {
 	loader := migrationLoader(def.JSMigrationsFS, def.JSMigrationsRoot)
 
-	builder := gggengine.NewBuilder().
+	builder := gggengine.NewRuntimeFactoryBuilder().
 		WithRequireOptions(require.WithLoader(loader)).
 		WithModules(scraperjsruntime.NewDatabaseRegistrar(scraperjsruntime.DatabaseRegistrarConfig{
 			SiteDB: tx,
