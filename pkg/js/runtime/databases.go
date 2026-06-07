@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/dop251/goja_nodejs/require"
-	gggengine "github.com/go-go-golems/go-go-goja/pkg/engine"
 	databasemod "github.com/go-go-golems/go-go-goja/modules/database"
+	gggengine "github.com/go-go-golems/go-go-goja/pkg/engine"
 )
 
 type DatabaseRegistrarConfig struct {
