@@ -67,9 +67,9 @@ func TestRuntimeStartRunAndRunOnce(t *testing.T) {
 
 	first, err := rt.RunOnce(ctx)
 	require.NoError(t, err)
-	// The current scheduler refreshes runnable child steps after completing a
-	// parent and may process the emitted child in the same RunOnce cycle.
-	require.Equal(t, 2, first.Processed)
+	// RunOnce leases a bounded concurrent snapshot. An operation emitted by a
+	// completed parent is admitted by the following cycle.
+	require.Equal(t, 1, first.Processed)
 	rootResult, err := rt.Result(ctx, run.ID, "root")
 	require.NoError(t, err)
 	require.NotNil(t, rootResult)
@@ -78,12 +78,19 @@ func TestRuntimeStartRunAndRunOnce(t *testing.T) {
 
 	childResult, err := rt.Result(ctx, run.ID, "child")
 	require.NoError(t, err)
-	require.NotNil(t, childResult)
-	require.JSONEq(t, `{"child":"hello child"}`, string(childResult.Data))
+	require.Nil(t, childResult)
 
 	second, err := rt.RunOnce(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 0, second.Processed)
+	require.Equal(t, 1, second.Processed)
+	childResult, err = rt.Result(ctx, run.ID, "child")
+	require.NoError(t, err)
+	require.NotNil(t, childResult)
+	require.JSONEq(t, `{"child":"hello child"}`, string(childResult.Data))
+
+	third, err := rt.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 0, third.Processed)
 
 	workflow, err = rt.Workflow(ctx, run.ID)
 	require.NoError(t, err)

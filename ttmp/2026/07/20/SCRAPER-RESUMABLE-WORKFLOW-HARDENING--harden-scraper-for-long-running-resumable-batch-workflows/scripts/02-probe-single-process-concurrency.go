@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Probe single-process scheduler concurrency in scraper v0.0.4.
 // Run from the scraper module:
 //

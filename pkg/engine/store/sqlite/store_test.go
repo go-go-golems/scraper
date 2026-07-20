@@ -366,6 +366,50 @@ func TestLeaseReadyOpTokenBucketStatePersistsAcrossReopen(t *testing.T) {
 	require.Equal(t, model.OpID("op-2"), nextOp.ID)
 }
 
+func TestRefreshBlocksAndReopensDependencyDescendants(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	defer func() { require.NoError(t, store.Close()) }()
+	now := time.Date(2026, 7, 20, 18, 0, 0, 0, time.UTC)
+	workflow := model.WorkflowRun{ID: "wf-blocked", Site: "site", Name: "blocked"}
+	initial := []model.OpSpec{
+		{ID: "batch-a", WorkflowID: workflow.ID, Site: workflow.Site, Kind: "kind", Queue: "queue"},
+		{ID: "batch-b", WorkflowID: workflow.ID, Site: workflow.Site, Kind: "kind", Queue: "queue"},
+		{ID: "finalize", WorkflowID: workflow.ID, Site: workflow.Site, Kind: "kind", Queue: "queue", DependsOn: []model.Dependency{{OpID: "batch-a", Required: true}, {OpID: "batch-b", Required: true}}},
+	}
+	require.NoError(t, store.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{Workflow: workflow, Initial: initial}))
+
+	a, aLease, err := store.LeaseReadyOp(ctx, storecontract.LeaseRequest{WorkerID: "worker", Site: workflow.Site, Queue: "queue", LeaseDuration: time.Minute, Now: now})
+	require.NoError(t, err)
+	require.Equal(t, model.OpID("batch-a"), a.ID)
+	require.NoError(t, store.FailOp(ctx, a.ID, storecontract.Failure{Lease: *aLease, Error: model.OpError{OccurredAt: now}}))
+	_, err = store.RefreshRunnableOps(ctx, now)
+	require.NoError(t, err)
+	require.Equal(t, model.OpStatusBlocked, opStatus(t, store.db, "finalize"))
+
+	b, bLease, err := store.LeaseReadyOp(ctx, storecontract.LeaseRequest{WorkerID: "worker", Site: workflow.Site, Queue: "queue", LeaseDuration: time.Minute, Now: now})
+	require.NoError(t, err)
+	require.Equal(t, model.OpID("batch-b"), b.ID)
+	require.NoError(t, store.CompleteOp(ctx, b.ID, storecontract.Completion{Lease: *bLease, Result: model.OpResult{CompletedAt: now}}))
+	_, err = store.RefreshRunnableOps(ctx, now)
+	require.NoError(t, err)
+	require.Equal(t, model.OpStatusBlocked, opStatus(t, store.db, "finalize"))
+
+	_, err = store.db.ExecContext(ctx, `UPDATE ops SET status = 'ready', updated_at = ?, updated_at_us = ? WHERE id = 'batch-a'`, now.Format(time.RFC3339Nano), now.UnixMicro())
+	require.NoError(t, err)
+	_, err = store.RefreshRunnableOps(ctx, now)
+	require.NoError(t, err)
+	require.Equal(t, model.OpStatusPending, opStatus(t, store.db, "finalize"))
+
+	a, aLease, err = store.LeaseReadyOp(ctx, storecontract.LeaseRequest{WorkerID: "worker", Site: workflow.Site, Queue: "queue", LeaseDuration: time.Minute, Now: now})
+	require.NoError(t, err)
+	require.Equal(t, model.OpID("batch-a"), a.ID)
+	require.NoError(t, store.CompleteOp(ctx, a.ID, storecontract.Completion{Lease: *aLease, Result: model.OpResult{CompletedAt: now}}))
+	_, err = store.RefreshRunnableOps(ctx, now)
+	require.NoError(t, err)
+	require.Equal(t, model.OpStatusReady, opStatus(t, store.db, "finalize"))
+}
+
 func TestMigrateBackfillsSortableTimestamps(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "legacy-engine.db")

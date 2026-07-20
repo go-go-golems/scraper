@@ -105,23 +105,40 @@ func (s *Store) RefreshRunnableOps(ctx context.Context, now time.Time) (int, err
 		return 0, fmt.Errorf("delete expired leases: %w", err)
 	}
 
+	// Dependency-derived blocking is recoverable. Repeat this transition so a
+	// newly blocked node blocks its pending descendants in the same refresh.
 	for {
-		canceled, err := execRowsAffected(ctx, tx, `UPDATE ops
+		blocked, err := execRowsAffected(ctx, tx, `UPDATE ops
 			SET status = ?, updated_at = ?, updated_at_us = ?
 			WHERE status = ? AND EXISTS (
 				SELECT 1 FROM op_dependencies d
 				JOIN ops dep ON dep.id = d.depends_on_op_id
-				WHERE d.op_id = ops.id AND d.required = 1 AND dep.status IN (?, ?)
-			)`, model.OpStatusCanceled, now.Format(time.RFC3339Nano), nowUS,
-			model.OpStatusPending, model.OpStatusFailed, model.OpStatusCanceled)
+				WHERE d.op_id = ops.id AND d.required = 1 AND dep.status IN (?, ?, ?)
+			)`, model.OpStatusBlocked, now.Format(time.RFC3339Nano), nowUS,
+			model.OpStatusPending, model.OpStatusFailed, model.OpStatusBlocked, model.OpStatusCanceled)
 		if err != nil {
-			return 0, fmt.Errorf("cancel blocked ops: %w", err)
+			return 0, fmt.Errorf("block dependency descendants: %w", err)
 		}
-		totalChanged += canceled
-		if canceled == 0 {
+		totalChanged += blocked
+		if blocked == 0 {
 			break
 		}
 	}
+
+	// A repaired dependency makes blocked descendants pending again. The ready
+	// transition below still requires every required dependency to succeed.
+	unblocked, err := execRowsAffected(ctx, tx, `UPDATE ops
+		SET status = ?, updated_at = ?, updated_at_us = ?
+		WHERE status = ? AND NOT EXISTS (
+			SELECT 1 FROM op_dependencies d
+			JOIN ops dep ON dep.id = d.depends_on_op_id
+			WHERE d.op_id = ops.id AND d.required = 1 AND dep.status IN (?, ?, ?)
+		)`, model.OpStatusPending, now.Format(time.RFC3339Nano), nowUS,
+		model.OpStatusBlocked, model.OpStatusFailed, model.OpStatusBlocked, model.OpStatusCanceled)
+	if err != nil {
+		return 0, fmt.Errorf("reopen dependency descendants: %w", err)
+	}
+	totalChanged += unblocked
 
 	ready, err := execRowsAffected(ctx, tx, `UPDATE ops
 		SET status = ?, updated_at = ?, updated_at_us = ?

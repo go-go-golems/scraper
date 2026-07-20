@@ -48,6 +48,7 @@ type WorkflowStats struct {
 	Running    int
 	Succeeded  int
 	Failed     int
+	Blocked    int
 	Canceled   int
 }
 

@@ -1,4 +1,7 @@
-// Probe repeated heartbeat and stale-worker completion behavior in scraper v0.0.4.
+//go:build ignore
+
+// Probe repeated heartbeat and stale-worker completion rejection after the
+// SCRAPER-RESUMABLE-WORKFLOW-HARDENING lease safety implementation.
 // Run from the scraper module:
 //
 //	go run ./ttmp/2026/07/20/SCRAPER-RESUMABLE-WORKFLOW-HARDENING--harden-scraper-for-long-running-resumable-batch-workflows/scripts/03-probe-stale-lease-completion.go
@@ -35,8 +38,8 @@ func main() {
 		Initial:  []model.OpSpec{{ID: opID, WorkflowID: workflowID, Site: "probe", Kind: "probe", Queue: "provider"}},
 	}))
 
-	// Keep fixed nanosecond precision because RFC3339Nano TEXT comparisons are
-	// otherwise vulnerable to variable-width fractional-second ordering.
+	// The SQLite store now compares epoch-microsecond columns, so this mixed
+	// precision value is intentionally safe.
 	t0 := time.Date(2026, 7, 20, 18, 0, 0, 123456789, time.UTC)
 	_, err = store.RefreshRunnableOps(ctx, t0)
 	must(err)
@@ -49,11 +52,13 @@ func main() {
 		panic("first lease not acquired")
 	}
 
-	must(store.HeartbeatLease(ctx, opID, *lease1, time.Second))
-	must(store.HeartbeatLease(ctx, opID, *lease1, time.Second))
-	printLease(ctx, dbPath, workflowID, "after two heartbeats")
+	lease1, err = store.HeartbeatLease(ctx, opID, *lease1, t0.Add(500*time.Millisecond), time.Second)
+	must(err)
+	lease1, err = store.HeartbeatLease(ctx, opID, *lease1, t0.Add(time.Second), time.Second)
+	must(err)
+	printLease(ctx, dbPath, workflowID, "after two cumulative heartbeats")
 
-	// Both heartbeats use lease1.ExpiresAt as the base, so expiry remains t0+2s.
+	// The current lease expires at t0+2s, so a later worker may safely acquire it.
 	_, err = store.RefreshRunnableOps(ctx, t0.Add(2500*time.Millisecond))
 	must(err)
 	_, lease2, err := store.LeaseReadyOp(ctx, storecontract.LeaseRequest{
@@ -68,7 +73,7 @@ func main() {
 
 	oldData, _ := json.Marshal(map[string]string{"writer": "stale-worker-1"})
 	err = store.CompleteOp(ctx, opID, storecontract.Completion{Lease: *lease1, Result: model.OpResult{OpID: opID, Data: oldData, CompletedAt: t0.Add(2600 * time.Millisecond)}})
-	fmt.Printf("stale completion error=%v\n", err)
+	fmt.Printf("stale completion rejected=%v\n", err)
 	printLease(ctx, dbPath, workflowID, "after stale completion")
 
 	newData, _ := json.Marshal(map[string]string{"writer": "current-worker-2"})

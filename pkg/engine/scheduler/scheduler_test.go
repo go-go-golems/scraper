@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -84,6 +85,47 @@ func TestSchedulerHeartbeatsLongRunningLease(t *testing.T) {
 	stats, err := store.GetWorkflowStats(ctx, "wf-heartbeat")
 	require.NoError(t, err)
 	require.Equal(t, 1, stats.Succeeded)
+}
+
+func TestSchedulerExecutesIndependentOpsConcurrently(t *testing.T) {
+	ctx := context.Background()
+	store := openSchedulerStore(t)
+	registry := runner.NewRegistry()
+	var active, maxActive atomic.Int32
+	require.NoError(t, registry.Register(runnerFunc{kind: "parallel", run: func(ctx context.Context, runCtx runner.RunContext) (*model.OpResult, error) {
+		current := active.Add(1)
+		for {
+			previous := maxActive.Load()
+			if current <= previous || maxActive.CompareAndSwap(previous, current) {
+				break
+			}
+		}
+		defer active.Add(-1)
+		select {
+		case <-time.After(50 * time.Millisecond):
+			return &model.OpResult{OpID: runCtx.Op.ID, CompletedAt: time.Now().UTC()}, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}}))
+	s, err := New(store, registry, Config{MaxWorkers: 3, PollInterval: time.Second, DefaultLeaseDuration: time.Second}, "worker", nil)
+	require.NoError(t, err)
+	s.SetQueuePolicyProvider(func(context.Context, model.SiteName, model.QueueKey) model.QueuePolicy {
+		return model.QueuePolicy{MaxInFlight: 3}
+	})
+	require.NoError(t, s.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
+		Workflow: model.WorkflowRun{ID: "wf-parallel", Site: "site", Name: "parallel"},
+		Initial: []model.OpSpec{
+			{ID: "parallel-1", WorkflowID: "wf-parallel", Site: "site", Kind: "parallel", Queue: "queue"},
+			{ID: "parallel-2", WorkflowID: "wf-parallel", Site: "site", Kind: "parallel", Queue: "queue"},
+			{ID: "parallel-3", WorkflowID: "wf-parallel", Site: "site", Kind: "parallel", Queue: "queue"},
+		},
+	}))
+	cycle, err := s.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 3, cycle.Processed)
+	require.Equal(t, 3, cycle.Succeeded)
+	require.Equal(t, int32(3), maxActive.Load())
 }
 
 func TestSchedulerFanOutAndDependencyCompletion(t *testing.T) {

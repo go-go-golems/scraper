@@ -75,10 +75,11 @@ func (s *Store) GetWorkflowStats(ctx context.Context, workflowID model.WorkflowI
 		COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0),
+		COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0)
-		FROM ops WHERE workflow_id = ?`, model.OpStatusPending, model.OpStatusReady, model.OpStatusRunning, model.OpStatusSucceeded, model.OpStatusFailed, model.OpStatusCanceled, workflowID)
+		FROM ops WHERE workflow_id = ?`, model.OpStatusPending, model.OpStatusReady, model.OpStatusRunning, model.OpStatusSucceeded, model.OpStatusFailed, model.OpStatusBlocked, model.OpStatusCanceled, workflowID)
 	stats := &storecontract.WorkflowStats{WorkflowID: workflowID}
-	if err := row.Scan(&stats.Total, &stats.Pending, &stats.Ready, &stats.Running, &stats.Succeeded, &stats.Failed, &stats.Canceled); err != nil {
+	if err := row.Scan(&stats.Total, &stats.Pending, &stats.Ready, &stats.Running, &stats.Succeeded, &stats.Failed, &stats.Blocked, &stats.Canceled); err != nil {
 		return nil, fmt.Errorf("query workflow stats: %w", err)
 	}
 	return stats, nil

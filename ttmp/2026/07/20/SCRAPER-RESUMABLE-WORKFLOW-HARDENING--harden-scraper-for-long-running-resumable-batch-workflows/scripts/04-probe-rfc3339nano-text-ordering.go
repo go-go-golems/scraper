@@ -1,4 +1,7 @@
-// Probe RFC3339Nano TEXT ordering at mixed fractional-second precision.
+//go:build ignore
+
+// Probe that mixed RFC3339Nano precision no longer affects scheduling because
+// scraper uses sortable epoch-microsecond columns for SQLite comparisons.
 // Run from the scraper module:
 //
 //	go run ./ttmp/2026/07/20/SCRAPER-RESUMABLE-WORKFLOW-HARDENING--harden-scraper-for-long-running-resumable-batch-workflows/scripts/04-probe-rfc3339nano-text-ordering.go
@@ -34,8 +37,8 @@ func main() {
 		Initial:  []model.OpSpec{{ID: opID, WorkflowID: workflowID, Site: "probe", Kind: "probe", Queue: "q"}},
 	}))
 
-	// The expiry has no fractional component; refresh time does. Chronologically
-	// expiry < refresh, but lexicographically "...01Z" > "...01.5Z".
+	// The formatted values retain the historically unsafe lexical ordering, but
+	// refresh is expected to recover the lease using integer epoch time.
 	t0 := time.Date(2026, 7, 20, 18, 0, 0, 0, time.UTC)
 	_, err = store.RefreshRunnableOps(ctx, t0)
 	must(err)
@@ -55,7 +58,7 @@ func main() {
 	must(err)
 	ops, err := engineview.NewService(dbPath).WorkflowOps(ctx, workflowID)
 	must(err)
-	fmt.Printf("refresh_changed=%d status=%s lease_present=%t\n", changed, ops[0].Status, ops[0].Lease != nil)
+	fmt.Printf("integer-time refresh_changed=%d status=%s lease_present=%t\n", changed, ops[0].Status, ops[0].Lease != nil)
 }
 
 func must(err error) {

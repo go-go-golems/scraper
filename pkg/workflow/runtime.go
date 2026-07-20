@@ -67,6 +67,7 @@ type Config struct {
 	PollInterval      time.Duration
 	LeaseDuration     time.Duration
 	HeartbeatInterval time.Duration
+	Observer          scheduler.Observer
 
 	Queues map[model.QueueKey]QueueConfig
 }
@@ -105,7 +106,7 @@ func NewRuntime(ctx context.Context, cfg Config) (*Runtime, error) {
 		PollInterval:         cfg.PollInterval,
 		DefaultLeaseDuration: cfg.LeaseDuration,
 		HeartbeatInterval:    cfg.HeartbeatInterval,
-	}, cfg.WorkerID, nil)
+	}, cfg.WorkerID, cfg.Observer)
 	if err != nil {
 		_ = closeStore()
 		return nil, err

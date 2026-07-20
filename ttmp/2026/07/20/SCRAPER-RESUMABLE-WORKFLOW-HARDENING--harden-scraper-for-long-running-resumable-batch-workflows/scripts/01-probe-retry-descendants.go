@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Probe failure isolation and manual-retry descendant behavior in scraper v0.0.4.
 // Run from the scraper module:
 //
