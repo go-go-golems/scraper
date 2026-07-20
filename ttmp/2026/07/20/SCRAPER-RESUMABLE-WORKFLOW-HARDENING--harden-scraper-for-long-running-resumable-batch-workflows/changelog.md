@@ -38,3 +38,18 @@ Implemented and tested the core durable-engine hardening phases: epoch-microseco
 - pkg/services/engineview/workflow_mutation_service.go — Blocked descendant reopen and explicit cancellation semantics
 - pkg/workflow/runtime.go — EnsureRun and snapshot APIs
 
+
+## 2026-07-20
+
+Completed full validation of implemented scraper hardening: GOWORK=off go test ./..., focused race suites, go vet, and gosec for the hardened SQLite store all pass. Added restart recovery coverage and published the updated implementation guide, investigation diary, and rollout runbook to reMarkable as SCRAPER Resumable Workflow Hardening Implementation.pdf.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/engine/store/sqlite/store_test.go — Restart and stale-transition regression coverage
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/20/SCRAPER-RESUMABLE-WORKFLOW-HARDENING--harden-scraper-for-long-running-resumable-batch-workflows/playbooks/01-rollout-and-operator-runbook.md — Release and operator procedure
+
+
+## 2026-07-20
+
+Ticket closed
+

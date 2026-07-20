@@ -1,7 +1,7 @@
 ---
 Title: Harden scraper for long-running resumable batch workflows
 Ticket: SCRAPER-RESUMABLE-WORKFLOW-HARDENING
-Status: active
+Status: complete
 Topics:
     - architecture
     - scraper
@@ -15,11 +15,12 @@ Intent: long-term
 Owners: []
 RelatedFiles: []
 ExternalSources: []
-Summary: "Engine hardening roadmap for safe long-running resumable workflows: leases, blocked dependencies, true concurrency, immutable identity, observers, snapshots, and migration safety."
-LastUpdated: 2026-07-20T20:15:00Z
-WhatFor: "Implement scraper-level guarantees needed by expensive resumable batch consumers without duplicating workflow orchestration downstream."
-WhenToUse: "Use before changing scheduler/store state transitions, embedded workflow APIs, worker concurrency, operator retry, or runtime event observation."
+Summary: 'Engine hardening roadmap for safe long-running resumable workflows: leases, blocked dependencies, true concurrency, immutable identity, observers, snapshots, and migration safety.'
+LastUpdated: 2026-07-20T15:13:48.612282791-04:00
+WhatFor: Implement scraper-level guarantees needed by expensive resumable batch consumers without duplicating workflow orchestration downstream.
+WhenToUse: Use before changing scheduler/store state transitions, embedded workflow APIs, worker concurrency, operator retry, or runtime event observation.
 ---
+
 
 # Harden scraper for long-running resumable batch workflows
 
