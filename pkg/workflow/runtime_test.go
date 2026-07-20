@@ -97,6 +97,31 @@ func TestRuntimeStartRunAndRunOnce(t *testing.T) {
 	require.Equal(t, model.WorkflowStatusSucceeded, workflow.Status)
 }
 
+func TestRuntimeEnsureRunAttachesOnlyToMatchingIdentity(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewRuntime(ctx, Config{Store: SQLiteStore(t.TempDir() + "/engine.db")})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, rt.Close()) }()
+	pkg := NewPackage("ensure").Entrypoint(EntrypointFunc[map[string]string](func(_ context.Context, run *RunBuilder, _ map[string]string) error {
+		_, err := run.Step(string(run.workflow.ID)+":root", map[string]string{}, StepOpts{Kind: "noop", Queue: "queue"})
+		return err
+	})).Build()
+	require.NoError(t, rt.RegisterPackage(pkg))
+
+	first, err := rt.EnsureRun(ctx, "ensure", map[string]string{"input": "one"}, WithRunIdentity(map[string]string{"source": "one"}))
+	require.NoError(t, err)
+	require.True(t, first.Created)
+	require.NotEmpty(t, first.IdentityDigest)
+	second, err := rt.EnsureRun(ctx, "ensure", map[string]string{"input": "ignored"}, WithRunIdentity(map[string]string{"source": "one"}))
+	require.NoError(t, err)
+	require.False(t, second.Created)
+	require.Equal(t, first.ID, second.ID)
+
+	_, err = rt.EnsureRun(ctx, "ensure", map[string]string{}, WithRunID(string(first.ID)), WithRunIdentity(map[string]string{"source": "different"}))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "identity conflict")
+}
+
 func TestRuntimeStartRunPersistsEntrypointWorkflowMutations(t *testing.T) {
 	ctx := context.Background()
 	rt, err := NewRuntime(ctx, Config{Store: SQLiteStore(t.TempDir() + "/engine.db")})

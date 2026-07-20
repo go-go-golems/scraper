@@ -52,6 +52,28 @@ func (o *recordingObserver) OnSchedulerEvent(ctx context.Context, event Event) {
 	o.events = append(o.events, event)
 }
 
+func TestSchedulerRecoversObserverPanicAfterCommittedTransition(t *testing.T) {
+	ctx := context.Background()
+	store := openSchedulerStore(t)
+	registry := runner.NewRegistry()
+	require.NoError(t, registry.Register(runnerFunc{kind: "ok", run: func(_ context.Context, runCtx runner.RunContext) (*model.OpResult, error) {
+		return &model.OpResult{OpID: runCtx.Op.ID, CompletedAt: time.Now().UTC()}, nil
+	}}))
+	observer := ObserverFunc(func(context.Context, Event) { panic("observer failure") })
+	s, err := New(store, registry, testSchedulerConfig(), "worker", observer)
+	require.NoError(t, err)
+	require.NoError(t, s.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
+		Workflow: model.WorkflowRun{ID: "wf-observer-panic", Site: "site", Name: "panic observer"},
+		Initial:  []model.OpSpec{{ID: "op-observer-panic", WorkflowID: "wf-observer-panic", Site: "site", Kind: "ok", Queue: "queue"}},
+	}))
+	cycle, err := s.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, cycle.Succeeded)
+	stats, err := store.GetWorkflowStats(ctx, "wf-observer-panic")
+	require.NoError(t, err)
+	require.Equal(t, 1, stats.Succeeded)
+}
+
 func TestSchedulerHeartbeatsLongRunningLease(t *testing.T) {
 	ctx := context.Background()
 	store := openSchedulerStore(t)

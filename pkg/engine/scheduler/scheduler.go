@@ -384,6 +384,7 @@ func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease 
 				Kind: EventOpLeaseLost, OccurredAt: s.now(), WorkflowID: op.WorkflowID, OpID: op.ID,
 				Site: op.Site, Queue: op.Queue, RunnerKind: op.Kind, Attempt: op.RetryState.Attempt + 1,
 				Message: "lease lost while operation was running",
+				Error:   &model.OpError{Code: "lease_lost", Message: "lease lost while operation was running", Retryable: true, OccurredAt: s.now()},
 			})
 		}
 		return 0, fmt.Errorf("heartbeat op %s: %w", op.ID, heartbeatErr)
