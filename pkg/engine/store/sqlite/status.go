@@ -117,22 +117,20 @@ func Inspect(ctx context.Context, dsn string) (*EngineStatus, error) {
 	if status.ArtifactCount, err = countTable(ctx, db, "artifacts"); err != nil {
 		return nil, err
 	}
-	if status.ActiveLeases, err = countQuery(
-		ctx,
-		db,
-		"active leases",
-		`SELECT COUNT(1) FROM leases WHERE expires_at > ?`,
-		time.Now().UTC().Format(time.RFC3339Nano),
-	); err != nil {
+	now := time.Now().UTC()
+	activeLeaseQuery, expiredLeaseQuery := `SELECT COUNT(1) FROM leases WHERE expires_at_us > ?`, `SELECT COUNT(1) FROM leases WHERE expires_at_us <= ?`
+	leaseArgument := any(epochMicros(now))
+	if status.CurrentVersion < 3 {
+		// Inspection deliberately does not migrate a database. Version 2 stores
+		// lease expiry as RFC3339Nano text, so use the legacy column until the
+		// caller opens the store and migration 3 has completed.
+		activeLeaseQuery, expiredLeaseQuery = `SELECT COUNT(1) FROM leases WHERE expires_at > ?`, `SELECT COUNT(1) FROM leases WHERE expires_at <= ?`
+		leaseArgument = now.Format(time.RFC3339Nano)
+	}
+	if status.ActiveLeases, err = countQuery(ctx, db, "active leases", activeLeaseQuery, leaseArgument); err != nil {
 		return nil, err
 	}
-	if status.ExpiredLeases, err = countQuery(
-		ctx,
-		db,
-		"expired leases",
-		`SELECT COUNT(1) FROM leases WHERE expires_at <= ?`,
-		time.Now().UTC().Format(time.RFC3339Nano),
-	); err != nil {
+	if status.ExpiredLeases, err = countQuery(ctx, db, "expired leases", expiredLeaseQuery, leaseArgument); err != nil {
 		return nil, err
 	}
 

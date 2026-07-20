@@ -16,51 +16,33 @@ func (s *Store) Enqueue(ctx context.Context, ops []model.OpSpec) error {
 	if err != nil {
 		return fmt.Errorf("begin enqueue: %w", err)
 	}
+	defer func() { _ = tx.Rollback() }()
 
 	if err := insertOps(ctx, tx, ops); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
-
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit enqueue: %w", err)
 	}
-
 	return nil
 }
 
 func (s *Store) GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error) {
 	row := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, workflow_id, parent_id, site, kind, queue_key, dedup_key, input_json, retry_json, retry_state_json, metadata_json, next_attempt_at, created_at, updated_at
+		`SELECT id, workflow_id, parent_id, site, kind, queue_key, dedup_key, input_json, retry_json, retry_state_json, metadata_json, next_attempt_at_us, created_at_us, updated_at_us
 		 FROM ops WHERE id = ?`,
 		id,
 	)
 
 	var op model.OpSpec
 	var parentID sql.NullString
-	var inputText string
-	var retryText string
-	var retryStateText string
-	var metadataText string
-	var nextAttemptText sql.NullString
-	var createdAt string
-	var updatedAt string
+	var inputText, retryText, retryStateText, metadataText string
+	var nextAttemptAt sql.NullInt64
+	var createdAt, updatedAt int64
 	if err := row.Scan(
-		&op.ID,
-		&op.WorkflowID,
-		&parentID,
-		&op.Site,
-		&op.Kind,
-		&op.Queue,
-		&op.DedupKey,
-		&inputText,
-		&retryText,
-		&retryStateText,
-		&metadataText,
-		&nextAttemptText,
-		&createdAt,
-		&updatedAt,
+		&op.ID, &op.WorkflowID, &parentID, &op.Site, &op.Kind, &op.Queue, &op.DedupKey,
+		&inputText, &retryText, &retryStateText, &metadataText, &nextAttemptAt, &createdAt, &updatedAt,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -82,14 +64,11 @@ func (s *Store) GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error)
 	if err := unmarshalJSON(metadataText, &op.Metadata); err != nil {
 		return nil, fmt.Errorf("decode op metadata: %w", err)
 	}
-	op.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
-	op.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updatedAt)
-	if nextAttemptText.Valid && nextAttemptText.String != "" {
-		nextAttemptAt, err := time.Parse(time.RFC3339Nano, nextAttemptText.String)
-		if err != nil {
-			return nil, fmt.Errorf("parse next attempt time: %w", err)
-		}
-		op.NextReadyAt = &nextAttemptAt
+	op.CreatedAt = timeFromEpochMicros(createdAt)
+	op.UpdatedAt = timeFromEpochMicros(updatedAt)
+	if nextAttemptAt.Valid {
+		readyAt := timeFromEpochMicros(nextAttemptAt.Int64)
+		op.NextReadyAt = &readyAt
 	}
 
 	dependencies, err := s.loadDependencies(ctx, id)
@@ -97,7 +76,6 @@ func (s *Store) GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error)
 		return nil, err
 	}
 	op.DependsOn = dependencies
-
 	return &op, nil
 }
 
@@ -106,98 +84,74 @@ func (s *Store) RefreshRunnableOps(ctx context.Context, now time.Time) (int, err
 	if err != nil {
 		return 0, fmt.Errorf("begin refresh runnable ops: %w", err)
 	}
+	defer func() { _ = tx.Rollback() }()
 
+	now = now.UTC()
+	nowUS := epochMicros(now)
 	totalChanged := 0
 
-	recovered, err := execRowsAffected(
-		ctx,
-		tx,
-		`UPDATE ops
-		 SET status = ?, updated_at = ?
-		 WHERE status = ?
-		   AND EXISTS (
-		     SELECT 1 FROM leases
-		     WHERE leases.op_id = ops.id
-		       AND leases.expires_at <= ?
-		   )`,
-		model.OpStatusReady,
-		now.UTC().Format(time.RFC3339Nano),
-		model.OpStatusRunning,
-		now.UTC().Format(time.RFC3339Nano),
-	)
+	recovered, err := execRowsAffected(ctx, tx, `UPDATE ops
+		SET status = ?, updated_at = ?, updated_at_us = ?
+		WHERE status = ? AND EXISTS (
+			SELECT 1 FROM leases
+			WHERE leases.op_id = ops.id AND leases.expires_at_us <= ?
+		)`, model.OpStatusReady, now.Format(time.RFC3339Nano), nowUS, model.OpStatusRunning, nowUS)
 	if err != nil {
-		_ = tx.Rollback()
 		return 0, fmt.Errorf("recover expired leases: %w", err)
 	}
 	totalChanged += recovered
 
-	if _, err := tx.ExecContext(
-		ctx,
-		`DELETE FROM leases WHERE expires_at <= ?`,
-		now.UTC().Format(time.RFC3339Nano),
-	); err != nil {
-		_ = tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM leases WHERE expires_at_us <= ?`, nowUS); err != nil {
 		return 0, fmt.Errorf("delete expired leases: %w", err)
 	}
 
+	// Dependency-derived blocking is recoverable. Repeat this transition so a
+	// newly blocked node blocks its pending descendants in the same refresh.
 	for {
-		canceled, err := execRowsAffected(
-			ctx,
-			tx,
-			`UPDATE ops
-			 SET status = ?, updated_at = ?
-			 WHERE status = ?
-			   AND EXISTS (
-			     SELECT 1
-			     FROM op_dependencies d
-			     JOIN ops dep ON dep.id = d.depends_on_op_id
-			     WHERE d.op_id = ops.id
-			       AND d.required = 1
-			       AND dep.status IN (?, ?)
-			   )`,
-			model.OpStatusCanceled,
-			now.UTC().Format(time.RFC3339Nano),
-			model.OpStatusPending,
-			model.OpStatusFailed,
-			model.OpStatusCanceled,
-		)
+		blocked, err := execRowsAffected(ctx, tx, `UPDATE ops
+			SET status = ?, updated_at = ?, updated_at_us = ?
+			WHERE status = ? AND EXISTS (
+				SELECT 1 FROM op_dependencies d
+				JOIN ops dep ON dep.id = d.depends_on_op_id
+				WHERE d.op_id = ops.id AND d.required = 1 AND dep.status IN (?, ?, ?)
+			)`, model.OpStatusBlocked, now.Format(time.RFC3339Nano), nowUS,
+			model.OpStatusPending, model.OpStatusFailed, model.OpStatusBlocked, model.OpStatusCanceled)
 		if err != nil {
-			_ = tx.Rollback()
-			return 0, fmt.Errorf("cancel blocked ops: %w", err)
+			return 0, fmt.Errorf("block dependency descendants: %w", err)
 		}
-		totalChanged += canceled
-		if canceled == 0 {
+		totalChanged += blocked
+		if blocked == 0 {
 			break
 		}
 	}
 
-	ready, err := execRowsAffected(
-		ctx,
-		tx,
-		`UPDATE ops
-		 SET status = ?, updated_at = ?
-		 WHERE status = ?
-		   AND NOT EXISTS (
-		     SELECT 1
-		     FROM op_dependencies d
-		     JOIN ops dep ON dep.id = d.depends_on_op_id
-		     WHERE d.op_id = ops.id
-		       AND (
-		         (d.required = 1 AND dep.status != ?)
-		         OR
-		         (d.required = 0 AND dep.status NOT IN (?, ?, ?))
-		       )
-		   )`,
-		model.OpStatusReady,
-		now.UTC().Format(time.RFC3339Nano),
-		model.OpStatusPending,
-		model.OpStatusSucceeded,
-		model.OpStatusSucceeded,
-		model.OpStatusFailed,
-		model.OpStatusCanceled,
-	)
+	// A repaired dependency makes blocked descendants pending again. The ready
+	// transition below still requires every required dependency to succeed.
+	unblocked, err := execRowsAffected(ctx, tx, `UPDATE ops
+		SET status = ?, updated_at = ?, updated_at_us = ?
+		WHERE status = ? AND NOT EXISTS (
+			SELECT 1 FROM op_dependencies d
+			JOIN ops dep ON dep.id = d.depends_on_op_id
+			WHERE d.op_id = ops.id AND d.required = 1 AND dep.status IN (?, ?, ?)
+		)`, model.OpStatusPending, now.Format(time.RFC3339Nano), nowUS,
+		model.OpStatusBlocked, model.OpStatusFailed, model.OpStatusBlocked, model.OpStatusCanceled)
 	if err != nil {
-		_ = tx.Rollback()
+		return 0, fmt.Errorf("reopen dependency descendants: %w", err)
+	}
+	totalChanged += unblocked
+
+	ready, err := execRowsAffected(ctx, tx, `UPDATE ops
+		SET status = ?, updated_at = ?, updated_at_us = ?
+		WHERE status = ? AND NOT EXISTS (
+			SELECT 1 FROM op_dependencies d
+			JOIN ops dep ON dep.id = d.depends_on_op_id
+			WHERE d.op_id = ops.id AND (
+				(d.required = 1 AND dep.status != ?) OR
+				(d.required = 0 AND dep.status NOT IN (?, ?, ?, ?))
+			)
+		)`, model.OpStatusReady, now.Format(time.RFC3339Nano), nowUS, model.OpStatusPending,
+		model.OpStatusSucceeded, model.OpStatusSucceeded, model.OpStatusFailed, model.OpStatusBlocked, model.OpStatusCanceled)
+	if err != nil {
 		return 0, fmt.Errorf("promote pending ops: %w", err)
 	}
 	totalChanged += ready
@@ -205,21 +159,15 @@ func (s *Store) RefreshRunnableOps(ctx context.Context, now time.Time) (int, err
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("commit refresh runnable ops: %w", err)
 	}
-
 	return totalChanged, nil
 }
 
 func (s *Store) ListQueueCandidates(ctx context.Context, now time.Time) ([]storecontract.QueueCandidate, error) {
-	rows, err := s.db.QueryContext(
-		ctx,
-		`SELECT DISTINCT ops.site, ops.queue_key
-		 FROM ops
-		 WHERE ops.status = ?
-		   AND (ops.next_attempt_at IS NULL OR ops.next_attempt_at <= ?)
-		 ORDER BY ops.site, ops.queue_key`,
-		model.OpStatusReady,
-		now.UTC().Format(time.RFC3339Nano),
-	)
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT ops.site, ops.queue_key
+		FROM ops
+		WHERE ops.status = ?
+		  AND (ops.next_attempt_at_us IS NULL OR ops.next_attempt_at_us <= ?)
+		ORDER BY ops.site, ops.queue_key`, model.OpStatusReady, epochMicros(now))
 	if err != nil {
 		return nil, fmt.Errorf("list queue candidates: %w", err)
 	}
@@ -233,7 +181,6 @@ func (s *Store) ListQueueCandidates(ctx context.Context, now time.Time) ([]store
 		}
 		ret = append(ret, candidate)
 	}
-
 	return ret, rows.Err()
 }
 

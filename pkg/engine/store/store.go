@@ -2,10 +2,13 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 )
+
+var ErrLeaseLost = errors.New("workflow lease lost")
 
 type CreateWorkflowParams struct {
 	Workflow model.WorkflowRun
@@ -22,12 +25,18 @@ type LeaseRequest struct {
 }
 
 type Completion struct {
-	Lease  model.Lease
+	Lease model.Lease
+	// Now is the wall-clock instant at which the owner attempts the durable
+	// transition. It must not be inferred from a runner-supplied result time.
+	Now    time.Time
 	Result model.OpResult
 }
 
 type Failure struct {
-	Lease      model.Lease
+	Lease model.Lease
+	// Now is the wall-clock instant at which the owner attempts the durable
+	// transition. It protects against a stale runner reporting an old error.
+	Now        time.Time
 	Error      model.OpError
 	RetryState model.RetryState
 }
@@ -35,6 +44,11 @@ type Failure struct {
 type QueueCandidate struct {
 	Site  model.SiteName
 	Queue model.QueueKey
+}
+
+type WorkflowSnapshot struct {
+	Workflow *model.WorkflowRun
+	Stats    *WorkflowStats
 }
 
 type WorkflowStats struct {
@@ -45,6 +59,7 @@ type WorkflowStats struct {
 	Running    int
 	Succeeded  int
 	Failed     int
+	Blocked    int
 	Canceled   int
 }
 
@@ -52,13 +67,15 @@ type WorkflowStore interface {
 	CreateWorkflow(ctx context.Context, params CreateWorkflowParams) error
 	GetWorkflow(ctx context.Context, id model.WorkflowID) (*model.WorkflowRun, error)
 	UpdateWorkflowStatus(ctx context.Context, id model.WorkflowID, status model.WorkflowStatus) error
+	GetWorkflowSnapshot(ctx context.Context, id model.WorkflowID) (*WorkflowSnapshot, error)
+	ListWorkflowSnapshots(ctx context.Context, updatedAfter time.Time, limit int) ([]WorkflowSnapshot, error)
 }
 
 type OpStore interface {
 	Enqueue(ctx context.Context, ops []model.OpSpec) error
 	GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error)
 	LeaseReadyOp(ctx context.Context, req LeaseRequest) (*model.OpSpec, *model.Lease, error)
-	HeartbeatLease(ctx context.Context, opID model.OpID, lease model.Lease, extendBy time.Duration) error
+	HeartbeatLease(ctx context.Context, opID model.OpID, lease model.Lease, now time.Time, leaseDuration time.Duration) (*model.Lease, error)
 	CompleteOp(ctx context.Context, opID model.OpID, completion Completion) error
 	FailOp(ctx context.Context, opID model.OpID, failure Failure) error
 }

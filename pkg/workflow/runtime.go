@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -62,10 +64,12 @@ type Config struct {
 	ArtifactStore   ArtifactStore
 	ProjectionStore ProjectionStore
 
-	WorkerID      string
-	MaxWorkers    int
-	PollInterval  time.Duration
-	LeaseDuration time.Duration
+	WorkerID          string
+	MaxWorkers        int
+	PollInterval      time.Duration
+	LeaseDuration     time.Duration
+	HeartbeatInterval time.Duration
+	Observer          scheduler.Observer
 
 	Queues map[model.QueueKey]QueueConfig
 }
@@ -103,7 +107,8 @@ func NewRuntime(ctx context.Context, cfg Config) (*Runtime, error) {
 		MaxWorkers:           cfg.MaxWorkers,
 		PollInterval:         cfg.PollInterval,
 		DefaultLeaseDuration: cfg.LeaseDuration,
-	}, cfg.WorkerID, nil)
+		HeartbeatInterval:    cfg.HeartbeatInterval,
+	}, cfg.WorkerID, cfg.Observer)
 	if err != nil {
 		_ = closeStore()
 		return nil, err
@@ -196,6 +201,7 @@ type runOptions struct {
 	ID       string
 	Name     string
 	Metadata map[string]string
+	Identity any
 }
 
 func WithRunID(id string) RunOption {
@@ -210,11 +216,21 @@ func WithRunMetadata(metadata map[string]string) RunOption {
 	return func(o *runOptions) { o.Metadata = cloneStringMap(metadata) }
 }
 
-type RunHandle struct {
-	ID      model.WorkflowID
-	Package string
-	Name    string
+// WithRunIdentity supplies the immutable canonical identity required by
+// EnsureRun. It is ignored by StartRun, which always creates a new run.
+func WithRunIdentity(identity any) RunOption {
+	return func(o *runOptions) { o.Identity = identity }
 }
+
+type RunHandle struct {
+	ID             model.WorkflowID
+	Package        string
+	Name           string
+	IdentityDigest string
+	Created        bool
+}
+
+const workflowIdentityDigestMetadataKey = "scraper.workflow.identity.digest"
 
 func (rt *Runtime) StartRun(ctx context.Context, packageName string, input any, opts ...RunOption) (*RunHandle, error) {
 	if rt == nil {
@@ -266,7 +282,91 @@ func (rt *Runtime) StartRun(ctx context.Context, packageName string, input any, 
 	}); err != nil {
 		return nil, err
 	}
-	return &RunHandle{ID: workflow.ID, Package: packageName, Name: workflow.Name}, nil
+	return &RunHandle{ID: workflow.ID, Package: packageName, Name: workflow.Name, Created: true}, nil
+}
+
+// EnsureRun creates a workflow once for a canonical immutable identity, or
+// attaches to the matching durable run after a restart. Identity mismatch is
+// an error rather than a best-effort name/input match.
+func (rt *Runtime) EnsureRun(ctx context.Context, packageName string, input any, opts ...RunOption) (*RunHandle, error) {
+	if rt == nil || rt.store == nil {
+		return nil, fmt.Errorf("workflow runtime store is not configured")
+	}
+	pkg := rt.packages[packageName]
+	if pkg == nil {
+		return nil, fmt.Errorf("workflow package %q is not registered", packageName)
+	}
+	options := runOptions{Metadata: map[string]string{}}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&options)
+		}
+	}
+	if options.Identity == nil {
+		return nil, fmt.Errorf("ensure run identity is required")
+	}
+	identity, err := marshalJSON(options.Identity)
+	if err != nil {
+		return nil, fmt.Errorf("marshal run identity: %w", err)
+	}
+	digestBytes := sha256.Sum256(identity)
+	digest := hex.EncodeToString(digestBytes[:])
+	if options.ID == "" {
+		options.ID = packageName + "-" + digest
+	}
+	workflowID := model.WorkflowID(options.ID)
+
+	existing, err := rt.store.GetWorkflow(ctx, workflowID)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return ensureExistingRun(existing, packageName, digest)
+	}
+
+	metadata := cloneStringMap(options.Metadata)
+	metadata[workflowIdentityDigestMetadataKey] = digest
+	created, err := rt.StartRun(ctx, packageName, input,
+		WithRunID(options.ID), WithRunName(options.Name), WithRunMetadata(metadata))
+	if err == nil {
+		created.IdentityDigest = digest
+		return created, nil
+	}
+	// A concurrent process may have created the same deterministic ID between
+	// the read and creation attempt. Attach only if it proves the same identity.
+	existing, lookupErr := rt.store.GetWorkflow(ctx, workflowID)
+	if lookupErr != nil {
+		return nil, lookupErr
+	}
+	if existing != nil {
+		return ensureExistingRun(existing, packageName, digest)
+	}
+	return nil, err
+}
+
+func ensureExistingRun(existing *model.WorkflowRun, packageName, digest string) (*RunHandle, error) {
+	if existing.Site != model.SiteName(packageName) || existing.Metadata[workflowIdentityDigestMetadataKey] != digest {
+		return nil, fmt.Errorf("workflow identity conflict for %s", existing.ID)
+	}
+	return &RunHandle{ID: existing.ID, Package: packageName, Name: existing.Name, IdentityDigest: digest, Created: false}, nil
+}
+
+// Snapshot reads current durable workflow state and aggregate counts. It is
+// suitable for restart-safe dashboards and operator polling.
+func (rt *Runtime) Snapshot(ctx context.Context, runID model.WorkflowID) (*storecontract.WorkflowSnapshot, error) {
+	if rt == nil || rt.store == nil {
+		return nil, fmt.Errorf("workflow runtime store is not configured")
+	}
+	return rt.store.GetWorkflowSnapshot(ctx, runID)
+}
+
+// SnapshotsSince incrementally reads workflows changed after the supplied
+// cursor. Consumers should retain the largest returned Workflow.UpdatedAt.
+func (rt *Runtime) SnapshotsSince(ctx context.Context, updatedAfter time.Time, limit int) ([]storecontract.WorkflowSnapshot, error) {
+	if rt == nil || rt.store == nil {
+		return nil, fmt.Errorf("workflow runtime store is not configured")
+	}
+	return rt.store.ListWorkflowSnapshots(ctx, updatedAfter, limit)
 }
 
 func (rt *Runtime) RunOnce(ctx context.Context) (*scheduler.CycleResult, error) {

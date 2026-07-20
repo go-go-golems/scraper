@@ -17,7 +17,8 @@ type OperatorService interface {
 	CancelWorkflow(ctx context.Context, workflowID model.WorkflowID) error
 }
 
-// RetryStep moves a failed step back to ready so workers can execute it again.
+// RetryStep repairs a failed step and reopens dependency-blocked descendants
+// whose required dependencies are no longer terminal blockers.
 func (rt *Runtime) RetryStep(ctx context.Context, runID model.WorkflowID, stepID model.OpID) error {
 	if rt == nil || rt.operators == nil {
 		return fmt.Errorf("workflow runtime operator service is not configured")
@@ -25,9 +26,9 @@ func (rt *Runtime) RetryStep(ctx context.Context, runID model.WorkflowID, stepID
 	return rt.operators.RetryOp(ctx, runID, stepID)
 }
 
-// CancelRun cancels pending, ready, and running steps for a run. The current
-// SQLite implementation marks running steps canceled and removes leases; future
-// phases should add cooperative executor cancellation for in-flight subprocesses.
+// CancelRun cancels pending, ready, running, and blocked steps for a run. The
+// SQLite implementation removes their leases; active workers detect lease loss
+// through their heartbeat and receive a canceled execution context.
 func (rt *Runtime) CancelRun(ctx context.Context, runID model.WorkflowID) error {
 	if rt == nil || rt.operators == nil {
 		return fmt.Errorf("workflow runtime operator service is not configured")

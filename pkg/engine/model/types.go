@@ -30,7 +30,10 @@ const (
 	OpStatusRunning   OpStatus = "running"
 	OpStatusSucceeded OpStatus = "succeeded"
 	OpStatusFailed    OpStatus = "failed"
-	OpStatusCanceled  OpStatus = "canceled"
+	// OpStatusBlocked is dependency-derived and may reopen after an explicit
+	// retry repairs every required dependency. It is distinct from cancellation.
+	OpStatusBlocked  OpStatus = "blocked"
+	OpStatusCanceled OpStatus = "canceled"
 )
 
 type BackoffKind string

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	databasemod "github.com/go-go-golems/go-go-goja/modules/database"
@@ -17,6 +18,7 @@ type Config struct {
 	MaxWorkers           int
 	PollInterval         time.Duration
 	DefaultLeaseDuration time.Duration
+	HeartbeatInterval    time.Duration
 }
 
 func (c Config) Validate() error {
@@ -28,6 +30,15 @@ func (c Config) Validate() error {
 	}
 	if c.DefaultLeaseDuration <= 0 {
 		return fmt.Errorf("default lease duration must be > 0")
+	}
+	if c.HeartbeatInterval < 0 {
+		return fmt.Errorf("heartbeat interval must not be negative")
+	}
+	if c.HeartbeatInterval >= c.DefaultLeaseDuration {
+		return fmt.Errorf("heartbeat interval must be shorter than default lease duration")
+	}
+	if c.HeartbeatInterval == 0 && c.DefaultLeaseDuration/3 <= 0 {
+		return fmt.Errorf("default lease duration is too short to derive a heartbeat interval")
 	}
 
 	return nil
@@ -41,6 +52,7 @@ const (
 	EventOpSucceeded      EventKind = "op_succeeded"
 	EventOpRetried        EventKind = "op_retried"
 	EventOpFailed         EventKind = "op_failed"
+	EventOpLeaseLost      EventKind = "op_lease_lost"
 	EventWorkflowUpdated  EventKind = "workflow_updated"
 	EventQueueRateLimited EventKind = "queue_rate_limited"
 	EventIdle             EventKind = "idle"
@@ -79,6 +91,7 @@ type Scheduler struct {
 	runners             *runner.Registry
 	workerID            string
 	observer            Observer
+	observerMu          sync.Mutex
 	scraperDB           databasemod.QueryExecer
 	siteDBProvider      func(ctx context.Context, site model.SiteName) (databasemod.QueryExecer, error)
 	queuePolicyProvider func(ctx context.Context, site model.SiteName, queue model.QueueKey) model.QueuePolicy
@@ -177,6 +190,19 @@ type CycleResult struct {
 	WorkflowEvents int
 }
 
+type executionOutcome uint8
+
+const (
+	executionOutcomeSucceeded executionOutcome = iota + 1
+	executionOutcomeRetried
+	executionOutcomeFailed
+)
+
+type leasedJob struct {
+	op    model.OpSpec
+	lease model.Lease
+}
+
 func (s *Scheduler) Run(ctx context.Context) error {
 	ticker := time.NewTicker(s.config.PollInterval)
 	defer ticker.Stop()
@@ -200,97 +226,104 @@ func (s *Scheduler) RunOnce(ctx context.Context) (*CycleResult, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	candidates, err := s.store.ListQueueCandidates(ctx, now)
 	if err != nil {
 		return nil, err
 	}
-
-	result := &CycleResult{
-		Refreshed: refreshed,
-	}
-
+	result := &CycleResult{Refreshed: refreshed}
 	if len(candidates) == 0 {
-		s.emit(ctx, Event{
-			Kind:       EventIdle,
-			OccurredAt: now,
-			Message:    "no leaseable queues",
-		})
+		s.emit(ctx, Event{Kind: EventIdle, OccurredAt: now, Message: "no leaseable queues"})
 		return result, nil
 	}
 
+	// Lease in round-robin passes. Queue policy is enforced transactionally by
+	// the store, while this pass prevents an early queue from consuming all local
+	// worker capacity before another ready queue gets a chance.
+	jobs := make([]leasedJob, 0, s.config.MaxWorkers)
 	processedWorkflows := map[model.WorkflowID]struct{}{}
-	for i, candidate := range candidates {
-		if i >= s.config.MaxWorkers {
-			break
-		}
-
-		policy := s.queuePolicy(ctx, candidate.Site, candidate.Queue)
-		remainingGlobalSlots := s.config.MaxWorkers - result.Processed
-		if remainingGlobalSlots <= 0 {
-			break
-		}
-		maxAttempts := policy.MaxInFlight
-		if maxAttempts > remainingGlobalSlots {
-			maxAttempts = remainingGlobalSlots
-		}
-
-		leasedInQueue := 0
-		for leasedInQueue < maxAttempts {
+	for len(jobs) < s.config.MaxWorkers {
+		leasedThisPass := false
+		for _, candidate := range candidates {
+			if len(jobs) == s.config.MaxWorkers {
+				break
+			}
+			policy := s.queuePolicy(ctx, candidate.Site, candidate.Queue)
 			op, lease, err := s.store.LeaseReadyOp(ctx, storecontract.LeaseRequest{
-				WorkerID:      s.workerID,
-				Queue:         candidate.Queue,
-				Site:          candidate.Site,
-				Policy:        policy,
-				LeaseDuration: s.config.DefaultLeaseDuration,
-				Now:           now,
+				WorkerID: s.workerID, Queue: candidate.Queue, Site: candidate.Site, Policy: policy,
+				LeaseDuration: s.config.DefaultLeaseDuration, Now: now,
 			})
 			if err != nil {
 				return nil, err
 			}
 			if op == nil || lease == nil {
-				if leasedInQueue == 0 && policy.RateLimit != nil {
-					s.emit(ctx, Event{
-						Kind:       EventQueueRateLimited,
-						OccurredAt: now,
-						Site:       candidate.Site,
-						Queue:      candidate.Queue,
-						Message:    "queue had ready work but could not lease due to queue policy",
-					})
+				if policy.RateLimit != nil {
+					s.emit(ctx, Event{Kind: EventQueueRateLimited, OccurredAt: now, Site: candidate.Site, Queue: candidate.Queue,
+						Message: "queue had ready work but could not lease due to queue policy"})
 				}
-				break
+				continue
 			}
-
-			leasedInQueue++
-			result.Processed++
+			leasedThisPass = true
+			jobs = append(jobs, leasedJob{op: *op, lease: *lease})
 			processedWorkflows[op.WorkflowID] = struct{}{}
-			s.emit(ctx, Event{
-				Kind:              EventOpLeased,
-				OccurredAt:        now,
-				WorkflowID:        op.WorkflowID,
-				OpID:              op.ID,
-				Site:              op.Site,
-				Queue:             op.Queue,
-				RunnerKind:        op.Kind,
-				QueueWaitDuration: op.QueueWaitDuration(now),
-				Attempt:           op.RetryState.Attempt + 1,
-				Message:           "leased op",
-			})
-
-			if err := s.executeLeasedOp(ctx, *op, *lease, now); err != nil {
-				return nil, err
-			}
+			s.emit(ctx, Event{Kind: EventOpLeased, OccurredAt: now, WorkflowID: op.WorkflowID, OpID: op.ID,
+				Site: op.Site, Queue: op.Queue, RunnerKind: op.Kind, QueueWaitDuration: op.QueueWaitDuration(now),
+				Attempt: op.RetryState.Attempt + 1, Message: "leased op"})
+		}
+		if !leasedThisPass {
+			break
 		}
 	}
+	result.Processed = len(jobs)
+	if len(jobs) == 0 {
+		s.emit(ctx, Event{Kind: EventIdle, OccurredAt: now, Message: "no operations admitted by queue policy"})
+		return result, nil
+	}
 
+	type executionResult struct {
+		outcome executionOutcome
+		err     error
+	}
+	executions := make(chan executionResult, len(jobs))
+	var workers sync.WaitGroup
+	for _, job := range jobs {
+		workers.Add(1)
+		go func(job leasedJob) {
+			defer workers.Done()
+			outcome, err := s.executeLeasedOp(ctx, job.op, job.lease, now)
+			executions <- executionResult{outcome: outcome, err: err}
+		}(job)
+	}
+	workers.Wait()
+	close(executions)
+
+	var firstErr error
+	for execution := range executions {
+		switch execution.outcome {
+		case executionOutcomeSucceeded:
+			result.Succeeded++
+		case executionOutcomeRetried:
+			result.Retried++
+		case executionOutcomeFailed:
+			result.Failed++
+		}
+		if execution.err != nil && firstErr == nil {
+			firstErr = execution.err
+		}
+	}
 	for workflowID := range processedWorkflows {
-		if err := s.refreshWorkflowStatus(ctx, workflowID); err != nil {
-			return nil, err
+		if err := s.refreshWorkflowStatus(ctx, workflowID); err != nil && firstErr == nil {
+			firstErr = err
 		}
 		result.WorkflowEvents++
 	}
+	return result, firstErr
+}
 
-	return result, nil
+func (s *Scheduler) heartbeatInterval() time.Duration {
+	if s.config.HeartbeatInterval > 0 {
+		return s.config.HeartbeatInterval
+	}
+	return s.config.DefaultLeaseDuration / 3
 }
 
 func (s *Scheduler) queuePolicy(ctx context.Context, site model.SiteName, queue model.QueueKey) model.QueuePolicy {
@@ -300,13 +333,13 @@ func (s *Scheduler) queuePolicy(ctx context.Context, site model.SiteName, queue 
 	return s.queuePolicyProvider(ctx, site, queue).Normalize()
 }
 
-func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease model.Lease, now time.Time) error {
+func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease model.Lease, now time.Time) (executionOutcome, error) {
 	workflow, err := s.store.GetWorkflow(ctx, op.WorkflowID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if workflow == nil {
-		return fmt.Errorf("workflow %s not found for op %s", op.WorkflowID, op.ID)
+		return 0, fmt.Errorf("workflow %s not found for op %s", op.WorkflowID, op.ID)
 	}
 
 	impl, ok := s.runners.Get(op.Kind)
@@ -324,11 +357,16 @@ func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease 
 	if s.siteDBProvider != nil {
 		siteDB, err = s.siteDBProvider(ctx, op.Site)
 		if err != nil {
-			return fmt.Errorf("resolve site db for %s: %w", op.Site, err)
+			return 0, fmt.Errorf("resolve site db for %s: %w", op.Site, err)
 		}
 	}
 
-	opResult, runErr := impl.Run(ctx, runner.RunContext{
+	runCtx, cancelRun := context.WithCancel(ctx)
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	heartbeatDone := make(chan error, 1)
+	go s.heartbeatLease(heartbeatCtx, heartbeatDone, cancelRun, op.ID, lease)
+
+	opResult, runErr := impl.Run(runCtx, runner.RunContext{
 		Workflow:     *workflow,
 		Op:           op,
 		Lease:        lease,
@@ -337,6 +375,20 @@ func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease 
 		ScraperDB:    s.scraperDB,
 		SiteDB:       siteDB,
 	})
+	cancelHeartbeat()
+	heartbeatErr := <-heartbeatDone
+	cancelRun()
+	if heartbeatErr != nil {
+		if errors.Is(heartbeatErr, storecontract.ErrLeaseLost) {
+			s.emit(ctx, Event{
+				Kind: EventOpLeaseLost, OccurredAt: s.now(), WorkflowID: op.WorkflowID, OpID: op.ID,
+				Site: op.Site, Queue: op.Queue, RunnerKind: op.Kind, Attempt: op.RetryState.Attempt + 1,
+				Message: "lease lost while operation was running",
+				Error:   &model.OpError{Code: "lease_lost", Message: "lease lost while operation was running", Retryable: true, OccurredAt: s.now()},
+			})
+		}
+		return 0, fmt.Errorf("heartbeat op %s: %w", op.ID, heartbeatErr)
+	}
 	if runErr != nil {
 		opErr := classifyRunError(runErr, now)
 		return s.failLeasedOp(ctx, op, lease, now, opErr)
@@ -359,9 +411,10 @@ func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease 
 
 	if err := s.store.CompleteOp(ctx, op.ID, storecontract.Completion{
 		Lease:  lease,
+		Now:    s.now(),
 		Result: *opResult,
 	}); err != nil {
-		return fmt.Errorf("complete op %s: %w", op.ID, err)
+		return 0, fmt.Errorf("complete op %s: %w", op.ID, err)
 	}
 
 	s.emit(ctx, Event{
@@ -377,20 +430,60 @@ func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease 
 	})
 
 	if _, err := s.store.RefreshRunnableOps(ctx, now); err != nil {
-		return err
+		return 0, err
 	}
 
-	return nil
+	return executionOutcomeSucceeded, nil
 }
 
-func (s *Scheduler) failLeasedOp(ctx context.Context, op model.OpSpec, lease model.Lease, now time.Time, opErr model.OpError) error {
+func (s *Scheduler) heartbeatLease(
+	ctx context.Context,
+	done chan<- error,
+	cancelRun context.CancelFunc,
+	opID model.OpID,
+	lease model.Lease,
+) {
+	interval := s.heartbeatInterval()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	var outcome error
+	defer func() { done <- outcome }()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_, err := s.store.HeartbeatLease(ctx, opID, lease, s.now(), s.config.DefaultLeaseDuration)
+			if err == nil {
+				continue
+			}
+			// Completion cancels the heartbeat context before joining this goroutine.
+			// A driver may return that cancellation from an in-flight heartbeat; it is
+			// not evidence that the lease was lost.
+			if ctx.Err() != nil {
+				return
+			}
+			cancelRun()
+			if errors.Is(err, storecontract.ErrLeaseLost) {
+				outcome = storecontract.ErrLeaseLost
+				return
+			}
+			outcome = fmt.Errorf("heartbeat lease: %w", err)
+			return
+		}
+	}
+}
+
+func (s *Scheduler) failLeasedOp(ctx context.Context, op model.OpSpec, lease model.Lease, now time.Time, opErr model.OpError) (executionOutcome, error) {
 	retryState := nextRetryState(op, now, opErr)
 	if err := s.store.FailOp(ctx, op.ID, storecontract.Failure{
 		Lease:      lease,
+		Now:        s.now(),
 		Error:      opErr,
 		RetryState: retryState,
 	}); err != nil {
-		return fmt.Errorf("fail op %s: %w", op.ID, err)
+		return 0, fmt.Errorf("fail op %s: %w", op.ID, err)
 	}
 
 	eventKind := EventOpFailed
@@ -414,10 +507,12 @@ func (s *Scheduler) failLeasedOp(ctx context.Context, op model.OpSpec, lease mod
 	})
 
 	if _, err := s.store.RefreshRunnableOps(ctx, now); err != nil {
-		return err
+		return 0, err
 	}
-
-	return nil
+	if retryState.NextAttemptAt != nil {
+		return executionOutcomeRetried, nil
+	}
+	return executionOutcomeFailed, nil
 }
 
 func (s *Scheduler) refreshWorkflowStatus(ctx context.Context, workflowID model.WorkflowID) error {
@@ -562,7 +657,7 @@ func (s *Scheduler) emit(ctx context.Context, event Event) {
 			Str("workflow_status", string(event.Status)).
 			Int("attempt", event.Attempt).
 			Msg(event.Message)
-	case EventOpFailed:
+	case EventOpFailed, EventOpLeaseLost:
 		logger := log.Warn()
 		if event.Error != nil {
 			logger = logger.Str("error_code", event.Error.Code).Bool("retryable", event.Error.Retryable)
@@ -587,7 +682,19 @@ func (s *Scheduler) emit(ctx context.Context, event Event) {
 	}
 
 	if s.observer != nil {
-		s.observer.OnSchedulerEvent(ctx, event)
+		// Runners complete concurrently. Serialize observer delivery so a simple
+		// observer remains race-free, and never let observer code terminate the
+		// durable scheduler after a state transition has committed.
+		s.observerMu.Lock()
+		defer s.observerMu.Unlock()
+		func() {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					log.Error().Interface("panic", recovered).Str("event", string(event.Kind)).Msg("scheduler observer panicked")
+				}
+			}()
+			s.observer.OnSchedulerEvent(ctx, event)
+		}()
 	}
 }
 

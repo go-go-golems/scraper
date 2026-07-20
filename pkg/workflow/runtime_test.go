@@ -67,9 +67,9 @@ func TestRuntimeStartRunAndRunOnce(t *testing.T) {
 
 	first, err := rt.RunOnce(ctx)
 	require.NoError(t, err)
-	// The current scheduler refreshes runnable child steps after completing a
-	// parent and may process the emitted child in the same RunOnce cycle.
-	require.Equal(t, 2, first.Processed)
+	// RunOnce leases a bounded concurrent snapshot. An operation emitted by a
+	// completed parent is admitted by the following cycle.
+	require.Equal(t, 1, first.Processed)
 	rootResult, err := rt.Result(ctx, run.ID, "root")
 	require.NoError(t, err)
 	require.NotNil(t, rootResult)
@@ -78,16 +78,48 @@ func TestRuntimeStartRunAndRunOnce(t *testing.T) {
 
 	childResult, err := rt.Result(ctx, run.ID, "child")
 	require.NoError(t, err)
-	require.NotNil(t, childResult)
-	require.JSONEq(t, `{"child":"hello child"}`, string(childResult.Data))
+	require.Nil(t, childResult)
 
 	second, err := rt.RunOnce(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 0, second.Processed)
+	require.Equal(t, 1, second.Processed)
+	childResult, err = rt.Result(ctx, run.ID, "child")
+	require.NoError(t, err)
+	require.NotNil(t, childResult)
+	require.JSONEq(t, `{"child":"hello child"}`, string(childResult.Data))
+
+	third, err := rt.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 0, third.Processed)
 
 	workflow, err = rt.Workflow(ctx, run.ID)
 	require.NoError(t, err)
 	require.Equal(t, model.WorkflowStatusSucceeded, workflow.Status)
+}
+
+func TestRuntimeEnsureRunAttachesOnlyToMatchingIdentity(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewRuntime(ctx, Config{Store: SQLiteStore(t.TempDir() + "/engine.db")})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, rt.Close()) }()
+	pkg := NewPackage("ensure").Entrypoint(EntrypointFunc[map[string]string](func(_ context.Context, run *RunBuilder, _ map[string]string) error {
+		_, err := run.Step(string(run.workflow.ID)+":root", map[string]string{}, StepOpts{Kind: "noop", Queue: "queue"})
+		return err
+	})).Build()
+	require.NoError(t, rt.RegisterPackage(pkg))
+
+	first, err := rt.EnsureRun(ctx, "ensure", map[string]string{"input": "one"}, WithRunIdentity(map[string]string{"source": "one"}))
+	require.NoError(t, err)
+	require.True(t, first.Created)
+	require.NotEmpty(t, first.IdentityDigest)
+	second, err := rt.EnsureRun(ctx, "ensure", map[string]string{"input": "ignored"}, WithRunIdentity(map[string]string{"source": "one"}))
+	require.NoError(t, err)
+	require.False(t, second.Created)
+	require.Equal(t, first.ID, second.ID)
+
+	_, err = rt.EnsureRun(ctx, "ensure", map[string]string{}, WithRunID(string(first.ID)), WithRunIdentity(map[string]string{"source": "different"}))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "identity conflict")
 }
 
 func TestRuntimeStartRunPersistsEntrypointWorkflowMutations(t *testing.T) {
