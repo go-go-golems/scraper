@@ -19,7 +19,7 @@ func TestOpenAppliesLatestMigrations(t *testing.T) {
 
 	version, err := store.CurrentVersion(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, 3, version)
+	require.Equal(t, 4, version)
 }
 
 func TestMigrateUpgradeFromVersionOne(t *testing.T) {
@@ -31,7 +31,7 @@ func TestMigrateUpgradeFromVersionOne(t *testing.T) {
 
 	migrations, err := loadMigrations()
 	require.NoError(t, err)
-	require.Len(t, migrations, 3)
+	require.Len(t, migrations, 4)
 
 	_, err = db.ExecContext(ctx, `
 		CREATE TABLE schema_migrations (
@@ -56,7 +56,7 @@ func TestMigrateUpgradeFromVersionOne(t *testing.T) {
 
 	version, err := currentVersion(ctx, db)
 	require.NoError(t, err)
-	require.Equal(t, 3, version)
+	require.Equal(t, 4, version)
 
 	var tableName string
 	err = db.QueryRowContext(
@@ -383,7 +383,7 @@ func TestWorkflowSnapshotsAreStoreDerivedAndIncremental(t *testing.T) {
 	items, err := store.ListWorkflowSnapshots(ctx, createdAt.Add(-time.Microsecond), 10)
 	require.NoError(t, err)
 	require.Len(t, items, 1)
-	items, err = store.ListWorkflowSnapshots(ctx, createdAt, 10)
+	items, err = store.ListWorkflowSnapshots(ctx, snapshot.Workflow.UpdatedAt, 10)
 	require.NoError(t, err)
 	require.Empty(t, items)
 }
@@ -441,7 +441,7 @@ func TestMigrateBackfillsSortableTimestamps(t *testing.T) {
 
 	migrations, err := loadMigrations()
 	require.NoError(t, err)
-	require.Len(t, migrations, 3)
+	require.Len(t, migrations, 4)
 	_, err = db.ExecContext(ctx, migrations[0].sql)
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, migrations[1].sql)

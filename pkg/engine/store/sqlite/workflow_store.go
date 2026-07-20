@@ -82,7 +82,8 @@ func (s *Store) GetWorkflowSnapshot(ctx context.Context, id model.WorkflowID) (*
 
 // ListWorkflowSnapshots returns an authoritative store-derived inspection page.
 // Pass the last observed UpdatedAt to resume polling without relying on
-// process-local events. The tie-breaking ID order makes page output stable.
+// process-local events. A page includes every workflow tied at its final
+// microsecond, preventing a timestamp-only cursor from skipping same-time IDs.
 func (s *Store) ListWorkflowSnapshots(ctx context.Context, updatedAfter time.Time, limit int) ([]storecontract.WorkflowSnapshot, error) {
 	if limit <= 0 {
 		limit = 100
@@ -90,10 +91,17 @@ func (s *Store) ListWorkflowSnapshots(ctx context.Context, updatedAfter time.Tim
 	if limit > 1000 {
 		limit = 1000
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM workflows
-		WHERE updated_at_us > ?
-		ORDER BY updated_at_us ASC, id ASC
-		LIMIT ?`, epochMicros(updatedAfter), limit)
+	rows, err := s.db.QueryContext(ctx, `WITH candidates AS (
+			SELECT id, updated_at_us FROM workflows WHERE updated_at_us > ?
+		), boundary AS (
+			SELECT updated_at_us FROM candidates
+			ORDER BY updated_at_us ASC, id ASC
+			LIMIT 1 OFFSET ?
+		)
+		SELECT id FROM candidates
+		WHERE NOT EXISTS (SELECT 1 FROM boundary)
+		   OR updated_at_us <= (SELECT updated_at_us FROM boundary)
+		ORDER BY updated_at_us ASC, id ASC`, epochMicros(updatedAfter), limit-1)
 	if err != nil {
 		return nil, fmt.Errorf("list workflow snapshot ids: %w", err)
 	}

@@ -147,10 +147,10 @@ func (s *Store) RefreshRunnableOps(ctx context.Context, now time.Time) (int, err
 			JOIN ops dep ON dep.id = d.depends_on_op_id
 			WHERE d.op_id = ops.id AND (
 				(d.required = 1 AND dep.status != ?) OR
-				(d.required = 0 AND dep.status NOT IN (?, ?, ?))
+				(d.required = 0 AND dep.status NOT IN (?, ?, ?, ?))
 			)
 		)`, model.OpStatusReady, now.Format(time.RFC3339Nano), nowUS, model.OpStatusPending,
-		model.OpStatusSucceeded, model.OpStatusSucceeded, model.OpStatusFailed, model.OpStatusCanceled)
+		model.OpStatusSucceeded, model.OpStatusSucceeded, model.OpStatusFailed, model.OpStatusBlocked, model.OpStatusCanceled)
 	if err != nil {
 		return 0, fmt.Errorf("promote pending ops: %w", err)
 	}
