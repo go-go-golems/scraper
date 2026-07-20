@@ -290,7 +290,7 @@ The runtime exposes two operator actions when the store configuration provides a
 | `RetryStep(ctx, runID, stepID)` | Moves a failed step back to ready so workers can execute it again |
 | `CancelRun(ctx, runID)` | Cancels pending, ready, and running steps for a workflow |
 
-The built-in SQLite store provides these actions through the engineview service. Current cancellation marks running steps canceled and removes leases; executors should still use contexts for cooperative cancellation where possible.
+The built-in SQLite store provides these actions through the engineview service. Dependency-derived `blocked` steps are recoverable when an operator retries the failed prerequisite; explicit cancellation remains terminal. Cancellation removes leases, and scheduler heartbeats cancel active executor contexts when they detect that lease loss.
 
 ## Running Workers
 
