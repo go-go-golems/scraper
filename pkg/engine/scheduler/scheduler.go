@@ -17,6 +17,7 @@ type Config struct {
 	MaxWorkers           int
 	PollInterval         time.Duration
 	DefaultLeaseDuration time.Duration
+	HeartbeatInterval    time.Duration
 }
 
 func (c Config) Validate() error {
@@ -28,6 +29,15 @@ func (c Config) Validate() error {
 	}
 	if c.DefaultLeaseDuration <= 0 {
 		return fmt.Errorf("default lease duration must be > 0")
+	}
+	if c.HeartbeatInterval < 0 {
+		return fmt.Errorf("heartbeat interval must not be negative")
+	}
+	if c.HeartbeatInterval >= c.DefaultLeaseDuration {
+		return fmt.Errorf("heartbeat interval must be shorter than default lease duration")
+	}
+	if c.HeartbeatInterval == 0 && c.DefaultLeaseDuration/3 <= 0 {
+		return fmt.Errorf("default lease duration is too short to derive a heartbeat interval")
 	}
 
 	return nil
@@ -41,6 +51,7 @@ const (
 	EventOpSucceeded      EventKind = "op_succeeded"
 	EventOpRetried        EventKind = "op_retried"
 	EventOpFailed         EventKind = "op_failed"
+	EventOpLeaseLost      EventKind = "op_lease_lost"
 	EventWorkflowUpdated  EventKind = "workflow_updated"
 	EventQueueRateLimited EventKind = "queue_rate_limited"
 	EventIdle             EventKind = "idle"
@@ -293,6 +304,13 @@ func (s *Scheduler) RunOnce(ctx context.Context) (*CycleResult, error) {
 	return result, nil
 }
 
+func (s *Scheduler) heartbeatInterval() time.Duration {
+	if s.config.HeartbeatInterval > 0 {
+		return s.config.HeartbeatInterval
+	}
+	return s.config.DefaultLeaseDuration / 3
+}
+
 func (s *Scheduler) queuePolicy(ctx context.Context, site model.SiteName, queue model.QueueKey) model.QueuePolicy {
 	if s.queuePolicyProvider == nil {
 		return model.DefaultQueuePolicy()
@@ -328,7 +346,12 @@ func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease 
 		}
 	}
 
-	opResult, runErr := impl.Run(ctx, runner.RunContext{
+	runCtx, cancelRun := context.WithCancel(ctx)
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	heartbeatDone := make(chan error, 1)
+	go s.heartbeatLease(heartbeatCtx, heartbeatDone, cancelRun, op.ID, lease)
+
+	opResult, runErr := impl.Run(runCtx, runner.RunContext{
 		Workflow:     *workflow,
 		Op:           op,
 		Lease:        lease,
@@ -337,6 +360,19 @@ func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease 
 		ScraperDB:    s.scraperDB,
 		SiteDB:       siteDB,
 	})
+	cancelHeartbeat()
+	heartbeatErr := <-heartbeatDone
+	cancelRun()
+	if heartbeatErr != nil {
+		if errors.Is(heartbeatErr, storecontract.ErrLeaseLost) {
+			s.emit(ctx, Event{
+				Kind: EventOpLeaseLost, OccurredAt: s.now(), WorkflowID: op.WorkflowID, OpID: op.ID,
+				Site: op.Site, Queue: op.Queue, RunnerKind: op.Kind, Attempt: op.RetryState.Attempt + 1,
+				Message: "lease lost while operation was running",
+			})
+		}
+		return fmt.Errorf("heartbeat op %s: %w", op.ID, heartbeatErr)
+	}
 	if runErr != nil {
 		opErr := classifyRunError(runErr, now)
 		return s.failLeasedOp(ctx, op, lease, now, opErr)
@@ -381,6 +417,45 @@ func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease 
 	}
 
 	return nil
+}
+
+func (s *Scheduler) heartbeatLease(
+	ctx context.Context,
+	done chan<- error,
+	cancelRun context.CancelFunc,
+	opID model.OpID,
+	lease model.Lease,
+) {
+	interval := s.heartbeatInterval()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	var outcome error
+	defer func() { done <- outcome }()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_, err := s.store.HeartbeatLease(ctx, opID, lease, s.now(), s.config.DefaultLeaseDuration)
+			if err == nil {
+				continue
+			}
+			// Completion cancels the heartbeat context before joining this goroutine.
+			// A driver may return that cancellation from an in-flight heartbeat; it is
+			// not evidence that the lease was lost.
+			if ctx.Err() != nil {
+				return
+			}
+			cancelRun()
+			if errors.Is(err, storecontract.ErrLeaseLost) {
+				outcome = storecontract.ErrLeaseLost
+				return
+			}
+			outcome = fmt.Errorf("heartbeat lease: %w", err)
+			return
+		}
+	}
 }
 
 func (s *Scheduler) failLeasedOp(ctx context.Context, op model.OpSpec, lease model.Lease, now time.Time, opErr model.OpError) error {

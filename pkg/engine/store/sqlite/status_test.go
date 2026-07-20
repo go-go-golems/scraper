@@ -18,8 +18,8 @@ func TestInspectMissingDatabase(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, status.Exists)
 	require.False(t, status.Initialized)
-	require.Equal(t, 2, status.LatestKnownMigration)
-	require.Len(t, status.Migrations, 2)
+	require.Equal(t, 3, status.LatestKnownMigration)
+	require.Len(t, status.Migrations, 3)
 	require.False(t, status.Migrations[0].Applied)
 }
 
@@ -99,7 +99,7 @@ func TestInspectPopulatedDatabase(t *testing.T) {
 	require.Equal(t, 0, status.ActiveLeases)
 	require.Equal(t, 1, status.ResultCount)
 	require.Equal(t, 1, status.ArtifactCount)
-	require.Len(t, status.Migrations, 2)
+	require.Len(t, status.Migrations, 3)
 	require.True(t, status.Migrations[0].Applied)
 }
 

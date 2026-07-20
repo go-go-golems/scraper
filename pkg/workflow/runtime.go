@@ -62,10 +62,11 @@ type Config struct {
 	ArtifactStore   ArtifactStore
 	ProjectionStore ProjectionStore
 
-	WorkerID      string
-	MaxWorkers    int
-	PollInterval  time.Duration
-	LeaseDuration time.Duration
+	WorkerID          string
+	MaxWorkers        int
+	PollInterval      time.Duration
+	LeaseDuration     time.Duration
+	HeartbeatInterval time.Duration
 
 	Queues map[model.QueueKey]QueueConfig
 }
@@ -103,6 +104,7 @@ func NewRuntime(ctx context.Context, cfg Config) (*Runtime, error) {
 		MaxWorkers:           cfg.MaxWorkers,
 		PollInterval:         cfg.PollInterval,
 		DefaultLeaseDuration: cfg.LeaseDuration,
+		HeartbeatInterval:    cfg.HeartbeatInterval,
 	}, cfg.WorkerID, nil)
 	if err != nil {
 		_ = closeStore()

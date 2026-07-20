@@ -2,10 +2,13 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/go-go-golems/scraper/pkg/engine/model"
 )
+
+var ErrLeaseLost = errors.New("workflow lease lost")
 
 type CreateWorkflowParams struct {
 	Workflow model.WorkflowRun
@@ -58,7 +61,7 @@ type OpStore interface {
 	Enqueue(ctx context.Context, ops []model.OpSpec) error
 	GetOp(ctx context.Context, id model.OpID) (*model.OpSpec, error)
 	LeaseReadyOp(ctx context.Context, req LeaseRequest) (*model.OpSpec, *model.Lease, error)
-	HeartbeatLease(ctx context.Context, opID model.OpID, lease model.Lease, extendBy time.Duration) error
+	HeartbeatLease(ctx context.Context, opID model.OpID, lease model.Lease, now time.Time, leaseDuration time.Duration) (*model.Lease, error)
 	CompleteOp(ctx context.Context, opID model.OpID, completion Completion) error
 	FailOp(ctx context.Context, opID model.OpID, failure Failure) error
 }

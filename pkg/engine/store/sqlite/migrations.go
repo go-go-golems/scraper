@@ -16,9 +16,10 @@ import (
 var migrationsFS embed.FS
 
 type migration struct {
-	version int
-	name    string
-	sql     string
+	version  int
+	name     string
+	sql      string
+	backfill func(context.Context, *sql.Tx) error
 }
 
 func migrate(ctx context.Context, db *sql.DB) error {
@@ -54,6 +55,12 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		if _, err := tx.ExecContext(ctx, m.sql); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("apply migration %d: %w", m.version, err)
+		}
+		if m.backfill != nil {
+			if err := m.backfill(ctx, tx); err != nil {
+				_ = tx.Rollback()
+				return fmt.Errorf("backfill migration %d: %w", m.version, err)
+			}
 		}
 
 		if _, err := tx.ExecContext(
@@ -127,9 +134,10 @@ func loadMigrations() ([]migration, error) {
 		}
 
 		ret = append(ret, migration{
-			version: version,
-			name:    entry.Name(),
-			sql:     string(body),
+			version:  version,
+			name:     entry.Name(),
+			sql:      string(body),
+			backfill: migrationBackfill(version),
 		})
 	}
 

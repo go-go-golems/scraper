@@ -121,8 +121,8 @@ func Inspect(ctx context.Context, dsn string) (*EngineStatus, error) {
 		ctx,
 		db,
 		"active leases",
-		`SELECT COUNT(1) FROM leases WHERE expires_at > ?`,
-		time.Now().UTC().Format(time.RFC3339Nano),
+		`SELECT COUNT(1) FROM leases WHERE expires_at_us > ?`,
+		epochMicros(time.Now().UTC()),
 	); err != nil {
 		return nil, err
 	}
@@ -130,8 +130,8 @@ func Inspect(ctx context.Context, dsn string) (*EngineStatus, error) {
 		ctx,
 		db,
 		"expired leases",
-		`SELECT COUNT(1) FROM leases WHERE expires_at <= ?`,
-		time.Now().UTC().Format(time.RFC3339Nano),
+		`SELECT COUNT(1) FROM leases WHERE expires_at_us <= ?`,
+		epochMicros(time.Now().UTC()),
 	); err != nil {
 		return nil, err
 	}

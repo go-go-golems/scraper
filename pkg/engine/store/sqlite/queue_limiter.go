@@ -26,10 +26,10 @@ func countActiveLeasesForQueue(
 		`SELECT COUNT(1)
 		 FROM leases l
 		 JOIN ops active ON active.id = l.op_id
-		 WHERE l.expires_at > ?
+		 WHERE l.expires_at_us > ?
 		   AND active.site = ?
 		   AND active.queue_key = ?`,
-		now.UTC().Format(time.RFC3339Nano),
+		epochMicros(now),
 		site,
 		queue,
 	)
@@ -49,7 +49,7 @@ func loadQueueLimiterState(
 ) (queueLimiterState, error) {
 	row := tx.QueryRowContext(
 		ctx,
-		`SELECT tokens, last_refill_at
+		`SELECT tokens, last_refill_at_us
 		 FROM queue_limit_state
 		 WHERE site = ? AND queue_key = ?`,
 		site,
@@ -57,7 +57,7 @@ func loadQueueLimiterState(
 	)
 
 	var tokens float64
-	var lastRefillAt string
+	var lastRefillAt int64
 	if err := row.Scan(&tokens, &lastRefillAt); err != nil {
 		if err == sql.ErrNoRows {
 			return queueLimiterState{}, nil
@@ -65,13 +65,9 @@ func loadQueueLimiterState(
 		return queueLimiterState{}, fmt.Errorf("load queue limiter state for %s/%s: %w", site, queue, err)
 	}
 
-	parsed, err := time.Parse(time.RFC3339Nano, lastRefillAt)
-	if err != nil {
-		return queueLimiterState{}, fmt.Errorf("parse last_refill_at for %s/%s: %w", site, queue, err)
-	}
 	return queueLimiterState{
 		Tokens:       tokens,
-		LastRefillAt: parsed,
+		LastRefillAt: timeFromEpochMicros(lastRefillAt),
 	}, nil
 }
 
@@ -114,15 +110,17 @@ func upsertQueueLimiterState(
 ) error {
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO queue_limit_state(site, queue_key, tokens, last_refill_at)
-		 VALUES(?, ?, ?, ?)
+		`INSERT INTO queue_limit_state(site, queue_key, tokens, last_refill_at, last_refill_at_us)
+		 VALUES(?, ?, ?, ?, ?)
 		 ON CONFLICT(site, queue_key) DO UPDATE SET
 		   tokens = excluded.tokens,
-		   last_refill_at = excluded.last_refill_at`,
+		   last_refill_at = excluded.last_refill_at,
+		   last_refill_at_us = excluded.last_refill_at_us`,
 		site,
 		queue,
 		state.Tokens,
 		state.LastRefillAt.UTC().Format(time.RFC3339Nano),
+		epochMicros(state.LastRefillAt),
 	); err != nil {
 		return fmt.Errorf("upsert queue limiter state for %s/%s: %w", site, queue, err)
 	}

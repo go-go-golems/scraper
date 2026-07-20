@@ -51,6 +51,41 @@ func (o *recordingObserver) OnSchedulerEvent(ctx context.Context, event Event) {
 	o.events = append(o.events, event)
 }
 
+func TestSchedulerHeartbeatsLongRunningLease(t *testing.T) {
+	ctx := context.Background()
+	store := openSchedulerStore(t)
+	registry := runner.NewRegistry()
+	runs := 0
+	require.NoError(t, registry.Register(runnerFunc{
+		kind: "slow",
+		run: func(ctx context.Context, runCtx runner.RunContext) (*model.OpResult, error) {
+			runs++
+			select {
+			case <-time.After(75 * time.Millisecond):
+				return &model.OpResult{OpID: runCtx.Op.ID, CompletedAt: time.Now().UTC()}, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		},
+	}))
+	s, err := New(store, registry, Config{
+		MaxWorkers: 1, PollInterval: time.Second, DefaultLeaseDuration: 20 * time.Millisecond, HeartbeatInterval: 5 * time.Millisecond,
+	}, "worker-1", nil)
+	require.NoError(t, err)
+	require.NoError(t, s.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{
+		Workflow: model.WorkflowRun{ID: "wf-heartbeat", Site: "site", Name: "heartbeat"},
+		Initial:  []model.OpSpec{{ID: "op-heartbeat", WorkflowID: "wf-heartbeat", Site: "site", Kind: "slow", Queue: "queue"}},
+	}))
+
+	cycle, err := s.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, cycle.Processed)
+	require.Equal(t, 1, runs)
+	stats, err := store.GetWorkflowStats(ctx, "wf-heartbeat")
+	require.NoError(t, err)
+	require.Equal(t, 1, stats.Succeeded)
+}
+
 func TestSchedulerFanOutAndDependencyCompletion(t *testing.T) {
 	ctx := context.Background()
 	store := openSchedulerStore(t)

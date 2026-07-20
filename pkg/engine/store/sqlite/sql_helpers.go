@@ -63,8 +63,8 @@ func insertOps(ctx context.Context, db execer, ops []model.OpSpec) error {
 			`INSERT INTO ops(
 				id, workflow_id, parent_id, site, kind, queue_key, dedup_key,
 				input_json, retry_json, metadata_json, status, retry_state_json,
-				next_attempt_at, created_at, updated_at
-			) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				next_attempt_at, next_attempt_at_us, created_at, created_at_us, updated_at, updated_at_us
+			) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			op.ID,
 			op.WorkflowID,
 			nullableParentID(op.ParentID),
@@ -78,8 +78,11 @@ func insertOps(ctx context.Context, db execer, ops []model.OpSpec) error {
 			initialStatus(op),
 			mustJSON(op.RetryState),
 			nil,
+			nil,
 			now.Format(time.RFC3339Nano),
+			epochMicros(now),
 			now.Format(time.RFC3339Nano),
+			epochMicros(now),
 		); err != nil {
 			return fmt.Errorf("insert op %s: %w", op.ID, err)
 		}

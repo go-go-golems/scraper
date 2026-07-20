@@ -19,7 +19,7 @@ func TestOpenAppliesLatestMigrations(t *testing.T) {
 
 	version, err := store.CurrentVersion(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, 2, version)
+	require.Equal(t, 3, version)
 }
 
 func TestMigrateUpgradeFromVersionOne(t *testing.T) {
@@ -31,7 +31,7 @@ func TestMigrateUpgradeFromVersionOne(t *testing.T) {
 
 	migrations, err := loadMigrations()
 	require.NoError(t, err)
-	require.Len(t, migrations, 2)
+	require.Len(t, migrations, 3)
 
 	_, err = db.ExecContext(ctx, `
 		CREATE TABLE schema_migrations (
@@ -56,7 +56,7 @@ func TestMigrateUpgradeFromVersionOne(t *testing.T) {
 
 	version, err := currentVersion(ctx, db)
 	require.NoError(t, err)
-	require.Equal(t, 2, version)
+	require.Equal(t, 3, version)
 
 	var tableName string
 	err = db.QueryRowContext(
@@ -364,6 +364,113 @@ func TestLeaseReadyOpTokenBucketStatePersistsAcrossReopen(t *testing.T) {
 	require.NotNil(t, nextOp)
 	require.NotNil(t, nextLease)
 	require.Equal(t, model.OpID("op-2"), nextOp.ID)
+}
+
+func TestMigrateBackfillsSortableTimestamps(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "legacy-engine.db")
+	db, err := sql.Open("sqlite3", path)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	migrations, err := loadMigrations()
+	require.NoError(t, err)
+	require.Len(t, migrations, 3)
+	_, err = db.ExecContext(ctx, migrations[0].sql)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, migrations[1].sql)
+	require.NoError(t, err)
+	for _, migration := range migrations[:2] {
+		_, err = db.ExecContext(ctx, `INSERT INTO schema_migrations(version, name, applied_at) VALUES(?, ?, ?)`, migration.version, migration.name, "2026-07-20T18:00:00Z")
+		require.NoError(t, err)
+	}
+
+	const created = "2026-07-20T18:00:01Z"
+	const updated = "2026-07-20T18:00:01.5Z"
+	_, err = db.ExecContext(ctx, `INSERT INTO workflows(id, site, name, status, input_json, metadata_json, created_at, updated_at) VALUES('wf', 'site', 'legacy', 'running', 'null', '{}', ?, ?)`, created, updated)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO ops(id, workflow_id, site, kind, queue_key, dedup_key, input_json, retry_json, metadata_json, status, retry_state_json, next_attempt_at, created_at, updated_at) VALUES('op', 'wf', 'site', 'kind', 'queue', 'dedup', 'null', '{}', '{}', 'running', '{}', ?, ?, ?)`, updated, created, updated)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO leases(op_id, worker_id, token, acquired_at, expires_at) VALUES('op', 'worker', 'token', ?, ?)`, created, updated)
+	require.NoError(t, err)
+
+	require.NoError(t, migrate(ctx, db))
+	var expiresAt int64
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT expires_at_us FROM leases WHERE op_id = 'op'`).Scan(&expiresAt))
+	expected, err := time.Parse(time.RFC3339Nano, updated)
+	require.NoError(t, err)
+	require.Equal(t, epochMicros(expected), expiresAt)
+
+	store := &Store{db: db}
+	changed, err := store.RefreshRunnableOps(ctx, expected)
+	require.NoError(t, err)
+	require.Equal(t, 1, changed)
+	op, err := store.GetOp(ctx, "op")
+	require.NoError(t, err)
+	require.Equal(t, model.OpStatusReady, opStatus(t, db, "op"))
+	require.Equal(t, expected, op.UpdatedAt)
+}
+
+func TestHeartbeatExtendsFromCurrentTimeAndRejectsLostLease(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	defer func() { require.NoError(t, store.Close()) }()
+	now := time.Date(2026, 7, 20, 18, 0, 1, 0, time.UTC)
+	workflow, op, lease := createAndLeaseTestOp(t, ctx, store, now, time.Second)
+	_ = workflow
+
+	first, err := store.HeartbeatLease(ctx, op.ID, lease, now.Add(500*time.Millisecond), time.Second)
+	require.NoError(t, err)
+	require.Equal(t, now.Add(1500*time.Millisecond), first.ExpiresAt)
+	second, err := store.HeartbeatLease(ctx, op.ID, *first, now.Add(time.Second), time.Second)
+	require.NoError(t, err)
+	require.Equal(t, now.Add(2*time.Second), second.ExpiresAt)
+
+	_, err = store.HeartbeatLease(ctx, op.ID, lease, now.Add(3*time.Second), time.Second)
+	require.ErrorIs(t, err, storecontract.ErrLeaseLost)
+}
+
+func TestStaleLeaseCannotCompleteOrFail(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	defer func() { require.NoError(t, store.Close()) }()
+	now := time.Date(2026, 7, 20, 18, 0, 1, 0, time.UTC)
+	workflow, op, oldLease := createAndLeaseTestOp(t, ctx, store, now, time.Second)
+	_, err := store.RefreshRunnableOps(ctx, now.Add(2*time.Second))
+	require.NoError(t, err)
+	currentOp, currentLease, err := store.LeaseReadyOp(ctx, storecontract.LeaseRequest{WorkerID: "worker-current", Site: workflow.Site, Queue: op.Queue, LeaseDuration: time.Second, Now: now.Add(2 * time.Second)})
+	require.NoError(t, err)
+	require.NotNil(t, currentOp)
+	require.NotNil(t, currentLease)
+
+	err = store.CompleteOp(ctx, op.ID, storecontract.Completion{Lease: oldLease, Result: model.OpResult{CompletedAt: now.Add(2 * time.Second), Data: []byte(`{"stale":true}`)}})
+	require.ErrorIs(t, err, storecontract.ErrLeaseLost)
+	err = store.FailOp(ctx, op.ID, storecontract.Failure{Lease: oldLease, Error: model.OpError{OccurredAt: now.Add(2 * time.Second)}})
+	require.ErrorIs(t, err, storecontract.ErrLeaseLost)
+	require.Equal(t, model.OpStatusRunning, opStatus(t, store.db, op.ID))
+	require.NoError(t, store.CompleteOp(ctx, op.ID, storecontract.Completion{Lease: *currentLease, Result: model.OpResult{CompletedAt: now.Add(2 * time.Second), Data: []byte(`{"current":true}`)}}))
+	result, err := store.GetResult(ctx, workflow.ID, op.ID)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"current":true}`, string(result.Data))
+}
+
+func createAndLeaseTestOp(t *testing.T, ctx context.Context, store *Store, now time.Time, leaseDuration time.Duration) (model.WorkflowRun, *model.OpSpec, model.Lease) {
+	t.Helper()
+	workflow := model.WorkflowRun{ID: model.WorkflowID("wf-" + now.Format("150405.000000000")), Site: "site", Name: "test"}
+	opSpec := model.OpSpec{ID: model.OpID("op-" + now.Format("150405.000000000")), WorkflowID: workflow.ID, Site: workflow.Site, Kind: "kind", Queue: "queue"}
+	require.NoError(t, store.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{Workflow: workflow, Initial: []model.OpSpec{opSpec}}))
+	op, lease, err := store.LeaseReadyOp(ctx, storecontract.LeaseRequest{WorkerID: "worker-old", Site: workflow.Site, Queue: opSpec.Queue, LeaseDuration: leaseDuration, Now: now})
+	require.NoError(t, err)
+	require.NotNil(t, op)
+	require.NotNil(t, lease)
+	return workflow, op, *lease
+}
+
+func opStatus(t *testing.T, db *sql.DB, opID model.OpID) model.OpStatus {
+	t.Helper()
+	var status model.OpStatus
+	require.NoError(t, db.QueryRow(`SELECT status FROM ops WHERE id = ?`, opID).Scan(&status))
+	return status
 }
 
 func openTestStore(t *testing.T) *Store {
