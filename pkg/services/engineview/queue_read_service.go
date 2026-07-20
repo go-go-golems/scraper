@@ -15,6 +15,7 @@ type QueueStatus struct {
 	Running     int            `json:"running"`
 	Succeeded   int            `json:"succeeded"`
 	Failed      int            `json:"failed"`
+	Blocked     int            `json:"blocked"`
 	InFlight    int            `json:"inFlight"`
 	MaxInFlight int            `json:"maxInFlight"`
 	Tokens      *float64       `json:"tokens,omitempty"`
@@ -75,6 +76,8 @@ func (s *Service) ListQueues(ctx context.Context) ([]QueueStatus, error) {
 			qs.Succeeded = count
 		case model.OpStatusFailed:
 			qs.Failed = count
+		case model.OpStatusBlocked:
+			qs.Blocked = count
 		case model.OpStatusCanceled:
 			// Canceled ops do not have a dedicated queue summary field yet.
 		}

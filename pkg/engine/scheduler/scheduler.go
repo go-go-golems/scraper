@@ -657,7 +657,7 @@ func (s *Scheduler) emit(ctx context.Context, event Event) {
 			Str("workflow_status", string(event.Status)).
 			Int("attempt", event.Attempt).
 			Msg(event.Message)
-	case EventOpFailed:
+	case EventOpFailed, EventOpLeaseLost:
 		logger := log.Warn()
 		if event.Error != nil {
 			logger = logger.Str("error_code", event.Error.Code).Bool("retryable", event.Error.Retryable)
