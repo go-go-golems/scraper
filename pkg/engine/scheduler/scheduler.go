@@ -411,6 +411,7 @@ func (s *Scheduler) executeLeasedOp(ctx context.Context, op model.OpSpec, lease 
 
 	if err := s.store.CompleteOp(ctx, op.ID, storecontract.Completion{
 		Lease:  lease,
+		Now:    s.now(),
 		Result: *opResult,
 	}); err != nil {
 		return 0, fmt.Errorf("complete op %s: %w", op.ID, err)
@@ -478,6 +479,7 @@ func (s *Scheduler) failLeasedOp(ctx context.Context, op model.OpSpec, lease mod
 	retryState := nextRetryState(op, now, opErr)
 	if err := s.store.FailOp(ctx, op.ID, storecontract.Failure{
 		Lease:      lease,
+		Now:        s.now(),
 		Error:      opErr,
 		RetryState: retryState,
 	}); err != nil {

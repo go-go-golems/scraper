@@ -25,12 +25,18 @@ type LeaseRequest struct {
 }
 
 type Completion struct {
-	Lease  model.Lease
+	Lease model.Lease
+	// Now is the wall-clock instant at which the owner attempts the durable
+	// transition. It must not be inferred from a runner-supplied result time.
+	Now    time.Time
 	Result model.OpResult
 }
 
 type Failure struct {
-	Lease      model.Lease
+	Lease model.Lease
+	// Now is the wall-clock instant at which the owner attempts the durable
+	// transition. It protects against a stale runner reporting an old error.
+	Now        time.Time
 	Error      model.OpError
 	RetryState model.RetryState
 }
@@ -38,6 +44,11 @@ type Failure struct {
 type QueueCandidate struct {
 	Site  model.SiteName
 	Queue model.QueueKey
+}
+
+type WorkflowSnapshot struct {
+	Workflow *model.WorkflowRun
+	Stats    *WorkflowStats
 }
 
 type WorkflowStats struct {
@@ -56,6 +67,8 @@ type WorkflowStore interface {
 	CreateWorkflow(ctx context.Context, params CreateWorkflowParams) error
 	GetWorkflow(ctx context.Context, id model.WorkflowID) (*model.WorkflowRun, error)
 	UpdateWorkflowStatus(ctx context.Context, id model.WorkflowID, status model.WorkflowStatus) error
+	GetWorkflowSnapshot(ctx context.Context, id model.WorkflowID) (*WorkflowSnapshot, error)
+	ListWorkflowSnapshots(ctx context.Context, updatedAfter time.Time, limit int) ([]WorkflowSnapshot, error)
 }
 
 type OpStore interface {

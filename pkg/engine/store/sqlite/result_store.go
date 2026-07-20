@@ -18,6 +18,10 @@ func (s *Store) CompleteOp(ctx context.Context, opID model.OpID, completion stor
 		result.CompletedAt = time.Now().UTC()
 	}
 	result.CompletedAt = result.CompletedAt.UTC()
+	transitionAt := completion.Now.UTC()
+	if transitionAt.IsZero() {
+		transitionAt = result.CompletedAt
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -25,7 +29,7 @@ func (s *Store) CompleteOp(ctx context.Context, opID model.OpID, completion stor
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := requireCurrentLease(ctx, tx, opID, completion.Lease.Token, result.CompletedAt); err != nil {
+	if err := requireCurrentLease(ctx, tx, opID, completion.Lease.Token, transitionAt); err != nil {
 		return fmt.Errorf("complete op %s: %w", opID, err)
 	}
 	workflowID, site, err := lookupOpContext(ctx, tx, opID)
@@ -65,13 +69,17 @@ func (s *Store) FailOp(ctx context.Context, opID model.OpID, failure storecontra
 		failedAt = time.Now().UTC()
 	}
 	failedAt = failedAt.UTC()
+	transitionAt := failure.Now.UTC()
+	if transitionAt.IsZero() {
+		transitionAt = failedAt
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin fail op: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := requireCurrentLease(ctx, tx, opID, failure.Lease.Token, failedAt); err != nil {
+	if err := requireCurrentLease(ctx, tx, opID, failure.Lease.Token, transitionAt); err != nil {
 		return fmt.Errorf("fail op %s: %w", opID, err)
 	}
 	workflowID, _, err := lookupOpContext(ctx, tx, opID)

@@ -68,6 +68,63 @@ func (s *Store) UpdateWorkflowStatus(ctx context.Context, id model.WorkflowID, s
 	return nil
 }
 
+func (s *Store) GetWorkflowSnapshot(ctx context.Context, id model.WorkflowID) (*storecontract.WorkflowSnapshot, error) {
+	workflow, err := s.GetWorkflow(ctx, id)
+	if err != nil || workflow == nil {
+		return nil, err
+	}
+	stats, err := s.GetWorkflowStats(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &storecontract.WorkflowSnapshot{Workflow: workflow, Stats: stats}, nil
+}
+
+// ListWorkflowSnapshots returns an authoritative store-derived inspection page.
+// Pass the last observed UpdatedAt to resume polling without relying on
+// process-local events. The tie-breaking ID order makes page output stable.
+func (s *Store) ListWorkflowSnapshots(ctx context.Context, updatedAfter time.Time, limit int) ([]storecontract.WorkflowSnapshot, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM workflows
+		WHERE updated_at_us > ?
+		ORDER BY updated_at_us ASC, id ASC
+		LIMIT ?`, epochMicros(updatedAfter), limit)
+	if err != nil {
+		return nil, fmt.Errorf("list workflow snapshot ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	ids := make([]model.WorkflowID, 0, limit)
+	for rows.Next() {
+		var id model.WorkflowID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan workflow snapshot id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close workflow snapshot ids: %w", err)
+	}
+	result := make([]storecontract.WorkflowSnapshot, 0, len(ids))
+	for _, id := range ids {
+		snapshot, err := s.GetWorkflowSnapshot(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if snapshot != nil {
+			result = append(result, *snapshot)
+		}
+	}
+	return result, nil
+}
+
 func (s *Store) GetWorkflowStats(ctx context.Context, workflowID model.WorkflowID) (*storecontract.WorkflowStats, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT COUNT(1),
 		COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0),

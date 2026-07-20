@@ -366,6 +366,28 @@ func TestLeaseReadyOpTokenBucketStatePersistsAcrossReopen(t *testing.T) {
 	require.Equal(t, model.OpID("op-2"), nextOp.ID)
 }
 
+func TestWorkflowSnapshotsAreStoreDerivedAndIncremental(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	defer func() { require.NoError(t, store.Close()) }()
+	createdAt := time.Date(2026, 7, 20, 18, 0, 0, 0, time.UTC)
+	workflow := model.WorkflowRun{ID: "wf-snapshot", Site: "site", Name: "snapshot", CreatedAt: createdAt, UpdatedAt: createdAt}
+	require.NoError(t, store.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{Workflow: workflow, Initial: []model.OpSpec{{ID: "op-snapshot", WorkflowID: workflow.ID, Site: workflow.Site, Kind: "kind", Queue: "queue"}}}))
+
+	snapshot, err := store.GetWorkflowSnapshot(ctx, workflow.ID)
+	require.NoError(t, err)
+	require.NotNil(t, snapshot)
+	require.Equal(t, workflow.ID, snapshot.Workflow.ID)
+	require.Equal(t, 1, snapshot.Stats.Ready)
+
+	items, err := store.ListWorkflowSnapshots(ctx, createdAt.Add(-time.Microsecond), 10)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	items, err = store.ListWorkflowSnapshots(ctx, createdAt, 10)
+	require.NoError(t, err)
+	require.Empty(t, items)
+}
+
 func TestRefreshBlocksAndReopensDependencyDescendants(t *testing.T) {
 	ctx := context.Background()
 	store := openTestStore(t)
@@ -472,6 +494,21 @@ func TestHeartbeatExtendsFromCurrentTimeAndRejectsLostLease(t *testing.T) {
 
 	_, err = store.HeartbeatLease(ctx, op.ID, lease, now.Add(3*time.Second), time.Second)
 	require.ErrorIs(t, err, storecontract.ErrLeaseLost)
+}
+
+func TestExpiredLeaseCannotCommitWithOldResultTimestamp(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	defer func() { require.NoError(t, store.Close()) }()
+	now := time.Date(2026, 7, 20, 18, 0, 1, 0, time.UTC)
+	_, op, lease := createAndLeaseTestOp(t, ctx, store, now, time.Second)
+	err := store.CompleteOp(ctx, op.ID, storecontract.Completion{
+		Lease:  lease,
+		Now:    now.Add(2 * time.Second),
+		Result: model.OpResult{CompletedAt: now, Data: []byte(`{"stale":true}`)},
+	})
+	require.ErrorIs(t, err, storecontract.ErrLeaseLost)
+	require.Equal(t, model.OpStatusRunning, opStatus(t, store.db, op.ID))
 }
 
 func TestStaleLeaseCannotCompleteOrFail(t *testing.T) {

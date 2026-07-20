@@ -351,6 +351,24 @@ func ensureExistingRun(existing *model.WorkflowRun, packageName, digest string) 
 	return &RunHandle{ID: existing.ID, Package: packageName, Name: existing.Name, IdentityDigest: digest, Created: false}, nil
 }
 
+// Snapshot reads current durable workflow state and aggregate counts. It is
+// suitable for restart-safe dashboards and operator polling.
+func (rt *Runtime) Snapshot(ctx context.Context, runID model.WorkflowID) (*storecontract.WorkflowSnapshot, error) {
+	if rt == nil || rt.store == nil {
+		return nil, fmt.Errorf("workflow runtime store is not configured")
+	}
+	return rt.store.GetWorkflowSnapshot(ctx, runID)
+}
+
+// SnapshotsSince incrementally reads workflows changed after the supplied
+// cursor. Consumers should retain the largest returned Workflow.UpdatedAt.
+func (rt *Runtime) SnapshotsSince(ctx context.Context, updatedAfter time.Time, limit int) ([]storecontract.WorkflowSnapshot, error) {
+	if rt == nil || rt.store == nil {
+		return nil, fmt.Errorf("workflow runtime store is not configured")
+	}
+	return rt.store.ListWorkflowSnapshots(ctx, updatedAfter, limit)
+}
+
 func (rt *Runtime) RunOnce(ctx context.Context) (*scheduler.CycleResult, error) {
 	if rt == nil || rt.scheduler == nil {
 		return nil, fmt.Errorf("workflow runtime scheduler is not configured")
