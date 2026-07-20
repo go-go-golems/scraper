@@ -496,6 +496,36 @@ func TestHeartbeatExtendsFromCurrentTimeAndRejectsLostLease(t *testing.T) {
 	require.ErrorIs(t, err, storecontract.ErrLeaseLost)
 }
 
+func TestExpiredLeaseRecoversAfterStoreRestart(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "restart-engine.db")
+	store, err := Open(ctx, path)
+	require.NoError(t, err)
+	now := time.Date(2026, 7, 20, 18, 0, 1, 0, time.UTC)
+	workflow := model.WorkflowRun{ID: "wf-restart", Site: "site", Name: "restart"}
+	require.NoError(t, store.CreateWorkflow(ctx, storecontract.CreateWorkflowParams{Workflow: workflow, Initial: []model.OpSpec{{ID: "op-restart", WorkflowID: workflow.ID, Site: workflow.Site, Kind: "kind", Queue: "queue"}}}))
+	_, oldLease, err := store.LeaseReadyOp(ctx, storecontract.LeaseRequest{WorkerID: "crashed-worker", Site: workflow.Site, Queue: "queue", LeaseDuration: time.Second, Now: now})
+	require.NoError(t, err)
+	require.NotNil(t, oldLease)
+	require.NoError(t, store.Close())
+
+	reopened, err := Open(ctx, path)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, reopened.Close()) }()
+	changed, err := reopened.RefreshRunnableOps(ctx, now.Add(2*time.Second))
+	require.NoError(t, err)
+	require.Equal(t, 1, changed)
+	op, lease, err := reopened.LeaseReadyOp(ctx, storecontract.LeaseRequest{WorkerID: "recovery-worker", Site: workflow.Site, Queue: "queue", LeaseDuration: time.Second, Now: now.Add(2 * time.Second)})
+	require.NoError(t, err)
+	require.NotNil(t, op)
+	require.NotNil(t, lease)
+	require.NotEqual(t, oldLease.Token, lease.Token)
+	require.NoError(t, reopened.CompleteOp(ctx, op.ID, storecontract.Completion{Lease: *lease, Now: now.Add(2 * time.Second), Result: model.OpResult{CompletedAt: now.Add(2 * time.Second)}}))
+	result, err := reopened.GetResult(ctx, workflow.ID, op.ID)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+}
+
 func TestExpiredLeaseCannotCommitWithOldResultTimestamp(t *testing.T) {
 	ctx := context.Background()
 	store := openTestStore(t)

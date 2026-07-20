@@ -84,6 +84,8 @@ flowchart LR
 
 This ticket is an implementation guide and task plan. It does not authorize unbounded live provider workloads. The correct rollout is fixture-first, crash/restart-tested, bounded in concurrency and cost, then released as a new scraper version before a consumer pins it.
 
+> **Implementation status (2026-07-20):** The core hardening design is implemented in commits `b80babf`, `3126c7c`, `9d35921`, and `cdb6fe7`. Scraper now uses migration 003 epoch-microsecond scheduling columns; token-verified lease transitions and scheduler heartbeats; recoverable `blocked` dependencies; bounded concurrent runner execution; `EnsureRun`; guarded workflow observers; correct cycle counts; and durable snapshot APIs. See [the rollout runbook](../playbooks/01-rollout-and-operator-runbook.md) for operational compatibility and validation steps. The guide’s descriptions of former defects remain historical evidence for regression tests.
+
 ## 1. Orientation for a new intern
 
 ### 1.1 What scraper owns
