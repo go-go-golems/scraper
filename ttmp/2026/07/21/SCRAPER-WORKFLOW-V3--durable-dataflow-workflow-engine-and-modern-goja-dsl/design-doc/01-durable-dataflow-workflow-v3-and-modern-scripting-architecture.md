@@ -1679,9 +1679,9 @@ side effects use the same durable path.
 | Boundary | Implementation evidence |
 |---|---|
 | Canonical model/compiler | `pkg/workflowv3` strict IR, catalog, exact identity, validation, digest, bundle, registry, failure, and artifact contracts |
-| Minimal authoring DSL | `pkg/gojamodules/workflow` plus IR, plan, and DTS goldens |
+| Minimal authoring DSL | `pkg/gojamodules/workflow` plus IR, plan, and authoring DTS goldens |
 | Real bundle | `pkg/testfixtures/workflowv3linear` paired workflow and `execution/tasks.cjs` source |
-| Fresh task runtime | `pkg/workflowv3runtime/task_runner.go` with `workflow/task` and declared `fs:input` only |
+| Fresh task runtime | `pkg/workflowv3runtime/task_runner.go` with `workflow/task`, exact task-ABI DTS, and only declared aliases |
 | Durable execution | `pkg/workflowv3runtime/engine.go` and `pkg/workflowv3sqlite` compact schema/store |
 | Restart/privacy proof | `TestEngineRunsAuthoredWorkflowAcrossRestartWithoutPersistingSource` over 12,000 JSONL rows |
 | Fencing/identity proof | cancellation, expired lease, concurrent lease, and wrong bundle/entrypoint/ABI tests |
@@ -1714,7 +1714,9 @@ count, and bounded blocked reasons without creating a second mutable queue.
 
 Host policy values remain outside plans. `fetch:public` receives origins,
 timeout, response bound, redirect checking, and disabled credential sources
-from Go. `db:sync` receives a Go-preconfigured target handle and rejects
+from Go. Worker boot rejects empty/wildcard public allowlists or enabled
+credential sources; transport rejects URL userinfo and authorization/cookie
+headers. `db:sync` receives a Go-preconfigured target handle and rejects
 JavaScript `configure()`. The database task's logical operation key derives
 from run/node identity, so a post-commit crash can retry without duplicating the
 write.

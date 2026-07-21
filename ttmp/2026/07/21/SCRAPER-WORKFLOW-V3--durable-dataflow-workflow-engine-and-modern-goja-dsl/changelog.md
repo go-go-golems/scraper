@@ -174,3 +174,17 @@ Documented implemented Slices 3–5 in the public Glazed topic and both architec
 ### Related Files
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md — Public Slices 1-5 runtime operations and validation guide
+
+## 2026-07-21
+
+Repository-wide validation exposed and fixed go-go-goja v0.10.6 jsverbs API removal, verified minimal-v3 SQLite column migration, generated fixture logcopter files, and passed make validate/full isolated lint/help smoke (commit 7df9f59)
+
+
+## 2026-07-21
+
+Hardened Slices 3–5 after audit: fail-closed public fetch profiles and credential/header/URL guards, exact 429/404 tests, real lease-loss crash-after-commit recovery, database-scoped capacity across independent connections, stable operation-key assertion, parsed retry deadlines, and starvation-free candidate scan (commit c1e0023)
+
+
+## 2026-07-21
+
+Finalized typed privacy contracts: completed failure vocabulary, exact workflow/task DTS plus TypeScript compile check, snapshot index output that cannot echo URL credentials, and implementation-unavailable projection evidence (commit c4c670b)

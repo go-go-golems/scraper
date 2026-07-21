@@ -49,7 +49,8 @@ task implementations. The implemented profiles are:
 
 - `fs:input`, a read-only mount containing only bound artifacts;
 - `fetch:public`, an origin-allowlisted HTTP client with bounded timeout/body,
-  credential sources disabled, and redirect policy enforcement;
+  credential sources disabled, URL/header credentials rejected, wildcard or
+  empty allowlists rejected at worker boot, and redirect policy enforcement;
 - `db:sync`, a Go-preconfigured database handle that rejects JavaScript
   `configure()`.
 
@@ -97,14 +98,17 @@ The HTTP fixture snapshots at most eight explicitly supplied article URLs.
 Transport, rate-limit, server-status, and validation failures become stable
 redacted codes. Origin policy applies to the initial request and every redirect;
 response headers, URL credentials, and raw failure text never enter workflow
-rows or events.
+rows or events. Snapshot outputs use stable list indexes rather than echoing
+request URLs, so query credentials are not copied into the output artifact.
 
 The database fixture uses a stable SHA-256 operation key derived from
 `(run_id,node_key)`. Side effects and the operation marker commit in one target
-transaction. A crash after that commit creates a retry attempt, but the fresh
-runtime observes the same operation key and cannot apply the logical write a
-second time. Domain rows remain in the target database; workflow SQLite stores
-only artifact refs and redacted attempt evidence.
+transaction. The crash test discards the task result after commit, closes the
+workflow store with attempt one still running, waits for lease expiry, and then
+reopens. Attempt one becomes `lease_lost`; the fresh second runtime observes the
+same operation key and cannot apply the logical write again. Domain rows remain
+in the target database; workflow SQLite stores only artifact refs and redacted
+attempt evidence.
 
 ## Validation
 
@@ -119,6 +123,10 @@ GOWORK=off go test ./pkg/workflowv3 \
 GOWORK=off go test -race \
   ./pkg/workflowv3runtime \
   ./pkg/workflowv3sqlite -count=1
+
+cd web && pnpm exec tsc --noEmit --skipLibCheck \
+  ../pkg/gojamodules/workflow/testdata/workflow.d.ts \
+  ../pkg/workflowv3runtime/testdata/workflow-task.d.ts
 ```
 
 The focused tests cover the 12,000-row file workflow plus real local HTTP and
@@ -135,7 +143,7 @@ for 499,554 source bytes (18.04%).
   registry.
 - `pkg/gojamodules/workflow` — safe authoring module and TypeScript declaration.
 - `pkg/workflowv3runtime` — fresh-runtime task runner, exact host modules,
-  deterministic engine hook, and long-lived dispatcher.
+  deterministic engine hook, long-lived dispatcher, and exact task-ABI DTS.
 - `pkg/workflowv3sqlite` — compact durable store, resource admission,
   projections, retries, and fencing.
 - `pkg/testfixtures/workflowv3linear` — linear file workflow and bundle.

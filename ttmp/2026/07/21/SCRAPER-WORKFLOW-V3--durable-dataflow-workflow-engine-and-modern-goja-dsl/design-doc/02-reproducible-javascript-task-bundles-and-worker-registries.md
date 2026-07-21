@@ -1365,8 +1365,10 @@ ambient module registry:
 
 The public HTTP bundle requests only `fs:input` and `fetch:public`. The host
 injects allowed origins, timeout, maximum response bytes, disabled credential
-sources, redirect checks, and `http.Client`; none of those policy values or
-headers enter the manifest or plan. Typed JavaScript failures expose stable
+sources, redirect checks, and `http.Client`; empty/wildcard public allowlists,
+enabled credential sources, URL userinfo, and authorization/cookie headers are
+rejected. None of those policy values or headers enter the manifest or plan.
+Typed JavaScript failures expose stable
 codes while the host persists only redacted messages.
 
 The database bundle requests only `fs:input` and `db:sync`. The host injects a

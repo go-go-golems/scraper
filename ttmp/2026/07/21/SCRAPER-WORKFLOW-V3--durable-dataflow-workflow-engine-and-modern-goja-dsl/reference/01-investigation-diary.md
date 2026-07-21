@@ -2111,9 +2111,11 @@ merely redesigned.
   another ready node in the same class.
 - Retry backoff remains blocked after store close/reopen and leases attempt two
   only after its durable deadline.
-- The database task commits 500 customer writes, deliberately reports a
-  retryable post-commit crash, survives workflow-store restart, then succeeds
-  without a second audit or operation row.
+- The database task commits 500 customer writes and returns a typed retryable
+  post-commit failure, but the test kills the worker path without persisting
+  that outcome. After workflow-store restart and lease expiry, attempt one is
+  durably `lease_lost`; attempt two succeeds without a second audit or
+  operation row.
 - The database receipt proves `configureDenied=true`, second-attempt
   `applied=false`, and exact cardinality 500.
 - Database privacy/storage evidence:
@@ -2218,3 +2220,301 @@ merely redesigned.
 - Retry bounds: three attempts, 10 ms deterministic fixture backoff.
 - Dispatcher wake fallback: 50 ms production default, configurable in tests.
 - Operation key: canonical SHA-256 of `{runId,nodeKey}`.
+
+## Step 21: Validate the dependency upgrade and existing repository behavior
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 19)
+
+**Assistant interpretation:** Expand validation from the new packages to every
+scraper package and release build, then fix compatibility rather than accepting
+a narrowed workflow-only pass.
+
+**Inferred user intent:** Slices 3–5 must preserve the existing application, not
+just work in isolated tests.
+
+**Commit:** `7df9f59` — "workflowv3: validate dependency upgrade and migration"
+
+### What I did
+
+- Ran `GOWORK=off go mod tidy` and the full repository test suite.
+- Adapted two existing submit-verb scanners to the current jsverbs API after
+  verifying that v0.10.6 removed implicit public-function discovery entirely.
+- Added an old-schema migration test that creates the completed Slice 1–2
+  `v3_runs`, `v3_nodes`, and `v3_attempts` tables, opens them through the new
+  store, and verifies every Slice 3–5 column was added.
+- Ran `make validate`, full isolated Go lint, JavaScript syntax checks, and the
+  rendered public help smoke test.
+- Committed `go mod tidy` cleanup and generated logcopter files for both new
+  fixture packages.
+
+### Why
+
+- Upgrading a shared scripting dependency can alter v2 scanner APIs even when
+  workflow-v3 focused tests pass.
+- Existing minimal-v3 databases must reopen safely after the resource/retry
+  schema expansion.
+- Generated package artifacts are part of this repository's build contract.
+
+### What worked
+
+- Focused site/submission/cmd tests passed after the scanner adaptation.
+- `GOWORK=off go test ./... -count=1` passed.
+- `make validate` passed, including all Go tests, web unit tests, code
+  generation, Go binary build, TypeScript build, and Vite production build.
+- `GOWORK=off .bin/golangci-lint run ./cmd/... ./pkg/...` reported `0 issues`.
+- All four new JavaScript files pass `node --check`.
+- The rendered help title is `Workflow V3 Runtime Slices 1–5`.
+- Old minimal-v3 table layouts acquire resource, retry, ready-time, attempt
+  resource, and dispatch columns without data-destructive recreation.
+
+### What didn't work
+
+- The first repository-wide test after upgrading go-go-goja failed in two
+  existing files:
+
+  `unknown field IncludePublicFunctions in struct literal of type jsverbs.ScanOptions`
+
+  v0.10.6 deliberately removed both the field and implicit public-function
+  verb discovery. The old code set it to `false`; removing the obsolete field
+  preserves exactly that behavior. Full tests then passed.
+
+### What I learned
+
+- An upstream API deletion can preserve semantics when it removes the behavior
+  an explicit old flag had disabled; this still requires source and test
+  evidence, not blind field removal.
+- `CREATE TABLE IF NOT EXISTS` does not evolve existing SQLite tables, so the
+  additive column migration must remain explicit and tested.
+
+### What was tricky to build
+
+- The old-schema migration fixture had to define enough foreign-key targets for
+  the current embedded schema to create all newly introduced tables and
+  indexes, while still omitting the columns under test.
+
+### What warrants a second pair of eyes
+
+- Review go-go-goja v0.8.3→v0.10.6 release changes beyond the compile-visible
+  jsverbs field; the repository-wide suites and builds currently pass.
+- Review whether `make lint` itself should set `GOWORK=off` in a separate build
+  policy change.
+
+### What should be done next
+
+- Add explicit 429/404 classification and cross-connection resource-admission
+  evidence, then perform the final requirement audit.
+
+### Code review instructions
+
+- Review the two one-line jsverbs changes against v0.10.6 `ScanOptions` and its
+  removal design note.
+- Run the old-schema migration test against a temporary SQLite database.
+
+### Technical details
+
+- Shared dependency: go-go-goja v0.10.6.
+- Full validation warning only: existing Vite chunk exceeds 500 kB.
+
+## Step 22: Harden credentials, crash semantics, and database-scoped admission
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 19)
+
+**Assistant interpretation:** Treat the first green repository validation as an
+opportunity for adversarial requirement review, not automatic completion.
+
+**Inferred user intent:** Prove the hard boundaries named in the goal under the
+strongest realistic failure mode.
+
+**Commit:** `c1e0023` — "workflowv3: harden resource and capability boundaries"
+
+### What I did
+
+- Added explicit 429 rate-limit and terminal 404 status classification tests.
+- Made public fetch profiles fail worker boot when origins are empty/wildcard,
+  limits are invalid, or environment/file credential sources are enabled.
+- Added a guarded RoundTripper that reapplies origin policy and rejects URL
+  userinfo, `Authorization`, `Cookie`, and `Proxy-Authorization` headers on
+  every request, including redirects.
+- Added a URL-password canary test proving zero network contact and zero
+  workflow-SQLite leakage.
+- Strengthened the database crash test: it now runs the task side effect, drops
+  the typed task result without calling `Complete` or `Fail`, closes the store
+  with a running attempt, waits for lease expiry, and restarts. Attempt one is
+  `lease_lost`; attempt two observes the same operation key and does not write
+  again.
+- Asserted the target operation key equals the canonical SHA-256 of exact
+  run/node identity.
+- Added a two-connection SQLite race proving resource capacity is
+  database-scoped, not merely process-local.
+- Replaced textual RFC3339 deadline comparisons with parsed Go times in
+  projections and SQLite `julianday` comparisons in lease eligibility/expiry.
+- Removed the ready-candidate `LIMIT 100`, which could starve a compatible node
+  behind one hundred capacity- or implementation-blocked rows.
+
+### Why
+
+- HTTP URL userinfo can create Basic Authorization implicitly even when explicit
+  credential APIs are disabled.
+- A task-reported post-commit error is weaker than a process death before any
+  workflow outcome is recorded; lease-loss recovery is the required proof.
+- RFC3339Nano strings are not lexicographically ordered when one timestamp omits
+  fractional seconds.
+- Resource capacity must hold across independent store connections to be a
+  durable admission invariant.
+
+### What worked
+
+- 429 creates three `rate-limit/HTTP_FETCH_RATE_LIMIT` attempts; 404 creates one
+  terminal `validation/HTTP_FETCH_STATUS` attempt.
+- URL credentials never reach the test server and their canary is absent from
+  SQLite/WAL/SHM.
+- Unsafe public profile construction fails before a runtime can advertise it.
+- Two concurrent SQLite connections produce exactly one resource-capacity
+  winner.
+- The stronger crash test still reports the 18.04% workflow storage ratio and
+  exactly one target operation/audit row for 500 customer writes.
+- Focused tests, race tests, and lint pass after hardening.
+
+### What didn't work
+
+- No command failed in this step. The deadline and candidate-limit defects were
+  found by manual invariant review before they manifested as flaky tests.
+
+### What I learned
+
+- Security review must follow the behavior of `net/http`, not only exposed
+  JavaScript APIs; URL credentials and cookie jars reach the transport layer.
+- Durable idempotency evidence is strongest when the workflow store has no
+  knowledge of the task's returned failure at all.
+- Bounded candidate scans need pagination with continuation; a bare SQL limit
+  silently changes scheduling correctness. The current slice prefers complete
+  scanning over starvation and can add measured pagination later without a
+  correctness cap.
+
+### What was tricky to build
+
+- A custom transport must wrap, not replace, an injected client's transport so
+  test/proxy/TLS behavior remains intact while policy executes first.
+- The crash test must avoid the engine's correct failure persistence path, so it
+  resolves/materializes/runs the leased task directly and then abandons the
+  running lease.
+
+### What warrants a second pair of eyes
+
+- Public fetch currently forbids all explicit authorization/cookie headers by
+  design. Future authenticated aliases must use different names and policy,
+  never relax `fetch:public`.
+- Full candidate scanning is correct but should be benchmarked before very
+  large ready queues; any optimization must preserve continuation fairness.
+
+### What should be done next
+
+- Rerun all validation after documentation, commit the final evidence, and map
+  every goal clause to fresh artifacts before completion.
+
+### Code review instructions
+
+- Start with `publicFetchTransport.RoundTrip` and unsafe-profile tests.
+- Confirm the database crash path never calls `Store.Fail` for attempt one.
+- Run the cross-connection capacity race under `-race`.
+
+### Technical details
+
+- HTTP credential guards apply on every RoundTrip.
+- Lease/retry timestamps remain RFC3339Nano at rest but compare through parsed
+  time or SQLite `julianday`.
+
+## Step 23: Finalize typed task and output-privacy contracts
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 19)
+
+**Assistant interpretation:** Check type surfaces and outbound artifacts, not
+only database persistence, before the final audit.
+
+**Inferred user intent:** Ensure trusted task authors can see the real ABI and
+that an HTTP credential cannot be echoed into a durable result accidentally.
+
+**Commit:** `c4c670b` — "workflowv3: finalize typed privacy contracts"
+
+### What I did
+
+- Added the exact `workflow/task` TypeScript declaration and golden, including
+  artifact metadata, fresh-attempt identity, stable operation key, checkpoint,
+  typed JSON outputs, success, failure, and implementation wrappers.
+- Compiled both authoring and task declarations with TypeScript in addition to
+  exact Go golden comparison.
+- Completed the failure-class vocabulary with the already-designed `budget`,
+  `configuration`, and `identity` classes; this makes the database
+  reconfiguration guard a valid typed failure path instead of a latent
+  TypeError if the invariant ever regresses.
+- Changed HTTP snapshots to store stable list indexes rather than final request
+  URLs and asserted the query credential canary is absent from the output
+  artifact as well as SQLite/WAL/SHM.
+- Added explicit `implementation-unavailable` blocked-projection evidence for a
+  bundle mismatch.
+
+### Why
+
+- Runtime type declarations must include the operation key introduced by Slice
+  5 or JavaScript authors will rely on undocumented dynamic properties.
+- A compact external artifact is outside workflow SQLite, but it is still a
+  durable result; copying a query credential there would violate the intended
+  public snapshot boundary.
+- Failure vocabulary and task implementations must agree on every class even
+  when a negative branch is expected never to execute.
+
+### What worked
+
+- Exact task DTS comparison passes.
+- TypeScript compiles both declaration files with no errors.
+- Focused tests and race suites pass.
+- Focused lint reports zero issues.
+- The HTTP plan digest changed deterministically with the bundle source and its
+  reviewed golden was regenerated.
+
+### What didn't work
+
+- N/A. Manual API/output review found the two contract gaps before a failing
+  test.
+
+### What I learned
+
+- Privacy review must inspect referenced outputs as well as the control-plane
+  database, even when the formal storage-amplification boundary excludes
+  external artifacts.
+- An unreachable negative branch can still hide vocabulary drift; type/failure
+  contracts need direct unit coverage.
+
+### What was tricky to build
+
+- `workflow/task` declarations describe a trusted runtime module rather than the
+  safe authoring module, so they are generated and tested separately to avoid
+  capability confusion.
+
+### What warrants a second pair of eyes
+
+- The task DTS currently uses schema IDs plus generic `unknown` values; future
+  descriptor-specific DTS should refine domain payloads without weakening Go
+  schema authority.
+
+### What should be done next
+
+- Perform one final repository-wide validation and requirement mapping after
+  committing documentation/bookkeeping.
+
+### Code review instructions
+
+- Compare `TaskTypeScript()` byte-for-byte with its golden and run the explicit
+  TypeScript command in the public help page.
+- Inspect the HTTP artifact for absence of its URL query canary.
+
+### Technical details
+
+- Task DTS: `pkg/workflowv3runtime/testdata/workflow-task.d.ts`.
+- HTTP snapshot identity field: zero-based stable `index`.
