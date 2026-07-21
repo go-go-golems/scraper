@@ -114,6 +114,89 @@ func TestHTTPSnapshotDeniesUnadvertisedOriginAndRedactsURL(t *testing.T) {
 	require.NotContains(t, string(persisted), denied.URL)
 }
 
+func TestHTTPSnapshotRejectsURLCredentials(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requests.Add(1)
+	}))
+	defer server.Close()
+	root := t.TempDir()
+	databasePath := filepath.Join(root, "workflow.db")
+	engine, dispatcher, artifacts := newHTTPEngine(
+		t, databasePath, filepath.Join(root, "artifacts"),
+		[]string{server.URL}, 1024,
+	)
+	secret := "URL-PASSWORD-SECRET-16ab"
+	credentialURL := strings.Replace(server.URL, "://", "://public:"+secret+"@", 1)
+	input := putJSONArtifact(t, artifacts, "http-article-list-ref/v1", map[string]any{
+		"urls": []string{credentialURL},
+	})
+	authored := authoredHTTPPlan(t, engine.Registry)
+	require.NoError(t, engine.Submit(context.Background(), "http-credentials", authored.Plan, map[string]workflowv3.ArtifactRef{
+		"articles": input,
+	}))
+	snapshot := runDispatcherUntilStatus(t, dispatcher, engine, "http-credentials", "failed")
+	require.Len(t, snapshot.Attempts, 3)
+	require.Zero(t, requests.Load())
+	require.NoError(t, engine.Store.Close())
+	persisted, _ := readSQLiteFiles(t, databasePath)
+	require.NotContains(t, string(persisted), secret)
+}
+
+func TestHTTPSnapshotClassifiesRateLimitAndTerminalStatus(t *testing.T) {
+	tests := []struct {
+		name      string
+		status    int
+		code      string
+		class     string
+		retryable bool
+		attempts  int
+	}{
+		{
+			name: "rate limit", status: http.StatusTooManyRequests,
+			code: "HTTP_FETCH_RATE_LIMIT", class: "rate-limit",
+			retryable: true, attempts: 3,
+		},
+		{
+			name: "not found", status: http.StatusNotFound,
+			code: "HTTP_FETCH_STATUS", class: "validation",
+			retryable: false, attempts: 1,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+				response.WriteHeader(test.status)
+			}))
+			defer server.Close()
+			root := t.TempDir()
+			engine, dispatcher, artifacts := newHTTPEngine(
+				t,
+				filepath.Join(root, "workflow.db"),
+				filepath.Join(root, "artifacts"),
+				[]string{server.URL},
+				1024,
+			)
+			input := putJSONArtifact(t, artifacts, "http-article-list-ref/v1", map[string]any{
+				"urls": []string{server.URL},
+			})
+			authored := authoredHTTPPlan(t, engine.Registry)
+			runID := workflowv3.RunID("http-status-" + strings.ReplaceAll(test.name, " ", "-"))
+			require.NoError(t, engine.Submit(context.Background(), runID, authored.Plan, map[string]workflowv3.ArtifactRef{
+				"articles": input,
+			}))
+			snapshot := runDispatcherUntilStatus(t, dispatcher, engine, runID, "failed")
+			require.Len(t, snapshot.Attempts, test.attempts)
+			for _, attempt := range snapshot.Attempts {
+				require.Equal(t, test.code, attempt.Failure.Code)
+				require.Equal(t, test.class, attempt.Failure.Class)
+				require.Equal(t, test.retryable, attempt.Failure.Retryable)
+			}
+			require.NoError(t, engine.Store.Close())
+		})
+	}
+}
+
 func TestHTTPSnapshotRejectsRedirectOutsideAllowlist(t *testing.T) {
 	var deniedRequests atomic.Int32
 	denied := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

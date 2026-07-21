@@ -80,11 +80,19 @@ WHERE n.status = 'pending' AND r.status = 'running'`)
 		if err := workflowv3.StrictDecode(modules, &node.Modules); err != nil {
 			return snapshot, err
 		}
+		backoffBlocked := false
+		if readyAt.Valid {
+			deadline, err := time.Parse(time.RFC3339Nano, readyAt.String)
+			if err != nil {
+				return snapshot, err
+			}
+			backoffBlocked = deadline.After(now)
+		}
 		reason := ""
 		switch {
 		case blockedByDependency:
 			reason = "dependency"
-		case readyAt.Valid && readyAt.String > formatTime(now):
+		case backoffBlocked:
 			reason = "retry-backoff"
 		case registry == nil:
 			reason = "implementation-unavailable"
