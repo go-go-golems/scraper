@@ -117,3 +117,12 @@ Implemented content-addressed artifacts, deterministic task bundles, exact seale
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/testfixtures/workflowv3linear — Real paired workflow and task bundle fixture
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime — Fresh JavaScript task runtimes and end-to-end engine
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite — Compact fenced append-only SQLite durability
+
+## 2026-07-21
+
+Hardened the first workflow-v3 slice with stable typed failure vocabulary across async Goja promises, redacted durable failure messages, output-schema and module-profile rejection, immutable bundle accessors, and concurrent single-winner lease tests under race detection (commit f25f558)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/task_runner.go — Async typed failure recovery and exact module admission
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/store_test.go — Concurrent lease and stale fencing evidence
