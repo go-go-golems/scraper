@@ -11,12 +11,13 @@ import (
 )
 
 type Engine struct {
-	Store         *workflowv3sqlite.Store
-	Registry      *workflowv3.SealedRegistry
-	Artifacts     workflowv3.ArtifactStore
-	Modules       *TaskModuleRegistry
-	LeaseDuration time.Duration
-	Now           func() time.Time
+	Store                       *workflowv3sqlite.Store
+	Registry                    workflowv3.RegistryResolver
+	Artifacts                   workflowv3.ArtifactStore
+	Modules                     *TaskModuleRegistry
+	LeaseDuration               time.Duration
+	RegistryQuarantineThreshold int
+	Now                         func() time.Time
 }
 
 func (e *Engine) Submit(ctx context.Context, runID workflowv3.RunID, plan workflowv3.WorkflowPlan, inputs map[string]workflowv3.ArtifactRef) error {
@@ -236,9 +237,16 @@ func (e *Engine) ExecuteLease(ctx context.Context, lease workflowv3.Lease) error
 	if err := e.validate(); err != nil {
 		return err
 	}
-	registered, err := e.Registry.ResolveNode(lease.PlanNode)
-	if err != nil {
-		return fmt.Errorf("resolve leased implementation: %w", err)
+	if lease.ReleaseGeneration != nil {
+		defer lease.ReleaseGeneration()
+	}
+	registered := lease.RegisteredTask
+	if registered.Bundle == nil {
+		var err error
+		registered, err = e.Registry.ResolveNode(lease.PlanNode)
+		if err != nil {
+			return fmt.Errorf("resolve leased implementation: %w", err)
+		}
 	}
 	inputs, err := e.Store.ResolveInputs(ctx, lease)
 	if err != nil {
@@ -264,6 +272,27 @@ func (e *Engine) ExecuteLease(ctx context.Context, lease workflowv3.Lease) error
 		Modules: e.Modules,
 	})
 	if err != nil {
+		var construction *RuntimeConstructionError
+		if errors.As(err, &construction) {
+			if recorder, ok := e.Registry.(interface {
+				RecordConstructionFailure(string, string, int) (bool, error)
+			}); ok {
+				if _, recordErr := recorder.RecordConstructionFailure(
+					lease.RegistryGeneration, "TASK_RUNTIME_CONSTRUCTION",
+					e.registryQuarantineThreshold(),
+				); recordErr != nil {
+					return fmt.Errorf("record runtime construction failure: %w", recordErr)
+				}
+				failure := workflowv3.Failure{
+					Class: "configuration", Code: "TASK_RUNTIME_CONSTRUCTION",
+					Retryable: true, Message: "task runtime construction failed",
+				}
+				if persistErr := e.Store.InfrastructureFail(ctx, lease, failure, e.now()); persistErr != nil {
+					return fmt.Errorf("construct task runtime: %v; persist failure: %w", err, persistErr)
+				}
+				return &AttemptExecutionError{Err: fmt.Errorf("construct task runtime: %w", err)}
+			}
+		}
 		failure := workflowv3.Failure{
 			Class: "internal", Code: "WORKFLOW_TASK_EXECUTION",
 			Retryable: false, Message: "task execution failed",
@@ -350,6 +379,13 @@ func (e *Engine) now() time.Time {
 		return e.Now().UTC()
 	}
 	return time.Now().UTC()
+}
+
+func (e *Engine) registryQuarantineThreshold() int {
+	if e.RegistryQuarantineThreshold > 0 {
+		return e.RegistryQuarantineThreshold
+	}
+	return 2
 }
 
 func (e *Engine) leaseDuration() time.Duration {

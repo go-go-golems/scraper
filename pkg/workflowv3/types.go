@@ -211,11 +211,14 @@ type Lease struct {
 	RunID              RunID
 	NodeKey            NodeKey
 	Attempt            int
+	FailureCount       int
 	Token              string
 	CancelEpoch        int64
 	ExpiresAt          time.Time
 	PlanNode           PlanNode
+	RegisteredTask     RegisteredTask
 	RegistryGeneration string
+	ReleaseGeneration  func()
 }
 
 type RunSnapshot struct {
@@ -249,10 +252,19 @@ type ReductionProgress struct {
 	RootReady           bool   `json:"rootReady"`
 }
 
+type RegistryGenerationProgress struct {
+	Generation     string `json:"generation"`
+	State          string `json:"state"`
+	References     int    `json:"references"`
+	Failures       int    `json:"failures"`
+	QuarantineCode string `json:"quarantineCode,omitempty"`
+}
+
 type QueueSnapshot struct {
-	Ready            int                 `json:"ready"`
-	ActiveByResource map[string]int      `json:"activeByResource"`
-	BlockedByReason  map[string]int      `json:"blockedByReason"`
-	Maps             []MapProgress       `json:"maps,omitempty"`
-	Reductions       []ReductionProgress `json:"reductions,omitempty"`
+	Ready               int                          `json:"ready"`
+	ActiveByResource    map[string]int               `json:"activeByResource"`
+	BlockedByReason     map[string]int               `json:"blockedByReason"`
+	Maps                []MapProgress                `json:"maps,omitempty"`
+	Reductions          []ReductionProgress          `json:"reductions,omitempty"`
+	RegistryGenerations []RegistryGenerationProgress `json:"registryGenerations,omitempty"`
 }

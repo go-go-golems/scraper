@@ -35,6 +35,13 @@ type TaskFailureError struct {
 	Failure workflowv3.Failure
 }
 
+type RuntimeConstructionError struct {
+	Err error
+}
+
+func (e *RuntimeConstructionError) Error() string { return e.Err.Error() }
+func (e *RuntimeConstructionError) Unwrap() error { return e.Err }
+
 func (e *TaskFailureError) Error() string {
 	return fmt.Sprintf("task failure %s/%s", e.Failure.Class, e.Failure.Code)
 }
@@ -77,7 +84,7 @@ func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
 			Request: request, Workspace: workspace,
 		})
 		if err != nil {
-			return TaskResult{}, err
+			return TaskResult{}, &RuntimeConstructionError{Err: err}
 		}
 		modules = append(modules, module)
 	}
@@ -87,11 +94,11 @@ func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
 		WithModules(modules...).
 		Build()
 	if err != nil {
-		return TaskResult{}, fmt.Errorf("build task runtime: %w", err)
+		return TaskResult{}, &RuntimeConstructionError{Err: fmt.Errorf("build task runtime: %w", err)}
 	}
 	runtime, err := factory.NewRuntime(gggengine.WithStartupContext(ctx))
 	if err != nil {
-		return TaskResult{}, fmt.Errorf("create task runtime: %w", err)
+		return TaskResult{}, &RuntimeConstructionError{Err: fmt.Errorf("create task runtime: %w", err)}
 	}
 	defer func() { _ = runtime.Close(context.Background()) }()
 

@@ -16,6 +16,13 @@ type RegistryBuilder struct {
 	modules map[string]struct{}
 }
 
+type RegistryResolver interface {
+	ResolveNode(PlanNode) (RegisteredTask, error)
+	AcquireNode(PlanNode) (RegisteredTask, string, func(), error)
+	ModuleAliases() []string
+	Catalog() (*Catalog, error)
+}
+
 type SealedRegistry struct {
 	generation string
 	tasks      map[ImplementationIdentity]RegisteredTask
@@ -128,6 +135,14 @@ func (r *SealedRegistry) Resolve(identity ImplementationIdentity) (RegisteredTas
 		return RegisteredTask{}, fmt.Errorf("registry generation %s does not advertise exact implementation %s", r.generation, formatIdentity(identity))
 	}
 	return task, nil
+}
+
+func (r *SealedRegistry) AcquireNode(node PlanNode) (RegisteredTask, string, func(), error) {
+	task, err := r.ResolveNode(node)
+	if err != nil {
+		return RegisteredTask{}, "", nil, err
+	}
+	return task, r.Generation(), func() {}, nil
 }
 
 func (r *SealedRegistry) ResolveNode(node PlanNode) (RegisteredTask, error) {
