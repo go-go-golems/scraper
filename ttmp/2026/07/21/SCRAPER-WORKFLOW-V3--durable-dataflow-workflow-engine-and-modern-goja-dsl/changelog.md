@@ -208,3 +208,11 @@ Completed the intern architecture guide for Slices 1-12 and implementation-ready
 ### Related Files
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/08-workflow-v3-slices-1-through-12-intern-architecture-and-analysis-guide.md — Cross-slice intern guide and bundle entry point
+
+## 2026-07-21
+
+Recorded Slice 1-12 architecture guide and dedicated Slice 6-10 designs in commit 84933ec; reMarkable bundle upload succeeded.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/01-investigation-diary.md — Step 25 records design audit validation upload and commit evidence
