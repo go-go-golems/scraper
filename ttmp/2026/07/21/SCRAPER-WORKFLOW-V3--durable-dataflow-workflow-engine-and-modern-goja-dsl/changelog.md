@@ -286,3 +286,13 @@ Step 34: completed Slice 7 audit, public/design status, full validation, and tas
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md — Public Slices 1-7 runtime guide
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/01-investigation-diary.md — Slice 7 completion audit
+
+## 2026-07-21
+
+Completed Slice 8 rolling immutable registry generations: atomic candidate activation, exact generation acquisition before durable leasing, A/B coexistence and execution, draining/reference-safe cleanup, restart reconstruction, construction-failure quarantine without semantic retry debt, lifecycle projections, additive migration, race tests, and public/design documentation.
+
+### Related Files
+
+- pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md — Public Slices 1-8 runtime guide
+- pkg/workflowv3runtime/registry_manager.go — Slice 8 generation lifecycle and exact resolver
+- pkg/workflowv3sqlite/store.go — Generation-aware durable lease acquisition and infrastructure failure accounting

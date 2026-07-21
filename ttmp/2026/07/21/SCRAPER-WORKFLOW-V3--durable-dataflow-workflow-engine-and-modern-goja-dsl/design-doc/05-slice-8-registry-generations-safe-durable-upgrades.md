@@ -1,7 +1,7 @@
 ---
 Title: Slice 8 Registry Generations - Safe Durable Upgrades
 Ticket: SCRAPER-WORKFLOW-V3
-Status: active
+Status: complete
 Topics:
     - architecture
     - scheduler
@@ -49,13 +49,14 @@ A failed candidate leaves the active generation unchanged. Repeated runtime
 construction failure quarantines the affected generation/implementation before
 it burns task retry budgets.
 
-## Current baseline and gap
+## Implemented baseline
 
-`SealedRegistry` already clones state, validates module advertisements,
-computes a deterministic generation digest, and resolves exact `PlanNode`
-identity and policy. `Engine` currently holds exactly one `*SealedRegistry`.
-Replacing that pointer directly would make lifetime, active attempt, and old
-plan behavior implicit.
+`SealedRegistry` clones state, validates module advertisements, computes a
+deterministic generation digest, and resolves exact `PlanNode` identity and
+policy. `RegistryManager` now owns atomic active/draining/quarantined lifecycle,
+while `Engine` and SQLite admission depend on the small `RegistryResolver`
+contract. Generation lifetime, exact task acquisition, and old-plan behavior
+are explicit.
 
 ## Scope
 
@@ -271,6 +272,26 @@ compatibility adapter that substitutes the current registry.
 7. Add optional durable advertisements required by multi-worker fixture.
 8. Update help, DTS if exposed, diary, changelog, and generated artifacts.
 9. Run race, focused, migration, full validation, privacy, and diff checks.
+
+## Implementation outcome
+
+Commit `7c00036` implements the resolver and manager, acquires exact task bytes
+before durable lease creation, records the generation on attempts, retains old
+A work across B activation, and denies cleanup while A has references. The
+runtime test executes A and B JavaScript and validates distinct output artifact
+contents. Pending A work resolves from draining A; after explicit removal it is
+projected as `implementation-unavailable` rather than substituted with B.
+
+Candidate self-test is atomic. Module/factory/runtime construction errors use a
+typed infrastructure path and additive semantic `failure_count`, so quarantine
+preserves append-only attempts without consuming domain retry limits.
+Dispatcher projections expose lifecycle state. Restart reconstruction from the
+same immutable sealed registry reproduces the exact generation.
+
+No durable worker-advertisement table was added: Slice 8's executor is
+process-local, and attempts already preserve durable generation evidence.
+Remote multi-process heartbeat/routing is deferred until there is a concrete
+remote-worker requirement.
 
 ## Acceptance criteria
 

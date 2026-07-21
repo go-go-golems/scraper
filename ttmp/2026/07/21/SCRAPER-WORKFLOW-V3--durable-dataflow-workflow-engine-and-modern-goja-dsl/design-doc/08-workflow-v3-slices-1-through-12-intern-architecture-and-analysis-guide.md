@@ -28,7 +28,7 @@ RelatedFiles:
     - Path: repo://pkg/testfixtures/workflowv3database
       Note: Executable Slice 5 database workflow
 ExternalSources: []
-Summary: Intern-oriented architectural guide to all twelve Workflow V3 vertical slices, including implemented evidence for Slices 1-7 and implementation contracts for Slices 8-12.
+Summary: Intern-oriented architectural guide to all twelve Workflow V3 vertical slices, including implemented evidence for Slices 1-8 and implementation contracts for Slices 9-12.
 LastUpdated: 2026-07-21T20:15:00-04:00
 WhatFor: Understand why each Workflow V3 slice exists, which architectural boundary it proves, how it changes durable state, and what evidence is required before advancing.
 WhenToUse: Read before implementing, reviewing, testing, or operating any Workflow V3 slice, and before changing canonical IR, SQLite state, worker registries, task capabilities, or RAG integration.
@@ -61,7 +61,7 @@ The sequence is:
 11. **Process isolation: broader trust is viable.**
 12. **RAG/TTC: an expensive production workload is safe.**
 
-Slices 1–7 are implemented and validated. Slices 8–12 are target contracts.
+Slices 1–8 are implemented and validated. Slices 9–12 are target contracts.
 This distinction is important: a design section explains what must become true;
 it is not evidence that the behavior already exists.
 
@@ -615,10 +615,10 @@ boundary.
 
 ### 9.1 Status and purpose
 
-Slice 8 is not implemented yet. Current sealed registries are immutable, but an
-engine instance holds one registry pointer. Production workers need to load a
-new bundle set without changing code beneath active attempts or abandoning
-plans pinned to the prior bundle.
+Slice 8 is implemented. Sealed registries remain immutable while a registry
+manager atomically activates validated candidates, retains draining generations
+for exact pinned work, and quarantines broken runtime construction without
+spending domain retry limits.
 
 ### 9.2 Candidate-to-active lifecycle
 
@@ -671,9 +671,9 @@ node's task retry budget. Quarantine state has bounded reason codes, threshold,
 time, generation identity, and operator reset/reload behavior. It never stores
 source or stack dumps in durable events.
 
-### 9.6 Required evidence
+### 9.6 Implemented evidence
 
-- run long attempt A, activate B, and prove A finishes on A;
+- lease attempt A, activate B, and prove A finishes with A executable bytes;
 - compile/submit new work on B and prove exact B bytes execute;
 - keep an A-pinned pending run executable while A is retained;
 - fail candidate validation and prove active A is unchanged;
@@ -1086,7 +1086,7 @@ isolation.
 | 5 | implemented and validated | reuse stable operation keys for publication |
 | 6 | implemented and validated | preserve deterministic paged expansion, publication, and privacy invariants |
 | 7 | implemented and validated | preserve bounded fan-in, level recovery, deterministic root, and privacy invariants |
-| 8 | design target | freeze generation-manager admission/refcount contract |
+| 8 | implemented and validated | preserve exact generation acquisition, draining, quarantine, and retry-debt separation |
 | 9 | design target | freeze integer budget dimensions and settlement policy |
 | 10 | design target | freeze gate CAS/operator/state contract |
 | 11 | design target | define worker protocol and isolation profiles |

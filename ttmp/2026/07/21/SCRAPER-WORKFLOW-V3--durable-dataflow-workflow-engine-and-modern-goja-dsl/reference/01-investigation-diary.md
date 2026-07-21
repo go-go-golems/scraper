@@ -3838,3 +3838,78 @@ before introducing rolling code upgrades.
 
 - Slice 7 implementation commits: `e760069`, `e2c48f2`.
 - Normal tree: 257 map children + 39 reducer partitions = 296 attempts.
+
+## Step 35: Activate, drain, and quarantine registry generations
+
+Slice 8 now validates and atomically activates sealed generations, retains old code while acquired attempts drain, and quarantines repeatedly broken runtime construction. Generation acquisition occurs before durable lease creation, so the attempt row and executable bytes cannot diverge.
+
+Infrastructure failures remain append-only evidence but no longer consume domain retry debt. Queue projections expose active, draining, and quarantined generations and implementation-unavailable work.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 25)
+
+**Assistant interpretation:** Implement exact rolling generations and quarantine behavior.
+
+**Inferred user intent:** Upgrade workers without changing code under active runs or charging broken worker configuration to task retries.
+
+**Commit (code):** `7c00036` — "workflowv3: add rolling registry generations"
+
+### What I did
+
+- Added `RegistryResolver` and a race-safe `RegistryManager` with candidate self-test, atomic activation, draining, reference-counted acquire/release, removal, quarantine, catalog, aliases, and snapshots.
+- Acquired exact generation/task bytes before lease persistence and stored the generation on every attempt.
+- Executed leased A bytes after B activation, then B bytes for new work; outputs prove versions A and B.
+- Added additive `failure_count`, separate from attempt history, plus `InfrastructureFail` and typed runtime-construction errors.
+- Added generation progress and concurrent activation/acquisition tests.
+
+### Why
+
+- Attempt number is history, not semantic retry debt.
+- Resolving after lease creation would race generation removal.
+- Configured aliases and currently admissible implementations are distinct facts.
+
+### What worked
+
+- A drains while referenced; removal fails until idempotent release.
+- Failed candidate self-test leaves A active.
+- Two construction failures with `maxAttempts=1` create two infrastructure attempts, quarantine the generation, and block the pending node without domain failure.
+- Rebuilding a manager from immutable B bytes reproduces B identity.
+- Runtime/store tests, race suites, lint, and `git diff --check` passed.
+
+### What didn't work
+
+The first quarantine test failed with `registry advertises modules [] but runtime configures [bad:module]`. `ModuleAliases` had omitted quarantined generations. I retained the configured alias union while exact resolution still excludes quarantined implementations.
+
+The first full `make validate` attempt also failed two timing-sensitive tests under concurrent package load. The unrelated v2 heartbeat test lost its 20 ms lease once, then passed ten isolated repetitions. The 1,807-item map reached success but had more than exactly 1,807 attempts, consistent with its two-second no-heartbeat test leases expiring under load. Two isolated map repetitions completed in 30.43 and 27.54 seconds with exact cardinality. I raised only that fixture's lease to ten seconds so the test measures deterministic map identity rather than accidental host scheduling delay; production lease-loss behavior remains separately tested.
+
+### What I learned
+
+- Generation acquisition belongs in admission, not just runtime lookup.
+- Separating failure count also prevents lease-loss history from spending future semantic retries.
+
+### What was tricky to build
+
+The store scans incompatible candidates transactionally but must retain only the selected generation. It now performs non-retaining resolution first, acquires once, and releases on transaction errors. Quarantine preserves attempts while returning the node to pending without incrementing semantic failures.
+
+### What warrants a second pair of eyes
+
+- `RemoveDrained` is operator/retention-policy driven and does not query all durable pending plans.
+- Entrypoint require/export errors remain ordinary task failures; only module/factory/runtime creation is construction-classified.
+
+### What should be done in the future
+
+- Complete full-repository validation and Slice 8 public/design status.
+- Add durable remote-worker heartbeats only if routing extends beyond process-local exact admission.
+
+### Code review instructions
+
+- Start with `pkg/workflowv3runtime/registry_manager_test.go`.
+- Review manager acquisition, SQLite lease ownership, `InfrastructureFail`, and Engine construction handling together.
+- Validate with `GOWORK=off go test -race ./pkg/workflowv3runtime ./pkg/workflowv3sqlite -count=1`.
+
+### Technical details
+
+- Quarantine code: `TASK_RUNTIME_CONSTRUCTION`.
+- Default threshold: two construction failures.
+- Focused non-race runtime test: 39.012 seconds; race runtime test: 10.450 seconds; lint: `0 issues.`
