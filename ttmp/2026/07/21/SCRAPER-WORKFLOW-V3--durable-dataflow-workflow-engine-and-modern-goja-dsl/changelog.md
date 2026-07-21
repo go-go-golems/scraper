@@ -296,3 +296,14 @@ Completed Slice 8 rolling immutable registry generations: atomic candidate activ
 - pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md — Public Slices 1-8 runtime guide
 - pkg/workflowv3runtime/registry_manager.go — Slice 8 generation lifecycle and exact resolver
 - pkg/workflowv3sqlite/store.go — Generation-aware durable lease acquisition and infrastructure failure accounting
+
+## 2026-07-21
+
+Completed Slice 9 transactional budgets and authoritative projections: canonical integer accounts and requested/effective claims, JavaScript/DTS APIs, lease-atomic multi-dimension reservation, actual/conservative/zero settlement, retry/lease-loss/cancellation recovery, exhaustion policies and versioned increases, startup reconciliation, map/reduction propagation, coherent operational snapshots/event continuation, real fixture privacy evidence, migrations, races, and full validation.
+
+### Related Files
+
+- pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md — Public Slices 1-9 guide
+- pkg/testfixtures/workflowv3budget — Real JavaScript usage reporting fixture
+- pkg/workflowv3sqlite/budget.go — Transactional reservation settlement recovery and operator increases
+- pkg/workflowv3sqlite/operational.go — One-read-transaction operational snapshots and event continuation

@@ -1,7 +1,7 @@
 ---
-Title: Workflow V3 Runtime Slices 1–8
+Title: Workflow V3 Runtime Slices 1–9
 Slug: scraper-workflow-v3-minimal-runtime
-Short: "Explains executable workflow-v3 file, HTTP, dispatcher, database, map, reduction, and rolling-registry slices with exact capabilities and durable privacy boundaries."
+Short: "Explains executable workflow-v3 file, HTTP, dispatcher, database, map, reduction, registry, and transactional-budget slices with durable privacy boundaries."
 Topics:
 - scraper
 - runtime
@@ -17,12 +17,13 @@ ShowPerDefault: true
 SectionType: GeneralTopic
 ---
 
-Workflow v3 has eight executable vertical slices for trusted first-party
+Workflow v3 has nine executable vertical slices for trusted first-party
 JavaScript tasks: linear file processing, typed authoring, allowlisted HTTP,
 work-conserving resource dispatch, idempotent database synchronization,
-deterministic lazy maps, bounded reduction trees, and immutable rolling
-registry generations. It remains intentionally separate from the existing v2
-site and submission runtime while later budget/gate capabilities are added.
+deterministic lazy maps, bounded reduction trees, immutable rolling registry
+generations, and transactional budgets with authoritative operational
+projections. It remains intentionally separate from the existing v2 site and
+submission runtime while later gate/isolation capabilities are added.
 
 ## What runs today
 
@@ -159,6 +160,36 @@ generation, and projects affected work as `implementation-unavailable`.
 Dispatcher projections include active, draining, and quarantined generations.
 Removal is denied while a generation has acquired references.
 
+## Transactional budget and projection behavior
+
+Plans declare sorted run accounts with integer limits and policy digests. Exact
+task, map, and reduction claims record requested and effective reservations;
+task bundle catalogs cap each dimension. Closed dimensions cover requests,
+tokens, bytes, and integer cost microunits. Unknown, negative, duplicate,
+unsorted, floating, unsafe JavaScript integers, and overflow are rejected.
+
+Lease admission reserves every dimension in the same immediate SQLite
+transaction that creates the attempt. Two independent connections racing for
+the final request unit produce one winner. Completion settles validated actual
+usage and releases the remainder. Failed tasks may settle reported actual
+usage; ambiguous failure, lease loss, or in-flight cancellation charges the
+full conservative reservation. Preparation failure before task execution
+releases it. Retries create new immutable reservation rows.
+
+`block` leaves work pending with `budget:<account>:<dimension>`;
+`require-approval` leaves it lease-free with a budget-approval reason for Slice
+10; `fail-run` records `budget/BUDGET_EXHAUSTED` evidence without creating an
+attempt. Versioned operator increases use expected-version CAS and unblock
+exact work. Startup reconciliation rejects inconsistent account/reservation
+state instead of inventing usage.
+
+An operational snapshot is reconstructed in one read transaction. It includes
+run/node/attempt states, retries, lease loss, resource queue state, maps,
+reductions, budget limit/used/reserved/remaining, explicit terminal-rate
+windows, ages, and an event high-water sequence. Runtime augmentation adds
+active/draining/quarantined registry generations. Consumers read a snapshot,
+then continue through bounded sequence-ordered events.
+
 ## HTTP and database behavior
 
 The HTTP fixture snapshots at most eight explicitly supplied article URLs.
@@ -198,9 +229,11 @@ cd web && pnpm exec tsc --noEmit --skipLibCheck \
 
 The focused tests cover the 12,000-row file workflow, real local HTTP and
 SQLite target servers, a 1,807-item JavaScript lazy map, and a 257-item
-multi-level JavaScript reduction, and exact A/B registry generations. They
-prove typed retry, atomic activation, draining, quarantine without domain retry
-debt, allowlist and redirect denial,
+multi-level JavaScript reduction, exact A/B registry generations, and a real
+budget-reporting JavaScript task. They prove typed retry, atomic activation,
+draining, quarantine without domain retry debt, database-scoped reservation,
+actual/conservative/zero settlement, exhaustion and CAS increase, allowlist and
+redirect denial,
 response limits, in-flight cancellation, independent resource refill,
 per-resource fairness, blocked projections, database reconfiguration denial,
 post-commit crash recovery, deterministic paged expansion, backpressure,
@@ -228,6 +261,7 @@ control persistence and the published output manifest.
   trusted JavaScript bundle.
 - `pkg/testfixtures/workflowv3reduce` — real bounded word-count map/reduction
   workflow and trusted JavaScript bundle.
+- `pkg/testfixtures/workflowv3budget` — real integer usage reporting, settlement,
+  overage, reopen, and privacy workflow.
 
-Later slices add transactional budgets, approval gates, and stronger process
-isolation. V3 does not translate or silently accept v2 raw operations.
+Later slices add durable approval gates and stronger process isolation. V3 does not translate or silently accept v2 raw operations.
