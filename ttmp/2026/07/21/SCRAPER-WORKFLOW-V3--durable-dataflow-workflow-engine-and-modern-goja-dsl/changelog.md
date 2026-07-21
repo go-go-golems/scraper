@@ -107,3 +107,13 @@ Implemented the minimal require(workflow) Goja authoring DSL with define/input/t
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/gojamodules/workflow/authoring.go — Minimal safe workflow authoring native modules
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/gojamodules/workflow/testdata/linear-transform.plan.json — Exact-identity compiled-plan golden
+
+## 2026-07-21
+
+Implemented content-addressed artifacts, deterministic task bundles, exact sealed registry generations, fresh lease-scoped Goja task runtimes with current fs:input, compact append-only SQLite runs/nodes/attempts/outputs/events, fencing/reclaim/reopen, and a real authored 12,000-row file workflow restart/privacy/storage test (commit 756dbf5)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/testfixtures/workflowv3linear — Real paired workflow and task bundle fixture
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime — Fresh JavaScript task runtimes and end-to-end engine
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite — Compact fenced append-only SQLite durability

@@ -14,7 +14,7 @@
 - [x] Revise architecture and bundle design for trusted Goja modules and vertical-slice implementation order <!-- t:foy2 -->
 - [x] Implement canonical workflow v3 IR, validation, digest, task catalog, and compiler <!-- t:0jm0 -->
 - [x] Implement minimal require(workflow) Goja authoring DSL and descriptor-only task module <!-- t:as4j -->
-- [ ] Implement sealed exact-identity bundle registry and fresh lease-scoped JavaScript task runtime <!-- t:9pis -->
-- [ ] Implement compact SQLite v3 runs nodes attempts outputs leases and restart-safe executor <!-- t:eyzy -->
-- [ ] Prove end-to-end linear file transform, privacy, restart/reopen, stale fencing, and identity mismatch behavior <!-- t:8cs8 -->
+- [x] Implement sealed exact-identity bundle registry and fresh lease-scoped JavaScript task runtime <!-- t:9pis -->
+- [x] Implement compact SQLite v3 runs nodes attempts outputs leases and restart-safe executor <!-- t:eyzy -->
+- [x] Prove end-to-end linear file transform, privacy, restart/reopen, stale fencing, and identity mismatch behavior <!-- t:8cs8 -->
 - [ ] Run repository validation, update ticket evidence, and audit minimal DSL completion <!-- t:awrp -->

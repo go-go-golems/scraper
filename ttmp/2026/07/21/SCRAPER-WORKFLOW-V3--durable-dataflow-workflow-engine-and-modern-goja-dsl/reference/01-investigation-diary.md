@@ -1266,3 +1266,166 @@ canonical validation and compilation authoritative in Go.
 - JavaScript fixture: `testdata/linear-transform.js`.
 - Plan digest: `sha256:5ad8d9c58ea4f769653b15d069f415a0f014f7a43e55b35100c3c86adf3b0305`.
 - Completed ticket task: `as4j`.
+
+## Step 14: Execute and reopen a real durable JavaScript file workflow
+
+The JavaScript-authored linear plan now runs end to end through immutable task
+bundle bytes, an exact sealed registry generation, fresh Goja runtimes, the
+current guarded `fs` module, an external content-addressed artifact store, and
+new compact SQLite v3 tables. The integration test transforms and validates
+12,000 real JSONL rows, deliberately restarts after the first node, reopens the
+final output, and scans SQLite main/WAL/SHM bytes for private source canaries.
+
+The store creates one immutable attempt row per lease, fences completion by
+lease token and cancellation epoch, marks expired attempts `lease_lost`, and
+starts a new monotonically numbered attempt. Plans pinned to different bundle
+bytes are not leased to the worker even when task kind and version match.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 10)
+
+**Assistant interpretation:** Connect the minimal DSL to real immutable bundle
+execution and durable compact persistence without waiting for later maps,
+budgets, or work-conserving dispatch.
+
+**Inferred user intent:** Reach a meaningful restartable workload quickly while
+proving the foundational privacy and reproducibility invariants now.
+
+**Commit (code):** 756dbf5 — "workflowv3: execute durable JavaScript file workflow"
+
+### What I did
+
+- Added deterministic bundle manifests and source-derived bundle digests.
+- Added exact sealed registry generations and full-identity resolution.
+- Added a shared embedded linear-transform workflow/task-bundle fixture.
+- Added a content-addressed file artifact store with size and digest checks.
+- Added fresh per-attempt Goja runtimes exposing only `workflow/task` and a
+  read-only attempt-scoped `fs:input` module.
+- Added lease-local input materialization and host-side output-port/schema
+  validation.
+- Added compact SQLite v3 run, input, node, dependency, attempt, output, and
+  redacted event tables.
+- Added transactional leasing, expiry reclamation, completion/failure,
+  cancellation fencing, snapshots, and reopen.
+- Added an engine that submits compiled plans and executes ready nodes through
+  the exact sealed registry.
+- Added exact bundle/entrypoint/ABI mismatch tests, stale completion tests,
+  lease-loss tests, artifact-integrity tests, and real task-runtime tests.
+- Added a 12,000-row restart/reopen/privacy/storage-amplification integration
+  test driven by the JavaScript-authored plan.
+
+### Why
+
+- Source bytes belong in verified external artifacts, not durable control rows.
+- Exact implementation identity must participate in lease admission, not only
+  runner lookup after a worker has already claimed work.
+- Fresh runtimes make mutable CommonJS globals attempt-local and permit module
+  authority to match the compiled task profile.
+- A restart between the two real tasks is stronger evidence than a unit-only
+  compiler demonstration.
+
+### What worked
+
+- Focused tests passed for core, authoring, fixtures, task runtime, and SQLite.
+- The real task source imports `workflow/task` and current go-go-goja
+  `fs:input`; both async file reads completed through runtime promise handling.
+- A global load counter in the task bundle proves a new runtime/module cache is
+  created for each attempt.
+- The integration test reopened after node one and again after final completion.
+- The final output reports 12,000 validated rows.
+- The private source canary and secret token remain present in the external
+  source artifact but absent from SQLite main, WAL, SHM, and final output.
+- SQLite control-plane bytes remain below half the source payload size.
+- A worker registry built from different task bytes receives no lease for the
+  pinned plan.
+
+### What didn't work
+
+- The first SQLite test build failed with:
+
+  `pkg/workflowv3sqlite/store.go:7:2: "encoding/json" imported and not used`
+
+  Command:
+
+  `GOWORK=off go test ./pkg/workflowv3sqlite -count=1`
+
+  I removed the stale import and reran the test.
+
+- The next stale-cancellation assertion failed:
+
+  `--- FAIL: TestStoreRejectsStaleCompletionAfterCancel`
+
+  `Error: Should be true`
+
+  The cancellation transaction correctly cleared `lease_token`, but
+  `checkFence` scanned nullable lease columns into plain strings/integers and
+  returned a SQL scan error instead of `ErrStaleCompletion`. I changed the
+  fence read to `sql.NullString`/`sql.NullInt64`, explicitly classified missing
+  lease values as stale, and reran the suite successfully.
+
+### What I learned
+
+- Exact registry matching naturally belongs inside `LeaseNext`; scanning ready
+  candidates against the sealed registry leaves incompatible work pending for
+  a worker that actually advertises it.
+- Bundle digest construction is simplest and deterministic when the manifest is
+  canonicalized with sorted file path/digest/size entries rather than raw map
+  iteration.
+- Async current-module `fs.readFile` works cleanly when the task runtime uses the
+  existing owned-runtime promise waiter.
+- External artifacts may be written before node completion because they are
+  content-addressed and unreferenced until the fenced completion transaction.
+
+### What was tricky to build
+
+- A bundle digest cannot be embedded in its own manifest task identities.
+  Manifest tasks omit it; `TaskSpecs()` injects the computed digest into exact
+  implementation identities after hashing.
+- Input refs must become usable paths without granting access to the whole
+  artifact store. Each attempt gets a temporary read-only filesystem containing
+  only its bound artifacts.
+- Completion updates output refs, attempt status, node status, run terminal
+  status, and redacted event evidence in one transaction.
+- SQLite canceled/expired leases deliberately null fence columns, so all fence
+  readers must treat nullability as a security state rather than a scan detail.
+- Common fixtures initially duplicated bundle/workflow source across authoring
+  and runtime tests. I moved both into `pkg/testfixtures/workflowv3linear` and
+  switched authoring tests to an external package to avoid an import cycle.
+
+### What warrants a second pair of eyes
+
+- Review the SQLite transaction and ready-node query for multi-process leasing
+  under heavier contention; the DSN currently uses immediate transactions and
+  a busy timeout.
+- Review whether the initial failure path should support bounded retry now or
+  remain terminal until typed retry policy enters the plan.
+- Review temporary input copies versus hardlinks or read-only bind mounts for
+  larger production artifacts.
+- Review whether event payload output digest maps meet the desired metadata
+  allowlist.
+
+### What should be done in the future
+
+- Add concurrent lease-race coverage and run store tests under `-race`.
+- Preserve typed `task.failure(...)` codes through the Goja boundary rather than
+  classifying all execution exceptions as internal.
+- Run repository-wide tests/lint and complete final docs/API validation.
+- Add a small runnable command or example if operators need a manual smoke path
+  outside integration tests.
+
+### Code review instructions
+
+- Start with `pkg/workflowv3runtime/engine_integration_test.go` for the complete
+  path, then follow into `engine.go`, `task_runner.go`, and SQLite `store.go`.
+- Inspect `schema.sql` for reference-only columns and composite run/node keys.
+- Run:
+
+  `GOWORK=off go test ./pkg/workflowv3 ./pkg/gojamodules/workflow ./pkg/testfixtures/workflowv3linear ./pkg/workflowv3runtime ./pkg/workflowv3sqlite -count=1`
+
+### Technical details
+
+- Code commit: `756dbf5`.
+- Real input rows: 12,000.
+- Runtime modules exposed per attempt: `workflow/task`, `fs:input`.
+- Completed ticket tasks: `9pis`, `eyzy`, `8cs8`.
