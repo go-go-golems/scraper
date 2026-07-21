@@ -105,7 +105,7 @@ func TestTypeScriptDeclaresMinimalSurface(t *testing.T) {
 	require.Equal(t, string(expectedDeclaration), declaration)
 	for _, expected := range []string{
 		"declare module \"workflow\"", "function define", "function compile",
-		"input(name: string", "task(", "output(name: string",
+		"input<T = unknown>", "task(", "output(name: string",
 	} {
 		require.Contains(t, declaration, expected)
 	}

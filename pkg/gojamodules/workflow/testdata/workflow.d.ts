@@ -5,7 +5,10 @@ declare module "workflow" {
   }
   export interface JobBuilder { after(job: JobRef): JobBuilder }
   export interface PlanBuilder {
-    input(name: string, options: {schema: string}): ValueRef;
+    input<T = unknown>(
+      name: string,
+      options: {schema: string},
+    ): ValueRef<T>;
     task(
       name: string,
       task: unknown,
