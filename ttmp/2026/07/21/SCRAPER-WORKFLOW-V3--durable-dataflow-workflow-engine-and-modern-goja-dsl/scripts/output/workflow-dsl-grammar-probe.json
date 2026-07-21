@@ -1,0 +1,113 @@
+{
+  "plan": {
+    "inputs": [
+      {
+        "id": "chunks",
+        "kind": "artifact-set",
+        "role": "corpus-chunks",
+        "schema": "rag-chunk-ref-set/v1"
+      }
+    ],
+    "jobs": [
+      {
+        "from": "chunks",
+        "id": "generated",
+        "mode": "map",
+        "resource": "llm.generate",
+        "retry": {
+          "class": "provider-response",
+          "maxAttempts": 3
+        },
+        "task": {
+          "config": {
+            "model": "generator",
+            "questionsPerChunk": 4
+          },
+          "kind": "rag.combined-summary-questions",
+          "version": "v1"
+        },
+        "timeout": "3m"
+      },
+      {
+        "from": "generated",
+        "id": "embedded",
+        "mode": "map",
+        "resource": "embedding.local",
+        "retry": {
+          "class": "provider",
+          "maxAttempts": 3
+        },
+        "task": {
+          "config": {
+            "batchSize": 16,
+            "model": "embedding"
+          },
+          "kind": "rag.embed-representations",
+          "version": "v1"
+        },
+        "timeout": "3m"
+      },
+      {
+        "from": "embedded",
+        "id": "published",
+        "mode": "reduce",
+        "resource": "local.publish",
+        "retry": {
+          "class": "permanent",
+          "maxAttempts": 1
+        },
+        "task": {
+          "config": {
+            "reopen": true,
+            "shardSize": 128
+          },
+          "kind": "rag.publish-prepared-corpus",
+          "version": "v1"
+        },
+        "timeout": "10m"
+      }
+    ],
+    "name": "ttc-preparation",
+    "outputs": [
+      {
+        "from": "published",
+        "name": "preparedCorpus"
+      }
+    ],
+    "resources": [
+      {
+        "fairness": "fifo",
+        "maxInFlight": 3,
+        "name": "llm.generate",
+        "rate": {
+          "requestsPerMinute": 30
+        }
+      },
+      {
+        "fairness": "fifo",
+        "maxInFlight": 1,
+        "name": "embedding.local"
+      },
+      {
+        "maxInFlight": 1,
+        "name": "local.publish"
+      }
+    ],
+    "schemaVersion": "scraper-workflow-plan/v3",
+    "digest": "sha256:8a0f2909936ed292e511cc2c2cf4cb20dd59890f42487eed8b75e374d43ecab8"
+  },
+  "explanation": {
+    "jobs": 3,
+    "resources": [
+      "llm.generate",
+      "embedding.local",
+      "local.publish"
+    ],
+    "outputs": [
+      {
+        "name": "preparedCorpus",
+        "from": "published"
+      }
+    ]
+  }
+}
