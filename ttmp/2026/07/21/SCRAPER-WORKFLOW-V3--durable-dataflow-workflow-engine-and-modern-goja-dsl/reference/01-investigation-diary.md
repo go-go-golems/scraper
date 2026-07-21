@@ -3014,3 +3014,94 @@ JavaScript"
 
 - Code commit: `c898571`.
 - Exact plan digest: `sha256:f452bb74fe9ba4c5afbb16fb83776c174d709377ab43f20a608e3606b41f7676`.
+
+## Step 28: Freeze map manifest and child identity
+
+Slice 6 now has a strict immutable data-plane manifest and exact child-key
+derivation. Manifests contain canonical sorted unique item keys and compact
+artifact references whose schema matches the declared item schema. Child node
+keys hash the map key, source manifest digest, and item key, keeping source
+identity stable without exposing item keys in durable node identifiers.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 25)
+
+**Assistant interpretation:** Define and test the immutable source contract and
+identity envelope before writing expansion rows.
+
+**Inferred user intent:** Ensure restart/concurrency can replay map expansion
+without duplicate children, payload persistence, or completion-order identity.
+
+**Commit (code):** `e88f95d` — "workflowv3: define canonical map manifests and
+child keys"
+
+### What I did
+
+- Added `ItemManifest`, `ManifestItem`, strict construction, encoding, decoding,
+  and validation.
+- Required an explicit array, exact schema, nonempty item schema, strictly
+  increasing unique keys, valid bounded UTF-8 keys without controls, valid
+  artifact refs, and exact per-item schema.
+- Added `MapChildNodeKey` over a canonical digest envelope and hid raw item keys
+  from node IDs.
+- Hardened all artifact/source SHA-256 validation to reject correctly sized
+  non-hex strings.
+- Added canonical round-trip, malformed manifest, duplicate/order/schema/key,
+  unknown-field, null-array, invalid-digest, and exact-key tests.
+
+### Why
+
+- The expansion transaction needs fully validated deterministic inputs before
+  any child rows are inserted.
+- Length/prefix-only digest checks allowed invalid identities to cross the
+  durable boundary.
+
+### What worked
+
+- `GOWORK=off go test ./pkg/workflowv3 -count=1` passed.
+- Focused isolated lint reported `0 issues`.
+- `git diff --check` passed.
+- Exact child key is
+  `map:762fdd8fbf74c3fab9d50ead448fcdb7ba311e5cbfe061f2677ff94deee84552`
+  for the frozen test envelope.
+
+### What didn't work
+
+- N/A. Focused implementation and tests passed after formatting.
+
+### What I learned
+
+- Strict increasing order simultaneously proves canonical ordering and
+  uniqueness without a second durable sort policy.
+- Validating digest hex centrally improves every existing artifact boundary,
+  not only lazy maps.
+
+### What was tricky to build
+
+- Empty manifests are valid, but JSON `null` items are not. The validator must
+  distinguish an explicit empty array from an absent/null collection.
+- Item keys are allowed to be domain-readable Unicode but must be bounded,
+  trimmed, valid UTF-8, and control-free before hashing or diagnostics.
+
+### What warrants a second pair of eyes
+
+- Whether 256 bytes is the correct public item-key ceiling.
+- Whether production manifests require a separately indexed/paged artifact
+  format before the 1,807-item acceptance workload.
+
+### What should be done in the future
+
+- Add expansion/page/item tables and the first atomic page materialization API.
+- Test two independent SQLite connections against one expansion cursor.
+
+### Code review instructions
+
+- Review `manifest_test.go` first, then `ValidateItemManifest` and
+  `MapChildNodeKey`.
+- Confirm no item payload is represented in either type.
+
+### Technical details
+
+- Code commit: `e88f95d`.
+- Item manifest schema: `scraper-workflow-item-manifest/v1`.
