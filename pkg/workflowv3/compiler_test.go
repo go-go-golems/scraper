@@ -139,3 +139,83 @@ func TestStrictDecodeRejectsUnknownFields(t *testing.T) {
 	err := StrictDecode([]byte(`{"schema":"x","unknown":true}`), &ref)
 	require.ErrorContains(t, err, "unknown field")
 }
+
+func TestCompileMapPinsTemplateAndSetIdentity(t *testing.T) {
+	catalog, err := NewCatalog(TaskSpec{
+		Identity: ImplementationIdentity{
+			TaskKey:      TaskKey{Kind: "cookbook.map.normalize-customer", Version: "v1"},
+			BundleDigest: testBundleDigest, Entrypoint: "tasks.cjs#normalizeCustomer", ABI: TaskABI,
+		},
+		Inputs:  map[string]string{"customer": "customer/v1"},
+		Outputs: map[string]string{"normalized": "normalized-customer/v1"},
+		Modules: []string{"fs:input"}, ResourceClass: "cpu.normalize",
+		Retry: RetryPolicy{MaxAttempts: 2, BackoffMillis: 10},
+	})
+	require.NoError(t, err)
+	ir := WorkflowIR{
+		Schema: IRSchema, Name: "mapped-customers",
+		SetInputs: []IRSetInput{{
+			Name: "customers", ItemSchema: "customer/v1", ManifestSchema: ItemManifestSchemaV1,
+		}},
+		Maps: []IRMap{{
+			Key: "normalize", Source: SetRef{
+				Source: "set-input", Name: "customers", ItemSchema: "customer/v1",
+				ManifestSchema: ItemManifestSchemaV1,
+			},
+			ItemTask: TaskKey{Kind: "cookbook.map.normalize-customer", Version: "v1"},
+			Bindings: map[string]ValueRef{
+				"customer": {Source: "map-item", MapKey: "normalize", Schema: "customer/v1"},
+			},
+			Policy: MapPolicy{PageSize: 64, MaxItems: 2000, MaxMaterializedAhead: 128},
+		}},
+		SetOutputs: []IRSetOutput{{Name: "customers", Value: SetRef{
+			Source: "map-output", MapKey: "normalize", ItemSchema: "normalized-customer/v1",
+			ManifestSchema: ItemManifestSchemaV1,
+		}}},
+	}
+	first, err := Compile(ir, catalog)
+	require.NoError(t, err)
+	second, err := Compile(ir, catalog)
+	require.NoError(t, err)
+	require.Equal(t, first, second)
+	require.Len(t, first.Maps, 1)
+	require.Equal(t, "cpu.normalize", first.Maps[0].ResourceClass)
+	require.Equal(t, testBundleDigest, first.Maps[0].Implementation.BundleDigest)
+	require.Equal(t, MapPolicy{PageSize: 64, MaxItems: 2000, MaxMaterializedAhead: 128}, first.Maps[0].Policy)
+}
+
+func TestValidateIRRejectsInvalidMapContracts(t *testing.T) {
+	catalog, err := NewCatalog(TaskSpec{
+		Identity: ImplementationIdentity{
+			TaskKey: TaskKey{Kind: "map-item", Version: "v1"}, BundleDigest: testBundleDigest,
+			Entrypoint: "tasks.cjs#run", ABI: TaskABI,
+		},
+		Inputs: map[string]string{"item": "item/v1"}, Outputs: map[string]string{"output": "result/v1"},
+	})
+	require.NoError(t, err)
+	base := WorkflowIR{
+		Schema: IRSchema, Name: "map",
+		SetInputs: []IRSetInput{{Name: "items", ItemSchema: "item/v1", ManifestSchema: ItemManifestSchemaV1}},
+		Maps: []IRMap{{
+			Key: "mapped", Source: SetRef{Source: "set-input", Name: "items", ItemSchema: "item/v1", ManifestSchema: ItemManifestSchemaV1},
+			ItemTask: TaskKey{Kind: "map-item", Version: "v1"},
+			Bindings: map[string]ValueRef{"item": {Source: "map-item", MapKey: "mapped", Schema: "item/v1"}},
+			Policy:   MapPolicy{PageSize: 10, MaxItems: 100, MaxMaterializedAhead: 20},
+		}},
+		SetOutputs: []IRSetOutput{{Name: "results", Value: SetRef{Source: "map-output", MapKey: "mapped", ItemSchema: "result/v1", ManifestSchema: ItemManifestSchemaV1}}},
+	}
+	invalidPolicy := base
+	invalidPolicy.Maps = append([]IRMap(nil), base.Maps...)
+	invalidPolicy.Maps[0].Policy.MaxMaterializedAhead = 1
+	require.ErrorContains(t, ValidateIR(invalidPolicy, catalog), "invalid expansion policy")
+
+	wrongOwner := base
+	wrongOwner.Maps = append([]IRMap(nil), base.Maps...)
+	wrongOwner.Maps[0].Bindings = cloneBindings(base.Maps[0].Bindings)
+	wrongOwner.Maps[0].Bindings["item"] = ValueRef{Source: "map-item", MapKey: "other", Schema: "item/v1"}
+	require.ErrorContains(t, ValidateIR(wrongOwner, catalog), "wrong item owner")
+
+	wrongOutput := base
+	wrongOutput.SetOutputs = []IRSetOutput{{Name: "results", Value: SetRef{Source: "map-output", MapKey: "mapped", ItemSchema: "wrong/v1", ManifestSchema: ItemManifestSchemaV1}}}
+	require.ErrorContains(t, ValidateIR(wrongOutput, catalog), "schema mismatch")
+}

@@ -28,6 +28,24 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		inputSchemas[input.Name] = input.Schema
 	}
 
+	setInputs := make(map[string]SetRef, len(ir.SetInputs))
+	for _, input := range ir.SetInputs {
+		if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.ItemSchema) == "" ||
+			strings.TrimSpace(input.ManifestSchema) == "" {
+			return fmt.Errorf("workflow set input name, item schema, and manifest schema are required")
+		}
+		if _, exists := inputSchemas[input.Name]; exists {
+			return fmt.Errorf("workflow input %q is already defined as a value input", input.Name)
+		}
+		if _, exists := setInputs[input.Name]; exists {
+			return fmt.Errorf("duplicate workflow set input %q", input.Name)
+		}
+		setInputs[input.Name] = SetRef{
+			Source: "set-input", Name: input.Name, ItemSchema: input.ItemSchema,
+			ManifestSchema: input.ManifestSchema,
+		}
+	}
+
 	nodeSpecs := make(map[NodeKey]TaskSpec, len(ir.Nodes))
 	for _, node := range ir.Nodes {
 		if strings.TrimSpace(string(node.Key)) == "" {
@@ -79,6 +97,72 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		return err
 	}
 
+	mapOutputs := make(map[string]SetRef, len(ir.Maps))
+	for _, mapped := range ir.Maps {
+		if strings.TrimSpace(mapped.Key) == "" {
+			return fmt.Errorf("map key is required")
+		}
+		if _, exists := nodeSpecs[NodeKey(mapped.Key)]; exists {
+			return fmt.Errorf("map key %q conflicts with a node key", mapped.Key)
+		}
+		if _, exists := mapOutputs[mapped.Key]; exists {
+			return fmt.Errorf("duplicate map key %q", mapped.Key)
+		}
+		source, err := setRefSchema(mapped.Source, setInputs, mapOutputs)
+		if err != nil {
+			return fmt.Errorf("map %q source: %w", mapped.Key, err)
+		}
+		if mapped.Policy.PageSize < 1 || mapped.Policy.MaxItems < 1 ||
+			mapped.Policy.MaxMaterializedAhead < mapped.Policy.PageSize ||
+			mapped.Policy.PageSize > mapped.Policy.MaxItems {
+			return fmt.Errorf("map %q has invalid expansion policy", mapped.Key)
+		}
+		spec, ok := catalog.Lookup(mapped.ItemTask)
+		if !ok {
+			return fmt.Errorf("map %q references unknown task %s@%s", mapped.Key, mapped.ItemTask.Kind, mapped.ItemTask.Version)
+		}
+		if len(spec.Outputs) != 1 {
+			return fmt.Errorf("map %q item task must declare exactly one output", mapped.Key)
+		}
+		if len(mapped.Bindings) != len(spec.Inputs) {
+			return fmt.Errorf("map %q has %d bindings, task requires %d", mapped.Key, len(mapped.Bindings), len(spec.Inputs))
+		}
+		itemBindings := 0
+		for port, expectedSchema := range spec.Inputs {
+			binding, ok := mapped.Bindings[port]
+			if !ok {
+				return fmt.Errorf("map %q is missing binding %q", mapped.Key, port)
+			}
+			var actualSchema string
+			if binding.Source == "map-item" {
+				if binding.MapKey != mapped.Key {
+					return fmt.Errorf("map %q binding %q has wrong item owner %q", mapped.Key, port, binding.MapKey)
+				}
+				actualSchema = source.ItemSchema
+				itemBindings++
+			} else {
+				actualSchema, err = refSchema(binding, inputSchemas, nodeSpecs)
+				if err != nil {
+					return fmt.Errorf("map %q binding %q: %w", mapped.Key, port, err)
+				}
+			}
+			if actualSchema != expectedSchema || binding.Schema != expectedSchema {
+				return fmt.Errorf("map %q binding %q schema %q does not match %q", mapped.Key, port, actualSchema, expectedSchema)
+			}
+		}
+		if itemBindings != 1 {
+			return fmt.Errorf("map %q item task requires exactly one map-item binding", mapped.Key)
+		}
+		outputSchema := ""
+		for _, schema := range spec.Outputs {
+			outputSchema = schema
+		}
+		mapOutputs[mapped.Key] = SetRef{
+			Source: "map-output", MapKey: mapped.Key, ItemSchema: outputSchema,
+			ManifestSchema: ItemManifestSchemaV1,
+		}
+	}
+
 	outputNames := map[string]struct{}{}
 	for _, output := range ir.Outputs {
 		if strings.TrimSpace(output.Name) == "" {
@@ -96,7 +180,24 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 			return fmt.Errorf("workflow output %q schema mismatch", output.Name)
 		}
 	}
-	if len(ir.Outputs) == 0 {
+	for _, output := range ir.SetOutputs {
+		if strings.TrimSpace(output.Name) == "" {
+			return fmt.Errorf("workflow set output name is required")
+		}
+		if _, exists := outputNames[output.Name]; exists {
+			return fmt.Errorf("duplicate workflow output %q", output.Name)
+		}
+		outputNames[output.Name] = struct{}{}
+		actual, err := setRefSchema(output.Value, setInputs, mapOutputs)
+		if err != nil {
+			return fmt.Errorf("workflow set output %q: %w", output.Name, err)
+		}
+		if actual.ItemSchema != output.Value.ItemSchema ||
+			actual.ManifestSchema != output.Value.ManifestSchema {
+			return fmt.Errorf("workflow set output %q schema mismatch", output.Name)
+		}
+	}
+	if len(ir.Outputs) == 0 && len(ir.SetOutputs) == 0 {
 		return fmt.Errorf("workflow requires at least one output")
 	}
 	return nil
@@ -120,7 +221,9 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 		IRDigest:      irDigest,
 		CatalogDigest: catalogDigest,
 		Inputs:        append([]IRInput(nil), ir.Inputs...),
+		SetInputs:     append([]IRSetInput(nil), ir.SetInputs...),
 		Outputs:       append([]IROutput(nil), ir.Outputs...),
+		SetOutputs:    append([]IRSetOutput(nil), ir.SetOutputs...),
 	}
 	for _, node := range ir.Nodes {
 		spec, _ := catalog.Lookup(node.Task)
@@ -134,6 +237,16 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 			Modules:        append([]string(nil), spec.Modules...),
 			ResourceClass:  spec.ResourceClass,
 			Retry:          spec.Retry,
+		})
+	}
+	for _, mapped := range ir.Maps {
+		spec, _ := catalog.Lookup(mapped.ItemTask)
+		plan.Maps = append(plan.Maps, PlanMap{
+			Key: mapped.Key, Source: mapped.Source, Implementation: spec.Identity,
+			Bindings:     cloneBindings(mapped.Bindings),
+			InputSchemas: cloneStringMap(spec.Inputs), OutputSchemas: cloneStringMap(spec.Outputs),
+			Modules: append([]string(nil), spec.Modules...), ResourceClass: spec.ResourceClass,
+			Retry: spec.Retry, Policy: mapped.Policy,
 		})
 	}
 	withoutDigest := plan
@@ -165,6 +278,31 @@ func refSchema(ref ValueRef, inputs map[string]string, nodes map[NodeKey]TaskSpe
 		return schema, nil
 	default:
 		return "", fmt.Errorf("unsupported ref source %q", ref.Source)
+	}
+}
+
+func setRefSchema(ref SetRef, inputs, maps map[string]SetRef) (SetRef, error) {
+	switch ref.Source {
+	case "set-input":
+		actual, ok := inputs[ref.Name]
+		if !ok {
+			return SetRef{}, fmt.Errorf("unknown set input %q", ref.Name)
+		}
+		if ref.MapKey != "" {
+			return SetRef{}, fmt.Errorf("set input ref cannot have a map key")
+		}
+		return actual, nil
+	case "map-output":
+		actual, ok := maps[ref.MapKey]
+		if !ok {
+			return SetRef{}, fmt.Errorf("unknown or forward map output %q", ref.MapKey)
+		}
+		if ref.Name != "" {
+			return SetRef{}, fmt.Errorf("map output ref cannot have an input name")
+		}
+		return actual, nil
+	default:
+		return SetRef{}, fmt.Errorf("unsupported set ref source %q", ref.Source)
 	}
 }
 

@@ -3,10 +3,11 @@ package workflowv3
 import "time"
 
 const (
-	IRSchema           = "scraper-workflow-ir/v3"
-	PlanSchema         = "scraper-workflow-plan/v3"
-	TaskABI            = "scraper-js-task/v1"
-	ResourceCPUDefault = "cpu.default"
+	IRSchema             = "scraper-workflow-ir/v3"
+	PlanSchema           = "scraper-workflow-plan/v3"
+	TaskABI              = "scraper-js-task/v1"
+	ResourceCPUDefault   = "cpu.default"
+	ItemManifestSchemaV1 = "scraper-workflow-item-manifest/v1"
 )
 
 type RunID string
@@ -50,8 +51,17 @@ type ValueRef struct {
 	Source  string  `json:"source"`
 	Name    string  `json:"name,omitempty"`
 	NodeKey NodeKey `json:"nodeKey,omitempty"`
+	MapKey  string  `json:"mapKey,omitempty"`
 	Port    string  `json:"port,omitempty"`
 	Schema  string  `json:"schema"`
+}
+
+type SetRef struct {
+	Source         string `json:"source"`
+	Name           string `json:"name,omitempty"`
+	MapKey         string `json:"mapKey,omitempty"`
+	ItemSchema     string `json:"itemSchema"`
+	ManifestSchema string `json:"manifestSchema"`
 }
 
 type IRInput struct {
@@ -66,17 +76,45 @@ type IRNode struct {
 	DependsOn []NodeKey           `json:"dependsOn,omitempty"`
 }
 
+type IRSetInput struct {
+	Name           string `json:"name"`
+	ItemSchema     string `json:"itemSchema"`
+	ManifestSchema string `json:"manifestSchema"`
+}
+
+type MapPolicy struct {
+	PageSize             int `json:"pageSize"`
+	MaxItems             int `json:"maxItems"`
+	MaxMaterializedAhead int `json:"maxMaterializedAhead"`
+}
+
+type IRMap struct {
+	Key      string              `json:"key"`
+	Source   SetRef              `json:"source"`
+	ItemTask TaskKey             `json:"itemTask"`
+	Bindings map[string]ValueRef `json:"bindings"`
+	Policy   MapPolicy           `json:"policy"`
+}
+
+type IRSetOutput struct {
+	Name  string `json:"name"`
+	Value SetRef `json:"value"`
+}
+
 type IROutput struct {
 	Name  string   `json:"name"`
 	Value ValueRef `json:"value"`
 }
 
 type WorkflowIR struct {
-	Schema  string     `json:"schema"`
-	Name    string     `json:"name"`
-	Inputs  []IRInput  `json:"inputs"`
-	Nodes   []IRNode   `json:"nodes"`
-	Outputs []IROutput `json:"outputs"`
+	Schema     string        `json:"schema"`
+	Name       string        `json:"name"`
+	Inputs     []IRInput     `json:"inputs"`
+	SetInputs  []IRSetInput  `json:"setInputs,omitempty"`
+	Nodes      []IRNode      `json:"nodes"`
+	Maps       []IRMap       `json:"maps,omitempty"`
+	Outputs    []IROutput    `json:"outputs"`
+	SetOutputs []IRSetOutput `json:"setOutputs,omitempty"`
 }
 
 type PlanNode struct {
@@ -91,15 +129,31 @@ type PlanNode struct {
 	Retry          RetryPolicy            `json:"retry"`
 }
 
+type PlanMap struct {
+	Key            string                 `json:"key"`
+	Source         SetRef                 `json:"source"`
+	Implementation ImplementationIdentity `json:"implementation"`
+	Bindings       map[string]ValueRef    `json:"bindings"`
+	InputSchemas   map[string]string      `json:"inputSchemas"`
+	OutputSchemas  map[string]string      `json:"outputSchemas"`
+	Modules        []string               `json:"modules,omitempty"`
+	ResourceClass  string                 `json:"resourceClass"`
+	Retry          RetryPolicy            `json:"retry"`
+	Policy         MapPolicy              `json:"policy"`
+}
+
 type WorkflowPlan struct {
-	Schema        string     `json:"schema"`
-	Name          string     `json:"name"`
-	IRDigest      string     `json:"irDigest"`
-	CatalogDigest string     `json:"catalogDigest"`
-	Inputs        []IRInput  `json:"inputs"`
-	Nodes         []PlanNode `json:"nodes"`
-	Outputs       []IROutput `json:"outputs"`
-	Digest        string     `json:"digest"`
+	Schema        string        `json:"schema"`
+	Name          string        `json:"name"`
+	IRDigest      string        `json:"irDigest"`
+	CatalogDigest string        `json:"catalogDigest"`
+	Inputs        []IRInput     `json:"inputs"`
+	SetInputs     []IRSetInput  `json:"setInputs,omitempty"`
+	Nodes         []PlanNode    `json:"nodes"`
+	Maps          []PlanMap     `json:"maps,omitempty"`
+	Outputs       []IROutput    `json:"outputs"`
+	SetOutputs    []IRSetOutput `json:"setOutputs,omitempty"`
+	Digest        string        `json:"digest"`
 }
 
 type Failure struct {
