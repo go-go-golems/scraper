@@ -1154,3 +1154,115 @@ compaction from causing diary updates to be skipped.
 ### Technical details
 
 - Active goal ID: `a7904295-8b3c-4259-851f-e6a69a9522cb`.
+
+## Step 13: Run the minimal `require("workflow")` authoring DSL
+
+A real CommonJS script can now import `workflow` and a generated-style
+`cookbook-linear-transform-tasks` descriptor module, define inputs and two
+ordered tasks, publish a named output, validate the graph, and compile it into
+the canonical exact-identity Go plan. The authoring runtime contains no store,
+filesystem, network, task-execution, or submission authority.
+
+The builder uses Go-owned opaque object identity rather than trusting mutable
+JavaScript properties. Direct Go construction and JavaScript authoring produce
+the same `WorkflowIR`, and deterministic JSON goldens freeze both normalized IR
+and compiled plan contracts.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 10)
+
+**Assistant interpretation:** Implement the smallest safe authoring surface
+that can describe and compile the real linear-transform plan.
+
+**Inferred user intent:** Exercise the public JavaScript API early while keeping
+canonical validation and compilation authoritative in Go.
+
+**Commit (code):** b4d54ba — "workflowv3: add minimal Goja authoring DSL"
+
+### What I did
+
+- Added `pkg/gojamodules/workflow`.
+- Implemented `workflow.define`, `input`, descriptor-backed `task`, `after`,
+  `output`, `validate`, `digest`, `toIR`, and `compile`.
+- Added descriptor-module generation from explicit factory-to-task mappings.
+- Kept handles opaque by associating Goja object identity with Go refs,
+  invocations, jobs, workflows, and plans.
+- Rejected unknown task options and descriptors created outside
+  `workflow.define`.
+- Added a minimal semantic TypeScript declaration without `any`.
+- Added a real CommonJS linear-transform script.
+- Added normalized IR and exact compiled-plan goldens.
+- Added direct Go versus JavaScript IR equality testing.
+
+### Why
+
+- The DSL must prove ergonomics without introducing a second model or compiler.
+- Opaque handles prevent scripts from forging a task descriptor or cross-plan
+  output by mutating public object fields.
+- Goldens expose representation drift before durable persisted plans depend on
+  it.
+
+### What worked
+
+- `GOWORK=off go test ./pkg/workflowv3 ./pkg/gojamodules/workflow -count=1`
+  passed.
+- The plan golden pins kind, version, bundle digest, entrypoint, ABI, schemas,
+  modules, IR digest, catalog digest, and plan digest.
+- Negative authoring tests reject undeclared task input fields.
+- TypeScript tests verify the minimal surface and reject semantic `any`.
+
+### What didn't work
+
+- N/A. The first authoring implementation and golden generation passed.
+
+### What I learned
+
+- A native module can provide private typed handles without exposing Go fields:
+  map each returned `*goja.Object` to its Go representation and ignore mutable
+  JavaScript properties.
+- CommonJS `module.exports = workflow.compile(...)` can retain plan identity by
+  mapping the exact exported object to the Go plan.
+- Immediate configurator callbacks make explicit dependencies available in IR
+  without persisting functions.
+
+### What was tricky to build
+
+- Descriptor factories execute inside the active plan build and must resolve
+  options through the same runtime's opaque ref map. This simultaneously
+  rejects plain-object forgeries and cross-runtime handles.
+- The script wrapper must pass both `module` and the original `exports`; the
+  final result must be read back from `module.exports` because scripts replace
+  it during compilation.
+- Go structs cannot be exported directly if lower-camel JSON shape matters, so
+  terminal inspection values are converted through canonical JSON to plain
+  JavaScript objects.
+
+### What warrants a second pair of eyes
+
+- Review whether the first public API should expose `formatDiagnostics` now or
+  wait until diagnostic codes are introduced.
+- Review whether dataflow bindings should automatically normalize explicit
+  `after` dependencies in a later compiler revision.
+- Review TypeScript generation strategy before expanding beyond the minimal
+  hand-declared surface.
+
+### What should be done in the future
+
+- Bind the catalog to a real computed bundle digest instead of the authoring
+  test fixture digest.
+- Execute the compiled plan through the sealed registry and SQLite store.
+- Add cross-plan and post-build mutation rejection tests as the API expands.
+
+### Code review instructions
+
+- Start with `pkg/gojamodules/workflow/authoring_test.go` and its JavaScript
+  fixture, then inspect object-identity maps in `authoring.go`.
+- Diff the IR and plan goldens against `pkg/workflowv3/types.go`.
+- Run the focused `GOWORK=off` test command above.
+
+### Technical details
+
+- JavaScript fixture: `testdata/linear-transform.js`.
+- Plan digest: `sha256:5ad8d9c58ea4f769653b15d069f415a0f014f7a43e55b35100c3c86adf3b0305`.
+- Completed ticket task: `as4j`.
