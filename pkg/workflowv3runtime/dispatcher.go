@@ -83,6 +83,13 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 			if finalized {
 				started = true
 			}
+			reduced, err := d.Engine.ReduceOne(ctx)
+			if err != nil {
+				return fmt.Errorf("advance workflow reduction: %w", err)
+			}
+			if reduced {
+				started = true
+			}
 			lease, err := d.DispatchOnce(ctx)
 			if err != nil {
 				if contextErr := ctx.Err(); contextErr != nil {

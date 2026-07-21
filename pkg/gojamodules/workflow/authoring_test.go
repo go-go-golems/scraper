@@ -11,6 +11,7 @@ import (
 	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3http"
 	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3linear"
 	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3map"
+	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3reduce"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 	"github.com/stretchr/testify/require"
 )
@@ -246,6 +247,22 @@ if (reduceCallbacks !== 1) throw new Error("reduce callback must run once");`
 	require.Equal(t, workflowv3.ReducePolicy{FanIn: 8, MaxLevels: 4}, result.IR.Reductions[0].Policy)
 	assertGolden(t, "bounded-reduction.ir.json", result.IR)
 	assertGolden(t, "bounded-reduction.plan.json", result.Plan)
+}
+
+func TestAuthorCompilesRealBoundedReductionFixtureToGoldens(t *testing.T) {
+	registry, err := workflowv3reduce.Registry()
+	require.NoError(t, err)
+	catalog, err := registry.Catalog()
+	require.NoError(t, err)
+	result, err := workflowmodule.Author(
+		context.Background(), workflowv3reduce.WorkflowSource(), catalog,
+		workflowv3reduce.DescriptorModule(),
+	)
+	require.NoError(t, err)
+	assertGolden(t, "bounded-word-count.ir.json", result.IR)
+	assertGolden(t, "bounded-word-count.plan.json", result.Plan)
+	require.Len(t, result.Plan.Reductions, 1)
+	require.Equal(t, workflowv3reduce.ReduceResource, result.Plan.Reductions[0].ResourceClass)
 }
 
 func TestAuthorRejectsInvalidLazyMapHandles(t *testing.T) {

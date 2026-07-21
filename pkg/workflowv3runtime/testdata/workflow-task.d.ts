@@ -1,10 +1,19 @@
 declare module "workflow/task" {
+  export interface ArtifactMember {
+    readonly key: string;
+    readonly schema: string;
+    readonly digest: string;
+    readonly mediaType: string;
+    readonly size: number;
+    readonly path: string;
+  }
   export interface ArtifactInput {
     readonly schema: string;
     readonly digest: string;
     readonly mediaType: string;
     readonly size: number;
     readonly path: string;
+    readonly members?: readonly ArtifactMember[];
   }
   export interface TaskIdentity {
     readonly runId: string;
