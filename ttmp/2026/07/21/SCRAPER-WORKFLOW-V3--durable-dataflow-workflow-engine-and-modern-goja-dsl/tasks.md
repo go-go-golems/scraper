@@ -9,4 +9,4 @@
 - [x] Author validate and publish the workflow-v3 JavaScript examples cookbook <!-- t:844e -->
 - [x] Design reproducible JavaScript task bundles and worker task registration <!-- t:8mdf -->
 - [x] Align the JavaScript cookbook with reproducible custom task bundles and exact worker implementation binding <!-- t:wxdo -->
-- [ ] Make every cookbook workflow self-contained with a companion task-bundle catalog and publish cookbook v2 <!-- t:k4q6 -->
+- [x] Make every cookbook workflow self-contained with a companion task-bundle catalog and publish cookbook v2 <!-- t:k4q6 -->
