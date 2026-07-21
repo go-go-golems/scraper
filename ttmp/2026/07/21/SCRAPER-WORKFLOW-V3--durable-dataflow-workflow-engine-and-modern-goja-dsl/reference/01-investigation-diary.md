@@ -13,6 +13,8 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: repo://pkg/workflowv3
+      Note: Initial canonical IR catalog compiler and focused tests (commit ff286a1)
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md
       Note: Primary design produced by the investigation
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md
@@ -38,6 +40,7 @@ LastUpdated: 2026-07-21T16:35:00Z
 WhatFor: Resume or review the workflow-v3 investigation without losing the commands, failures, evidence boundaries, and implementation risks that shaped the design.
 WhenToUse: Read before continuing implementation, reviewing the architecture, or validating the ticket deliverables.
 ---
+
 
 
 
@@ -871,3 +874,283 @@ HTTP, database, filesystem, tool, and structured-data operations.
 - Companion implementations: 15 bundles, all catalog tasks covered.
 - Remote document:
   `/ai/2026/07/21/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 JavaScript Cookbook V3.pdf`.
+
+## Step 10: Start the implementation tranche with frozen contracts
+
+The architecture now has an executable delivery order that reaches real work
+immediately: a durable linear file transform first, then the minimal
+`require("workflow")` DSL over the same canonical Go plan. The complete design
+still leads through HTTP, work-conserving dispatch, database side effects,
+maps, reductions, rolling registries, budgets, gates, isolation, and finally
+the TTC preflight.
+
+The first production package freezes canonical workflow IR, compact artifact
+references, exact implementation identity, strict decoding, deterministic
+digests, task catalogs, graph validation, and compilation. This is deliberately
+below the JavaScript surface so both direct Go plans and JavaScript-authored
+plans must converge on one representation.
+
+### Prompt Context
+
+**User prompt (verbatim):** "User task:
+ok, so update the design doc for the ticket to incorporate the new JS stuff and this sequence of work (in tasks), then get to work and implement it and get to the minimal workflow DSL running
+
+Turn the user task into exactly one durable pi-codex-goal objective, then call the goal creation tool with that objective.
+
+This prompt invocation is an explicit user request to set a new goal. When the goal creation tool exposes `replace_existing`, pass `replace_existing: true` so an existing active, paused, or budget-limited goal is replaced instead of requiring `/goal clear` first.
+
+Do not set a token budget limit unless the user explicitly provides a budget/limit in the task. If no explicit budget is provided, omit the token budget field entirely.
+
+The goal must be a completion contract, not a task summary. Preserve the user's full intent. Do not weaken broad acceptance criteria such as \"all\", \"any\", \"complete\", \"no tech debt\", \"do it right\", \"fully\", or \"hard acceptance criteria\".
+
+The goal must require:
+
+1. Outcome
+   - State what must be true when complete.
+   - Preserve the full requested end state.
+   - Do not narrow scope after the fact unless the original user task explicitly defined that scope.
+
+2. Verification evidence
+   - Name the concrete evidence required before completion.
+   - Include relevant tests, lint, type checks, builds, smoke checks, diffs, docs, generated outputs, rendered UI inspection, or artifact checks when applicable.
+   - If the repo has an existing local CI/validation command, require it unless clearly irrelevant.
+
+3. Constraints
+   - Preserve existing behavior unless the task explicitly changes it.
+   - Do not discard user changes.
+   - Do not leave unapproved shortcuts, compatibility shims, TODO placeholders, dead code, duplicated logic, hidden assumptions, or undocumented behavior changes.
+
+4. Iteration policy
+   - After each attempt, inspect evidence, update the plan, and keep taking the next low-risk useful step.
+   - Do not stop at a plan when implementation or verification remains.
+   - If validation fails, triage and fix the cause rather than reporting partial completion.
+
+5. Completion audit
+   - Before marking the goal complete, map every explicit requirement in the goal to fresh evidence from files, commands, diffs, tests, screenshots, artifacts, or logs.
+   - The goal is not complete if any requirement is unverified, narrowed, deferred, or only probably satisfied.
+   - Phrases like \"for the scope this is complete\", \"good enough\", \"out of scope\", or \"remaining tech debt\" are not valid completion evidence unless the original user task explicitly allowed that limitation.
+
+6. Blocked stop condition
+   - If completion is impossible with current access, tools, budget, or missing decisions, stop without marking complete.
+   - Report attempted paths, evidence gathered, exact blockers, remaining unmet requirements, and what input would unblock progress.
+
+Use concise imperative language in the goal. If the task is blank or only whitespace, infer the goal based on the conversation context or ask the user to clarify."
+
+**Assistant interpretation:** Replace the previous long-running goal with a
+strict completion contract, revise ticket design/tasks for trusted JavaScript
+execution and vertical slices, and continue implementation until the minimal
+DSL executes a real durable file workflow with all foundational invariants.
+
+**Inferred user intent:** Move from architecture into evidence-backed working
+software without postponing real workload tests until the entire v3 platform
+is built.
+
+**Commit (code/docs):** ff286a1 — "workflowv3: freeze core IR and vertical slices"
+
+### What I did
+
+- Replaced the previous active goal with the requested durable completion
+  contract and no token budget.
+- Added seven implementation tasks to the ticket.
+- Updated the primary design with trusted execution-phase Goja module aliases
+  and twelve workload-driven vertical slices.
+- Updated the bundle design to permit exact profile-selected host modules while
+  retaining phase separation and isolation requirements.
+- Added `pkg/workflowv3` with strict core representations and validation.
+- Added exact task kind/version/bundle/entrypoint/ABI catalog identities.
+- Added deterministic IR/catalog/plan digests.
+- Added compiler validation for port schemas, dependencies, cycles, duplicate
+  names, output refs, and unsupported task identities.
+- Added focused unit tests and ran them with workspace isolation.
+
+### Why
+
+- Persisted run identity and reference shapes cannot be safely retrofitted after
+  real work begins.
+- A canonical Go model lets direct Go construction and the upcoming JavaScript
+  DSL share one validation and compilation path.
+- Workload slices make every infrastructure addition answer to a concrete
+  restartable workflow.
+
+### What worked
+
+- `GOWORK=off go test ./pkg/workflowv3 -count=1` passed.
+- Deterministic compilation produced exact pinned implementation identities.
+- Negative tests rejected schema drift, cycles, unknown JSON fields, and an
+  unsupported task ABI.
+- Commit `ff286a1` captured the first focused implementation interval.
+
+### What didn't work
+
+- N/A in the core implementation. The first compile/test pass succeeded.
+
+### What I learned
+
+- Bundle-level module profiles fit a CommonJS implementation file because all
+  top-level imports must be available before any exported handler can run.
+- The minimal compiler can stay small if task catalogs own all port schemas and
+  exact implementation identity.
+
+### What was tricky to build
+
+- The plan digest cannot include itself; compilation hashes a copy with an empty
+  digest field and then sets the resulting digest.
+- Schema checks must validate both the resolved source schema and the schema
+  carried by the symbolic reference, otherwise a stale or forged handle can
+  hide drift.
+- Dependency validation and binding validation are separate: dataflow refs do
+  not implicitly replace explicit readiness dependencies in the durable plan.
+
+### What warrants a second pair of eyes
+
+- Review whether explicit `DependsOn` should be normalized from data bindings
+  during compilation or remain mandatory author intent.
+- Review canonical JSON assumptions before adding values with durations,
+  timestamps, or semantically unordered arrays.
+
+### What should be done in the future
+
+- Implement the minimal Goja authoring module over these exact Go types.
+- Add golden IR and plan files before changing the model further.
+- Implement sealed bundle registration, task execution, and compact SQLite
+  persistence next.
+
+### Code review instructions
+
+- Start with `pkg/workflowv3/types.go`, then `catalog.go` and `compiler.go`.
+- Compare the implementation sequence in the primary design to ticket tasks.
+- Run `GOWORK=off go test ./pkg/workflowv3 -count=1`.
+
+### Technical details
+
+- New schemas: `scraper-workflow-ir/v3` and `scraper-workflow-plan/v3`.
+- Task ABI: `scraper-js-task/v1`.
+- Completed ticket tasks: `foy2`, `0jm0`.
+
+## Step 11: Make diary maintenance part of the completion contract
+
+Diary maintenance is now an explicit goal invariant rather than optional end
+bookkeeping. Work will continue in focused code commits followed immediately by
+diary, changelog, task, and file-relation updates carrying the code commit hash.
+
+### Prompt Context
+
+**User prompt (verbatim):** "keep a detailed diary as you work, and commit at regular intervals."
+
+**Assistant interpretation:** Record implementation decisions, commands,
+failures, fixes, and review evidence continuously, and split work into regular
+focused commits.
+
+**Inferred user intent:** Preserve a trustworthy continuation and review trail
+through a long implementation rather than reconstructing an incomplete story
+at the end.
+
+### What I did
+
+- Committed the first architecture/core implementation interval as `ff286a1`.
+- Checked the first two implementation tasks and updated the ticket changelog.
+- Began this detailed diary entry immediately after the code commit.
+
+### Why
+
+- The runtime/store/Goja work crosses several sharp trust and durability
+  boundaries; contemporaneous evidence is necessary for review and recovery.
+
+### What worked
+
+- The focused commit contains only architecture, task planning, core model,
+  compiler, and tests.
+
+### What didn't work
+
+- N/A.
+
+### What I learned
+
+- Recording task completion at each commit keeps docmgr state aligned with the
+  actual implementation rather than the intended plan.
+
+### What was tricky to build
+
+- The goal was already active, so the explicit follow-up required replacing it
+  again while preserving every original acceptance condition and adding diary
+  requirements rather than narrowing the objective.
+
+### What warrants a second pair of eyes
+
+- Confirm future commit intervals remain focused enough to review independently.
+
+### What should be done in the future
+
+- Continue the code-commit then diary-commit loop for authoring, registry,
+  persistence, and end-to-end execution.
+
+### Code review instructions
+
+- Compare commit `ff286a1` with this step and the ticket changelog entry.
+
+### Technical details
+
+- Goal was updated after the follow-up prompt below.
+
+## Step 12: Update the durable goal with strict diary evidence
+
+The active goal now requires detailed append-only diary updates after every
+meaningful attempt and at regular focused commit intervals. Completion cannot
+be claimed without diary entries and linked evidence for all requirements.
+
+### Prompt Context
+
+**User prompt (verbatim):** "update the goal accordingly to make sure we always properly write things up in our diary"
+
+**Assistant interpretation:** Amend the active completion contract so ongoing
+diary quality and timing are mandatory acceptance requirements.
+
+**Inferred user intent:** Prevent implementation momentum or future context
+compaction from causing diary updates to be skipped.
+
+### What I did
+
+- Replaced the active goal with the same implementation contract plus explicit
+  continuous diary, changelog, task, relation, command, error, decision, risk,
+  validation, and commit-hash requirements.
+
+### Why
+
+- A conversation-level reminder is weaker than a durable completion condition.
+
+### What worked
+
+- Goal `a7904295-8b3c-4259-851f-e6a69a9522cb` is active without a token budget.
+
+### What didn't work
+
+- N/A.
+
+### What I learned
+
+- Goal replacement is appropriate here because the user explicitly requested a
+  stronger contract, not a second concurrent goal.
+
+### What was tricky to build
+
+- The updated objective had to retain the complete implementation and
+  verification scope while adding diary obligations without accidentally
+  resetting the work outcome.
+
+### What warrants a second pair of eyes
+
+- Verify every subsequent completion audit includes diary evidence as well as
+  code and test evidence.
+
+### What should be done in the future
+
+- N/A; this requirement remains active throughout the goal.
+
+### Code review instructions
+
+- Inspect the active goal and compare it with Steps 10–12.
+
+### Technical details
+
+- Active goal ID: `a7904295-8b3c-4259-851f-e6a69a9522cb`.

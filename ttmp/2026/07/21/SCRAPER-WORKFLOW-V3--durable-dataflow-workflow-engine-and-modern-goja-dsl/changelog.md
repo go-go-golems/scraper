@@ -89,3 +89,12 @@ Added visible 80-column JavaScript implementations for every cookbook bundle, us
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md — Readable complete trusted JavaScript task implementations
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/06-format-cookbook-js.py — 80-column enforcement
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/07-check-cookbook-bundles.py — Bundle implementation consistency checks
+
+## 2026-07-21
+
+Started workflow-v3 implementation: documented trusted Goja module aliases and executable vertical-slice delivery, added implementation tasks, and implemented canonical IR, strict codecs, task catalog, validation, exact-identity compiler, digests, and focused tests (commit ff286a1)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3 — Canonical workflow-v3 model catalog compiler and tests
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md — Trusted module model and twelve executable vertical slices
