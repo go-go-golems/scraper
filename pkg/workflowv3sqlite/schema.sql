@@ -50,6 +50,54 @@ CREATE TABLE IF NOT EXISTS v3_nodes (
   FOREIGN KEY (run_id) REFERENCES v3_runs(run_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS v3_expansions (
+  run_id TEXT NOT NULL,
+  map_key TEXT NOT NULL,
+  source_schema TEXT,
+  source_digest TEXT,
+  source_media_type TEXT,
+  source_size_bytes INTEGER,
+  source_locator TEXT,
+  total_items INTEGER NOT NULL DEFAULT -1,
+  next_index INTEGER NOT NULL DEFAULT 0,
+  materialized_items INTEGER NOT NULL DEFAULT 0,
+  terminal_items INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'expanding', 'expanded', 'succeeded', 'failed', 'canceled')),
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (run_id, map_key),
+  FOREIGN KEY (run_id) REFERENCES v3_runs(run_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS v3_expansion_pages (
+  run_id TEXT NOT NULL,
+  map_key TEXT NOT NULL,
+  page_no INTEGER NOT NULL,
+  first_index INTEGER NOT NULL,
+  item_count INTEGER NOT NULL,
+  page_digest TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (run_id, map_key, page_no),
+  FOREIGN KEY (run_id, map_key) REFERENCES v3_expansions(run_id, map_key) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS v3_map_items (
+  run_id TEXT NOT NULL,
+  map_key TEXT NOT NULL,
+  item_key TEXT NOT NULL,
+  item_index INTEGER NOT NULL,
+  node_key TEXT NOT NULL,
+  input_schema TEXT NOT NULL,
+  input_digest TEXT NOT NULL,
+  input_media_type TEXT NOT NULL,
+  input_size_bytes INTEGER NOT NULL,
+  input_locator TEXT NOT NULL,
+  PRIMARY KEY (run_id, map_key, item_key),
+  UNIQUE (run_id, map_key, item_index),
+  UNIQUE (run_id, node_key),
+  FOREIGN KEY (run_id, map_key) REFERENCES v3_expansions(run_id, map_key) ON DELETE CASCADE,
+  FOREIGN KEY (run_id, node_key) REFERENCES v3_nodes(run_id, node_key) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS v3_run_resource_dispatch (
   run_id TEXT NOT NULL,
   resource_class TEXT NOT NULL,
@@ -115,3 +163,7 @@ CREATE INDEX IF NOT EXISTS v3_attempts_status_idx
   ON v3_attempts(status, run_id, node_key);
 CREATE INDEX IF NOT EXISTS v3_events_run_idx
   ON v3_events(run_id, sequence);
+CREATE INDEX IF NOT EXISTS v3_expansions_status_idx
+  ON v3_expansions(status, updated_at, run_id, map_key);
+CREATE INDEX IF NOT EXISTS v3_map_items_node_idx
+  ON v3_map_items(run_id, node_key);
