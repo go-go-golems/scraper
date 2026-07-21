@@ -1810,3 +1810,123 @@ JavaScript/TypeScript authoring API, not merely schema-tagged internally.
 ### Technical details
 
 - Generic signature: `input<T = unknown>(..., {schema}): ValueRef<T>`.
+
+## Step 18: Complete the requirement-by-requirement audit
+
+A fresh final audit maps every active-goal requirement to committed code,
+deterministic artifacts, commands, and logs. No required implementation item
+is deferred: the requested end state was the fully running minimal DSL vertical
+slice, while later HTTP/map/budget/gate slices remain the already documented
+next architecture sequence.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 10)
+
+**Assistant interpretation:** Do not mark completion until every explicit
+minimal-DSL, durability, privacy, documentation, and validation condition has
+fresh evidence.
+
+**Inferred user intent:** Receive a trustworthy implementation handoff whose
+completion claim can be independently reproduced.
+
+### Outcome audit
+
+| Requirement | Fresh evidence |
+|---|---|
+| Design incorporates trusted JavaScript modules | Primary and bundle design docs describe exact `fetch:*`, `db:*`, `fs:*`, `exec:*`, utility aliases, and trust/isolation boundaries |
+| Work sequence exists in ticket tasks | Twelve vertical slices are documented; implementation tasks `foy2` through `awrp` are checked |
+| Minimal DSL runs | `pkg/testfixtures/workflowv3linear/workflow.js` executes `define`, generic typed input, task, `after`, output, validate, and compile |
+| Go owns canonical IR and compilation | `pkg/workflowv3` plus direct-Go/JavaScript equality and exact IR/plan goldens |
+| Exact implementation identity | Plan golden and registry tests cover kind, version, bundle digest, entrypoint, ABI, catalog digest, and wrong-identity rejection |
+| Sealed registry and fresh runtimes | Registry-generation tests and bundle global-load assertion in both real attempts |
+| Compact reference-only persistence | `schema.sql`, artifact store, and byte scan: 1,656,000 source bytes versus 73,728 SQLite bytes |
+| Append-only attempts and fencing | Attempt history, expired lease, cancel epoch, stale completion, and eight-contender single-winner tests |
+| Restart and reopen | End-to-end test closes/reopens after node one and again after success, preserving root output and plan digest |
+| Source/secret privacy | Exact source and token canaries absent from main/WAL/SHM/events/final output but present in external source artifact |
+| Typed failures and schema validation | Duplicate-ID failure class/code persistence plus wrong input/output schema tests |
+| No silent capability/implementation substitution | Lease admission requires exact registry identity; unsupported `db:ambient` profile is rejected |
+| Detailed diary and regular commits | Steps 10–18 and paired focused code/docs commits with hashes |
+
+### Verification audit
+
+- `make validate` passed after the final typed-input change.
+- `GOWORK=off .bin/golangci-lint run ./cmd/... ./pkg/...` reported `0 issues`.
+- `GOWORK=off go test -race ./pkg/workflowv3sqlite
+  ./pkg/workflowv3runtime -count=1` passed.
+- Both real JavaScript files pass `node --check`.
+- Exact IR, plan, and DTS goldens pass.
+- `dist/scraper help scraper-workflow-v3-minimal-runtime` passes.
+- `docmgr doctor --ticket SCRAPER-WORKFLOW-V3 --stale-after 30` passes.
+- `git diff --check` passes and the working tree was clean before this diary
+  update.
+
+### Constraints audit
+
+- Existing v2 workflow/site behavior remains unchanged and the full repository
+  Go suite passes.
+- No v2 compatibility shim or raw-operation translation was added.
+- No unrelated user changes were discarded.
+- `rg` found no TODO/FIXME/HACK placeholders in new workflow-v3 packages.
+- Bundle/catalog/runtime logic has one shared linear fixture rather than
+  duplicated source.
+- All behavior changes are documented in design, public help, changelog, tasks,
+  and diary.
+
+### What I did
+
+- Repeated all completion-critical commands after the final generic typed-input
+  change.
+- Rechecked privacy/storage evidence and help rendering.
+- Rechecked task completion, clean docmgr validation, commit history, and tree
+  status.
+- Updated the final changelog audit entry.
+
+### What worked
+
+- Every required command and artifact check passed.
+- Privacy ratio remained `0.0445` across the fresh run.
+- All seven implementation tasks are checked.
+
+### What didn't work
+
+- N/A in the final rerun. Earlier failures and their fixes are preserved in
+  Steps 14–16.
+
+### What I learned
+
+- The strongest completion evidence is the intersection of representation
+  goldens, negative trust-boundary tests, crash/reopen behavior, byte-level
+  privacy scans, and repository-wide validation; no single category is enough.
+
+### What was tricky to build
+
+- The audit had to distinguish the requested complete minimal vertical slice
+  from later architecture slices without weakening any requirement. The
+  minimal slice includes all foundational identity, durability, fencing,
+  privacy, and fresh-runtime invariants; only new workload capabilities remain
+  for subsequent slices.
+
+### What warrants a second pair of eyes
+
+- Transaction ordering in `Store.Complete` and `Store.Fail`.
+- Promise rejection classification in `waitForTaskPromise`.
+- Module-profile admission and read-only input materialization.
+- Plan/registry exact identity and digest normalization.
+
+### What should be done in the future
+
+- Begin Slice 3 only after review: add an allowlisted real HTTP snapshot without
+  changing the proven minimal contracts.
+
+### Code review instructions
+
+- Read Steps 10–18 in order.
+- Start code review at the end-to-end test and follow each boundary inward.
+- Reproduce the commands in the verification audit.
+
+### Technical details
+
+- Final implementation commit range: `ff286a1..3136cd6`.
+- Final diary/bookkeeping commits continue through this step.
+- Active goal: `a7904295-8b3c-4259-851f-e6a69a9522cb`.
