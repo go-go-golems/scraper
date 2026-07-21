@@ -259,3 +259,12 @@ Steps 30-31: completed Slice 6 real 1,807-item lazy maps, deterministic publicat
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md — Public Slices 1-6 operations and validation guide
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/map_integration_test.go — Final Slice 6 vertical acceptance evidence
+
+## 2026-07-21
+
+Step 32: froze homogeneous bounded reduction IR, exact plan templates, JavaScript authoring, policy, and DTS goldens (commit e760069).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/gojamodules/workflow/authoring.go — Safe opaque reduction authoring
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/types.go — Canonical reduction contract
