@@ -2,10 +2,11 @@ package workflowv3sqlite
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -80,9 +81,10 @@ func storeFixture(t *testing.T, source string) (*workflowv3.SealedRegistry, work
 }
 
 func artifactRef(schema, seed string) workflowv3.ArtifactRef {
+	digest := sha256.Sum256([]byte(seed))
 	return workflowv3.ArtifactRef{
 		Schema:    schema,
-		Digest:    "sha256:" + seed + strings.Repeat("a", 64-len(seed)),
+		Digest:    "sha256:" + hex.EncodeToString(digest[:]),
 		MediaType: "application/json",
 		Size:      1,
 		Locator:   "objects/" + seed,

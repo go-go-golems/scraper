@@ -93,6 +93,14 @@ VALUES (?, ?, ?, ?, ?, ?, ?)`, []any{runID, input.Name}, ref); err != nil {
 			return fmt.Errorf("insert run input %s: %w", input.Name, err)
 		}
 	}
+	for _, input := range plan.SetInputs {
+		ref := inputs[input.Name]
+		if err := insertRef(ctx, tx, `
+INSERT INTO v3_run_inputs(run_id, name, schema_id, digest, media_type, size_bytes, locator)
+VALUES (?, ?, ?, ?, ?, ?, ?)`, []any{runID, input.Name}, ref); err != nil {
+			return fmt.Errorf("insert run set input %s: %w", input.Name, err)
+		}
+	}
 	for ordinal, node := range plan.Nodes {
 		bindings, _ := workflowv3.CanonicalJSON(node.Bindings)
 		inputSchemas, _ := workflowv3.CanonicalJSON(node.InputSchemas)
@@ -121,6 +129,28 @@ INSERT INTO v3_dependencies(run_id, node_key, dependency_key)
 VALUES (?, ?, ?)`, runID, node.Key, dependency); err != nil {
 				return fmt.Errorf("insert dependency %s -> %s: %w", node.Key, dependency, err)
 			}
+		}
+	}
+	for _, mapped := range plan.Maps {
+		var source *workflowv3.ArtifactRef
+		if mapped.Source.Source == "set-input" {
+			ref := inputs[mapped.Source.Name]
+			source = &ref
+		}
+		var sourceSchema, sourceDigest, sourceMediaType, sourceLocator any
+		var sourceSize any
+		if source != nil {
+			sourceSchema, sourceDigest = source.Schema, source.Digest
+			sourceMediaType, sourceSize, sourceLocator = source.MediaType, source.Size, source.Locator
+		}
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO v3_expansions(
+  run_id, map_key, source_schema, source_digest, source_media_type,
+  source_size_bytes, source_locator, status, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+			runID, mapped.Key, sourceSchema, sourceDigest, sourceMediaType,
+			sourceSize, sourceLocator, stamp); err != nil {
+			return fmt.Errorf("insert expansion %s: %w", mapped.Key, err)
 		}
 	}
 	if err := insertEvent(ctx, tx, runID, "", "run.created", map[string]any{
@@ -309,6 +339,11 @@ FROM v3_run_inputs WHERE run_id = ? AND name = ?`, lease.RunID, binding.Name)
 SELECT schema_id, digest, media_type, size_bytes, locator
 FROM v3_node_outputs WHERE run_id = ? AND node_key = ? AND port = ?`,
 				lease.RunID, binding.NodeKey, binding.Port)
+		case "map-item":
+			row = s.db.QueryRowContext(ctx, `
+SELECT input_schema, input_digest, input_media_type, input_size_bytes, input_locator
+FROM v3_map_items WHERE run_id = ? AND map_key = ? AND node_key = ?`,
+				lease.RunID, binding.MapKey, lease.NodeKey)
 		default:
 			return nil, fmt.Errorf("unsupported binding source %q", binding.Source)
 		}
@@ -365,11 +400,29 @@ WHERE run_id = ? AND node_key = ? AND lease_token = ? AND status = 'running'`,
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
+UPDATE v3_expansions
+SET terminal_items = terminal_items + 1,
+    status = CASE
+      WHEN status = 'expanded' AND terminal_items + 1 = total_items
+      THEN 'succeeded' ELSE status END,
+    updated_at = ?
+WHERE run_id = ? AND EXISTS (
+  SELECT 1 FROM v3_map_items item
+  WHERE item.run_id = v3_expansions.run_id
+    AND item.map_key = v3_expansions.map_key
+    AND item.node_key = ?
+)`, stamp, lease.RunID, lease.NodeKey); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
 UPDATE v3_runs SET status = 'succeeded', updated_at = ?
 WHERE run_id = ? AND status = 'running'
   AND NOT EXISTS (
     SELECT 1 FROM v3_nodes WHERE run_id = ? AND status != 'succeeded'
-  )`, stamp, lease.RunID, lease.RunID); err != nil {
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'succeeded'
+  )`, stamp, lease.RunID, lease.RunID, lease.RunID); err != nil {
 		return err
 	}
 	if err := insertEvent(ctx, tx, lease.RunID, lease.NodeKey, "node.succeeded", map[string]any{
@@ -657,8 +710,9 @@ func validatePlanDigest(plan workflowv3.WorkflowPlan) error {
 }
 
 func validateRunInputs(plan workflowv3.WorkflowPlan, inputs map[string]workflowv3.ArtifactRef) error {
-	if len(inputs) != len(plan.Inputs) {
-		return fmt.Errorf("run has %d inputs, plan requires %d", len(inputs), len(plan.Inputs))
+	required := len(plan.Inputs) + len(plan.SetInputs)
+	if len(inputs) != required {
+		return fmt.Errorf("run has %d inputs, plan requires %d", len(inputs), required)
 	}
 	for _, input := range plan.Inputs {
 		ref, ok := inputs[input.Name]
@@ -670,6 +724,18 @@ func validateRunInputs(plan workflowv3.WorkflowPlan, inputs map[string]workflowv
 		}
 		if ref.Schema != input.Schema {
 			return fmt.Errorf("run input %q schema %q does not match %q", input.Name, ref.Schema, input.Schema)
+		}
+	}
+	for _, input := range plan.SetInputs {
+		ref, ok := inputs[input.Name]
+		if !ok {
+			return fmt.Errorf("run set input %q is missing", input.Name)
+		}
+		if err := workflowv3.ValidateArtifactRef(ref); err != nil {
+			return fmt.Errorf("run set input %q: %w", input.Name, err)
+		}
+		if ref.Schema != input.ManifestSchema {
+			return fmt.Errorf("run set input %q schema %q does not match %q", input.Name, ref.Schema, input.ManifestSchema)
 		}
 	}
 	return nil
