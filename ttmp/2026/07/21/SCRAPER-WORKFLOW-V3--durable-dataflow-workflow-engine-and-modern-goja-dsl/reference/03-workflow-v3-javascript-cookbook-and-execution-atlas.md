@@ -21,16 +21,19 @@ RelatedFiles:
       Note: Current Go package and initial-step builder baseline for job mapping
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md
       Note: Defines the proposed DSL contracts and durable execution invariants used by every example
+    - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md
+      Note: Defines custom bundle authoring execution registration and exact worker binding now used throughout the cookbook
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/03-workflow-dsl-grammar-probe.mjs
       Note: Original executable grammar probe that informed cookbook syntax
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/04-check-cookbook-js.py
       Note: Extracts and syntax-checks every JavaScript fence
 ExternalSources: []
-Summary: A broad, non-RAG cookbook of proposed workflow-v3 JavaScript definitions with exact transformation, compilation, durable job/node mapping, leasing, attempt, and execution walkthroughs.
-LastUpdated: 2026-07-21T17:45:00Z
-WhatFor: Pressure-test and teach the workflow-v3 DSL by showing how varied JavaScript workflows become normalized IR, compiled jobs, durable nodes, attempts, artifacts, and projections.
+Summary: A broad non-RAG cookbook showing custom task-bundle authoring modules and exact worker implementations transforming through workflow IR, compiled jobs, durable nodes, leases, attempts, and outputs.
+LastUpdated: 2026-07-21T19:05:00Z
+WhatFor: Pressure-test and teach workflow v3 by showing how custom domain JavaScript bundles supply task descriptors and worker implementations for varied durable workflows.
 WhenToUse: Read when implementing the workflow module/compiler, writing workflow definitions, adding task providers, or reviewing how authored scripts become durable execution.
 ---
+
 
 
 # Workflow v3 JavaScript cookbook and execution atlas
@@ -50,8 +53,9 @@ The examples cover linear pipelines, web scraping, paginated API synchronization
 
 These scripts are **executable design examples for the proposed workflow-v3 API**. They are not expected to run against scraper v2 today. In particular:
 
-- `require("workflow")` and the example domain modules are proposed native modules;
-- task factories such as `web.tasks.fetch(...)` return portable task descriptors; they do not perform network access while the authoring script runs;
+- `require("workflow")` is a proposed native module, while example domain imports such as `require("acme-web-tasks")` are descriptor-only authoring modules generated from immutable JavaScript task bundles;
+- task factories such as `web.tasks.fetch(...)` return portable task descriptors; they neither register implementations nor perform network access while the authoring script runs;
+- workers load the corresponding execution bundles separately from an approved bundle lock, verify them, seal a registry generation, and advertise exact implementation digests;
 - `workflow.compile(...)` is pure with respect to execution;
 - trusted Go host code, not the authoring script, submits the compiled plan;
 - some examples deliberately exercise proposed gate/condition APIs so implementation gaps are visible before the DSL is frozen.
@@ -68,7 +72,7 @@ ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern
   --out ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/output/workflow-cookbook-js-check.json
 ```
 
-The current result is 17 of 17 JavaScript blocks passing syntax validation. This proves syntax only. Runtime/IR/plan behavior remains a proposed contract until the native modules, task catalogs, compiler, and golden tests are implemented.
+The current result is recorded in `scripts/output/workflow-cookbook-js-check.json`. This proves syntax only. Runtime/IR/plan behavior remains a proposed contract until the native workflow modules, bundle-generated authoring modules, task catalogs, compiler, and golden tests are implemented.
 
 ## The vocabulary: definition, job, node, attempt, and task
 
@@ -110,7 +114,7 @@ Every example follows the same pipeline regardless of domain.
 
 ```text
 1. Load authoring modules
-   require("workflow"), require("web"), require("data"), ...
+   require("workflow"), require("acme-web-tasks"), require("acme-data-tasks"), ...
                            │
 2. Invoke workflow.define callback immediately
    Go-backed builders create hidden typed handles
@@ -174,7 +178,7 @@ A simplified normalized job is:
   "item": {"name": "$item", "schema": "web-url-ref/v1"},
   "task": {
     "schemaVersion": "scraper-task-descriptor/v1",
-    "kind": "web.fetch",
+    "kind": "acme.web.fetch",
     "version": "v1",
     "inputSchema": "web-fetch-input/v1",
     "outputSchema": "web-fetch-output/v1",
@@ -187,7 +191,7 @@ A simplified normalized job is:
 }
 ```
 
-At compile time the host may bind `internet` to `http.public.egress`, select runner `web.fetch/v1`, cap requested concurrency, and add a host-required retry ceiling. The compiled plan records both requested and effective policy.
+At compile time the host may bind `internet` to `http.public.egress`, select exact implementation `acme.web.fetch@v1 + bundle digest + entrypoint + ABI`, cap requested concurrency, and add a host-required retry ceiling. The compiled plan records both requested/effective policy and exact executable identity.
 
 ### What the authoring modules may and may not do
 
@@ -209,6 +213,13 @@ It may not:
 - retain the live Goja runtime in durable state.
 
 Actual work belongs to a registered runner invoked under a lease.
+
+For custom JavaScript tasks, the authoring module and execution implementation come from one built bundle but are loaded in different runtime phases:
+
+- the safe authoring host loads generated `authoring.cjs` and receives descriptor factories only;
+- the compiler resolves descriptors against an approved signed catalog snapshot;
+- the worker loads `execution.cjs` from its immutable bundle lock, validates entrypoints/self-tests, seals a registry generation, and advertises exact implementations;
+- an attempt receives only the pinned entrypoint plus lease-scoped `workflow/task` capabilities.
 
 ## Common example capability profile
 
@@ -250,26 +261,187 @@ resources:
 
 The workflow can request lower limits but cannot raise these ceilings. Credentials, endpoint secrets, filesystem paths, and database DSNs are not part of the public profile or compiled plan.
 
-## Common task modules used below
+## Custom task bundles used below
 
-These are proposed examples of domain-owned native modules. Each `tasks.*` function returns a task descriptor.
+These are proposed **domain-authored JavaScript task bundles**, not scraper-native modules. The workflow script imports each bundle's generated descriptor-only authoring module. Workers load its execution artifact independently and advertise the exact implementation digest.
 
-| Module | Example task kinds | Worker authority |
-|---|---|---|
-| `web` | `web.fetch`, `web.extract-links`, `web.parse-records` | bounded HTTP and HTML artifact resolution |
-| `api` | `api.enumerate-pages`, `api.fetch-page`, `api.apply-mutation` | named partner APIs through host clients |
-| `data` | `data.normalize`, `data.join`, `data.aggregate`, `data.validate` | compact refs and content-addressed datasets |
-| `files` | `files.enumerate`, `files.convert`, `files.bundle` | named artifact stores, not arbitrary host paths |
-| `media` | `media.probe`, `media.transcode`, `media.thumbnail` | sandboxed media tools and object storage |
-| `analytics` | `analytics.token-count`, `analytics.reduce-counts` | CPU and compact shard manifests |
-| `security` | `security.scan`, `security.evaluate-policy`, `security.sign-report` | sandboxed scanners and signing service |
-| `ml` | `ml.preprocess-image`, `ml.classify-image`, `ml.aggregate-predictions` | named model profile and GPU resource |
-| `notify` | `notify.render`, `notify.email`, `notify.chat`, `notify.receipt` | configured channel clients |
-| `database` | `database.snapshot-shard`, `database.restore-verify` | named source/destination handles |
-| `build` | `build.checkout`, `build.test`, `build.package`, `build.sign` | sandboxed command runner and artifact store |
-| `ops` | `ops.await-approval`, `ops.probe`, `ops.evaluate-slo` | operator signal or bounded network probe |
+| Authoring import | Local variable | Task namespace | Worker authority requested by bundle |
+|---|---|---|---|
+| `acme-web-tasks` | `web` | `acme.web.*` | bounded HTTP and HTML artifact resolution |
+| `acme-partner-api-tasks` | `api` | `acme.partner-api.*` | named partner APIs through host clients |
+| `acme-data-tasks` | `data` | `acme.data.*` | compact refs and content-addressed datasets |
+| `acme-file-tasks` | `files` | `acme.files.*` | named artifact stores, not arbitrary host paths |
+| `studio-media-tasks` | `media` | `studio.media.*` | sandboxed media tools and object storage |
+| `acme-analytics-tasks` | `analytics` | `acme.analytics.*` | CPU and compact shard manifests |
+| `company-security-tasks` | `security` | `company.security.*` | sandboxed scanners and signing service |
+| `acme-ml-tasks` | `ml` | `acme.ml.*` | named model profile and GPU resource |
+| `company-notification-tasks` | `notify` | `company.notify.*` | configured channel clients |
+| `company-database-tasks` | `database` | `company.database.*` | named source/destination handles |
+| `company-build-tasks` | `build` | `company.build.*` | sandboxed build tools, artifact store, signer |
+| `company-ops-tasks` | `ops` | `company.ops.*` | operator signals and bounded probes/deployments |
 
-The table is an API design aid, not a claim that these modules already exist. Most should be domain-authored JavaScript task bundles rather than scraper built-ins. For example, an organization can publish `acme-customer`, `studio-media-tasks`, or `company-security-tasks`; each bundle provides a safe descriptor-only authoring module and exact worker execution implementations pinned by digest. See [Reproducible JavaScript task bundles and worker registries](../design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md).
+A real deployment can split or combine bundles differently. Names are globally namespaced, contract versions are immutable, and a compiled plan pins bundle digest, entrypoint, and task ABI in addition to task kind/version. See [Reproducible JavaScript task bundles and worker registries](../design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md).
+
+## How a custom bundle supplies a cookbook task
+
+The `acme-data-tasks` import in Example 1 represents the descriptor-only authoring half of an immutable task bundle. The domain developer owns a source tree such as:
+
+```text
+acme-data-tasks/
+  task-bundle.yaml
+  catalog.js
+  authoring.js
+  tasks/
+    normalize-customers.js
+    validate-dataset.js
+  schemas/
+    normalize-customer-input.v1.json
+    normalized-customer-dataset-ref.v1.json
+  tests/
+  pnpm-lock.yaml
+```
+
+### Registration catalog
+
+```js
+const taskBundle = require("workflow/task-bundle");
+
+module.exports = taskBundle.define({
+  name: "acme-data-tasks",
+  version: "1.4.2",
+  namespace: "acme.data",
+  abiVersion: "scraper-js-task/v1",
+}, bundle => {
+  bundle.task({
+    kind: "acme.data.normalize-customers",
+    version: "v1",
+    entrypoint: "./tasks/normalize-customers.js#run",
+    inputSchema: "normalize-customer-input/v1",
+    outputs: {
+      dataset: "normalized-customer-dataset-ref/v1",
+    },
+    defaultResource: "cpu.transform",
+    timeoutCeiling: "10m",
+    semantics: {
+      determinism: "deterministic",
+      idempotency: "pure",
+      sideEffects: ["artifact-read", "artifact-write"],
+    },
+    modules: ["workflow/task", "data/records"],
+  });
+});
+```
+
+This catalog executes only while building or registering the bundle. It populates a candidate registry; it does not mutate a global registry from an ordinary workflow `require()`.
+
+### Execution entrypoint
+
+```js
+const task = require("workflow/task");
+const records = require("data/records");
+
+exports.run = task.implementation(async ctx => {
+  const input = ctx.input();
+  const reader = await ctx.artifacts.openJSONLines(input.source, {
+    schema: "customer-export-ref/v1",
+  });
+  const writer = await ctx.outputs.createJSONLines("dataset", {
+    schema: "normalized-customer-dataset-ref/v1",
+  });
+
+  let completed = 0;
+  for await (const raw of reader) {
+    ctx.checkpoint();
+    await writer.write(records.normalize(raw, {unknown: "reject"}));
+    completed += 1;
+    if (completed % 1000 === 0) {
+      ctx.progress({completed, unit: "records"});
+    }
+  }
+
+  return task.success({dataset: await writer.commit()});
+});
+```
+
+This module executes only under a node lease. It receives a fresh runtime and lease-scoped task context; it cannot register tasks, submit workflows, open arbitrary stores, or access undeclared native modules.
+
+### Descriptor-only authoring module
+
+The bundle build emits or validates an authoring module resembling:
+
+```js
+const descriptors = require("workflow/task-descriptors");
+
+exports.tasks = {
+  normalizeCustomers(options) {
+    return descriptors.task({
+      kind: "acme.data.normalize-customers",
+      version: "v1",
+      config: {source: options.source},
+    });
+  },
+};
+```
+
+This is what `require("acme-data-tasks")` resolves to in a safe workflow authoring host. It creates portable descriptors; it does not import or invoke `normalize-customers.js`.
+
+### Worker bundle lock
+
+```yaml
+schemaVersion: scraper-task-bundle-lock/v1
+bundles:
+  - name: acme-data-tasks
+    version: 1.4.2
+    digest: sha256:4c7f0d...
+    manifestDigest: sha256:933e11...
+    locator: registry://internal/task-bundles/sha256:4c7f0d...
+    signatureRef: sigstore://acme-engineering/...
+```
+
+Every compatible worker uses the lock to fetch and verify the exact artifact, evaluate its catalog in a registration-only runtime, validate entrypoints and self-tests, seal an immutable registry generation, and advertise its task implementations.
+
+### Complete binding chain
+
+```text
+Domain bundle source
+  ├─ catalog.js + schemas + task entrypoints + dependency lock
+  ↓ deterministic build, tests, provenance, signature
+TaskBundle artifact: acme-data-tasks@1.4.2 / sha256:4c7f0d...
+  ├─ authoring.cjs ── safe workflow host ──► TaskDescriptor
+  └─ execution.cjs ── worker bundle lock ──► sealed registry generation
+                                               │ advertises exact implementation
+Workflow compiler
+  ├─ validates descriptor against approved catalog snapshot
+  ├─ binds acme.data.normalize-customers@v1
+  ├─ pins bundle sha256:4c7f0d...
+  ├─ pins ./tasks/normalize-customers.js#run
+  └─ pins scraper-js-task/v1 ABI
+                                               │
+Dispatcher matches node requirement to worker advertisement
+                                               │
+Lease transaction creates attempt and reserves cpu.transform
+                                               │
+Worker creates fresh Goja runtime and invokes pinned entrypoint
+                                               │
+Go validates output port/schema/ref before completion commits
+```
+
+A worker that advertises the same task kind/version from another bundle digest is **not** eligible. Active runs remain pinned to old digests during rolling deployment; workers may temporarily advertise both old and new immutable generations.
+
+### What belongs in scraper versus the bundle
+
+| Scraper core | Domain bundle |
+|---|---|
+| bundle/catalog/descriptor schemas | namespaced task catalog |
+| digest, signature, trust, ABI verification | input/config/output schemas |
+| worker registry generations | JavaScript execution entrypoints |
+| compiler and exact implementation binding | descriptor-only authoring module |
+| leases, attempts, retries, resources, budgets | domain failure translation helpers |
+| lease-scoped `workflow/task` API | requested narrow capabilities/modules |
+| host-side input/output validation | deterministic self-tests/help/DTS |
+| sandbox worker class | domain processing behavior |
+
+Privileged generic capabilities such as artifact access, HTTP policy clients, database handles, signing, and sandboxed tool execution remain host-owned interfaces. A bundle requests them by stable name; it does not provide credentials or bypass policy.
 
 # Example 1 — Minimal linear transform
 
@@ -281,7 +453,7 @@ Normalize one input dataset, validate it, and publish a compact output manifest.
 
 ```js
 const workflow = require("workflow");
-const data = require("data");
+const data = require("acme-data-tasks");
 
 const definition = workflow.define("normalize-customer-export", p => {
   const source = p.input("source", {
@@ -323,7 +495,7 @@ input:source → [normalize] → [validate] → output:dataset
 | Layer | Result |
 |---|---|
 | IR | two `task` jobs with one data dependency |
-| Compiled jobs | `data.normalize-customers/v1` and `data.validate-dataset/v1`, both bound to `cpu.transform` |
+| Compiled jobs | `acme.data.normalize-customers@v1` and `acme.data.validate-dataset@v1`, each pinned to its bundle digest/entrypoint/ABI and bound to `cpu.transform` |
 | Initial durable nodes | `normalize` only is ready; `validate` is pending |
 | After normalize success | output `dataset` ref commits; `validate` becomes ready with that ref bound |
 | Attempts | normally two; more only if configured retry class occurs |
@@ -352,8 +524,8 @@ Fetch a seed page, extract same-origin article links, fetch each article with ra
 
 ```js
 const workflow = require("workflow");
-const web = require("web");
-const data = require("data");
+const web = require("acme-web-tasks");
+const data = require("acme-data-tasks");
 
 const definition = workflow.define("news-site-snapshot", p => {
   const seed = p.input("seed", {schema: "web-url-ref/v1", role: "seed-url"});
@@ -450,8 +622,8 @@ Discover immutable page cursors, fetch pages with a partner-specific rate limit,
 
 ```js
 const workflow = require("workflow");
-const api = require("api");
-const data = require("data");
+const api = require("acme-partner-api-tasks");
+const data = require("acme-data-tasks");
 
 const definition = workflow.define("partner-catalog-sync", p => {
   const account = p.input("account", {schema: "partner-account-ref/v1"});
@@ -517,7 +689,7 @@ Normalize customer and order exports independently, join them, evaluate quality,
 
 ```js
 const workflow = require("workflow");
-const data = require("data");
+const data = require("acme-data-tasks");
 
 const definition = workflow.define("customer-order-mart", p => {
   const customers = p.inputSet("customers", {schema: "customer-shard-ref-set/v1"});
@@ -595,8 +767,8 @@ Probe uploaded videos, transcode each video into three renditions, generate thum
 
 ```js
 const workflow = require("workflow");
-const media = require("media");
-const files = require("files");
+const media = require("studio-media-tasks");
+const files = require("acme-file-tasks");
 
 const definition = workflow.define("video-rendition-package", p => {
   const videos = p.inputSet("videos", {schema: "video-ref-set/v1"});
@@ -668,7 +840,7 @@ Count normalized tokens across a large document collection using bounded map tas
 
 ```js
 const workflow = require("workflow");
-const analytics = require("analytics");
+const analytics = require("acme-analytics-tasks");
 
 const definition = workflow.define("document-word-count", p => {
   const documents = p.inputSet("documents", {schema: "text-document-ref-set/v1"});
@@ -719,7 +891,7 @@ Scan a source snapshot with several independent tools, normalize findings, evalu
 
 ```js
 const workflow = require("workflow");
-const security = require("security");
+const security = require("company-security-tasks");
 
 const definition = workflow.define("release-security-gate", p => {
   const source = p.input("source", {schema: "source-snapshot-ref/v1"});
@@ -776,7 +948,7 @@ Preprocess images on CPU, run one model inference per item on a serial GPU, aggr
 
 ```js
 const workflow = require("workflow");
-const ml = require("ml");
+const ml = require("acme-ml-tasks");
 
 const definition = workflow.define("image-classification-batch", p => {
   const images = p.inputSet("images", {schema: "image-ref-set/v1"});
@@ -829,7 +1001,7 @@ Render one notification, deliver it to a set of recipients/channels under separa
 
 ```js
 const workflow = require("workflow");
-const notify = require("notify");
+const notify = require("company-notification-tasks");
 
 const definition = workflow.define("incident-notification", p => {
   const incident = p.input("incident", {schema: "incident-ref/v1"});
@@ -889,7 +1061,7 @@ Snapshot a consistent database identity, dump table/range shards, build a root b
 
 ```js
 const workflow = require("workflow");
-const database = require("database");
+const database = require("company-database-tasks");
 
 const definition = workflow.define("verified-database-backup", p => {
   const databaseRef = p.input("database", {schema: "database-handle-ref/v1"});
@@ -943,8 +1115,8 @@ Compare warehouse and storefront inventory snapshots, calculate discrepancies, a
 
 ```js
 const workflow = require("workflow");
-const data = require("data");
-const api = require("api");
+const data = require("acme-data-tasks");
+const api = require("acme-partner-api-tasks");
 
 const definition = workflow.define("inventory-reconciliation", p => {
   const warehouse = p.input("warehouse", {schema: "inventory-snapshot-ref/v1"});
@@ -992,7 +1164,7 @@ Build a source snapshot for a platform matrix, run tests, package successful bui
 
 ```js
 const workflow = require("workflow");
-const build = require("build");
+const build = require("company-build-tasks");
 
 const definition = workflow.define("cross-platform-release", p => {
   const source = p.input("source", {schema: "source-snapshot-ref/v1"});
@@ -1046,8 +1218,7 @@ Prepare a deployment, wait durably for operator approval, then deploy and verify
 
 ```js
 const workflow = require("workflow");
-const build = require("build");
-const ops = require("ops");
+const ops = require("company-ops-tasks");
 
 const definition = workflow.define("approved-deployment", p => {
   const release = p.input("release", {schema: "signed-release-ref/v1"});
@@ -1108,8 +1279,8 @@ Probe a finite matrix of endpoints and regions, evaluate SLO rules, and emit one
 
 ```js
 const workflow = require("workflow");
-const ops = require("ops");
-const notify = require("notify");
+const ops = require("company-ops-tasks");
+const notify = require("company-notification-tasks");
 
 const definition = workflow.define("service-probe-matrix", p => {
   const probes = p.inputSet("probes", {schema: "service-probe-ref-set/v1"});
@@ -1155,7 +1326,7 @@ Detect file types, route office documents, images, and plain text through approp
 
 ```js
 const workflow = require("workflow");
-const files = require("files");
+const files = require("acme-file-tasks");
 
 const definition = workflow.define("document-conversion-bundle", p => {
   const documents = p.inputSet("documents", {schema: "document-ref-set/v1"});
@@ -1244,14 +1415,14 @@ The native module emits data equivalent to:
     {
       "key": "fetch-front-page",
       "mode": "task",
-      "task": {"kind": "web.fetch", "version": "v1"},
+      "task": {"kind": "acme.web.fetch", "version": "v1"},
       "bindings": {"url": {"$ref": "input", "key": "seed"}},
       "resource": "http"
     },
     {
       "key": "extract-links",
       "mode": "task",
-      "task": {"kind": "web.extract-links", "version": "v1"},
+      "task": {"kind": "acme.web.extract-links", "version": "v1"},
       "bindings": {"html": {"$ref": "job-output", "job": "fetch-front-page", "port": "html"}},
       "resource": "cpu"
     },
@@ -1259,7 +1430,7 @@ The native module emits data equivalent to:
       "key": "fetch-articles",
       "mode": "map",
       "source": {"$ref": "job-output", "job": "extract-links", "port": "urls"},
-      "task": {"kind": "web.fetch", "version": "v1"},
+      "task": {"kind": "acme.web.fetch", "version": "v1"},
       "bindings": {"url": {"$ref": "map-item"}},
       "resource": "http"
     },
@@ -1267,7 +1438,7 @@ The native module emits data equivalent to:
       "key": "parse-articles",
       "mode": "map",
       "source": {"$ref": "job-output-set", "job": "fetch-articles"},
-      "task": {"kind": "web.parse-article", "version": "v1"},
+      "task": {"kind": "acme.web.parse-article", "version": "v1"},
       "bindings": {"html": {"$ref": "map-item-output", "port": "html"}},
       "resource": "cpu"
     },
@@ -1275,7 +1446,7 @@ The native module emits data equivalent to:
       "key": "build-snapshot",
       "mode": "reduce",
       "source": {"$ref": "job-output-set", "job": "parse-articles"},
-      "task": {"kind": "data.reduce-manifest", "version": "v1"},
+      "task": {"kind": "acme.data.reduce-manifest", "version": "v1"},
       "fanIn": 128,
       "orderedBy": "itemKey",
       "resource": "cpu"
@@ -1296,7 +1467,7 @@ Go validates:
 - all keys are unique and normalized;
 - every reference points to an existing input/job/port;
 - the graph is acyclic;
-- `extract-links.html` expects the schema produced by `web.fetch.html`;
+- `extract-links.html` expects the schema produced by `acme.web.fetch.html`;
 - the map source is a set with stable item keys;
 - the reduction is associative/deterministic according to task catalog metadata;
 - fan-in and requested concurrency are within absolute structural limits;
@@ -1324,7 +1495,13 @@ Suppose the host profile permits only three HTTP calls for this tenant. Compilat
   "jobs": [
     {
       "key": "fetch-front-page",
-      "taskImplementation": "web.fetch/v1@sha256:runner...",
+      "task": {"kind": "acme.web.fetch", "version": "v1"},
+      "implementation": {
+        "language": "javascript",
+        "bundleDigest": "sha256:web-task-bundle...",
+        "entrypoint": "./tasks/fetch.js#run",
+        "abiVersion": "scraper-js-task/v1"
+      },
       "resourceClass": "http.public.egress",
       "timeoutMs": 30000,
       "retry": {
@@ -1376,7 +1553,7 @@ The worker receives a lease grant containing compact refs and task identity.
 
 ## Stage G — Runner execution
 
-The `web.fetch/v1` runner:
+The JavaScript implementation `acme.web.fetch@v1`, pinned to its exact bundle digest and entrypoint:
 
 1. resolves `URLRef` through its allowed codec;
 2. applies host egress policy and configured HTTP client;
@@ -1592,6 +1769,15 @@ Catalog entries should provide:
 - help/examples;
 - implementation digest/version.
 
+## 9. Custom task registration must be explicit and immutable
+
+Every cookbook domain import should resolve to a descriptor-only authoring module from an approved task bundle. Workers load the execution half from immutable bundle locks; they do not discover implementations from the workflow source or accept top-level global registration side effects. Compilation pins task kind/version, bundle digest, entrypoint, and ABI, and dispatch matches those values exactly against a live sealed worker registry generation.
+
+This means cookbook integration fixtures need two related but separate runtime plans:
+
+1. an authoring runtime with `workflow` plus generated descriptor modules;
+2. a worker runtime factory with `workflow/task`, allowed native capabilities, and exact bundle-local entrypoints.
+
 # Implementation test matrix derived from the examples
 
 | Capability | Example | Required test |
@@ -1611,48 +1797,71 @@ Catalog entries should provide:
 | Gate waiting | 13 | no lease/resource held during 24-hour wait |
 | Samples vs attempts | 14 | retry metadata cannot be confused with probe samples |
 | Structured converter routing | 15 | arbitrary executable/command rejected |
+| Custom task bundle binding | all | descriptor module and worker bundle share catalog identity; exact digest matches |
+| Registry generation | all | partial/failed bundle load never advertises tasks |
+| Rolling implementation version | all | old pinned run cannot execute a new digest silently |
 
 Every example should eventually become:
 
-1. a JavaScript fixture;
-2. a normalized IR golden file;
-3. a compiled-plan golden file for a fixed capability profile;
-4. a store/dispatcher execution test with fake runners;
-5. one or more negative/privacy tests.
+1. a JavaScript workflow fixture;
+2. one or more task-bundle catalog/entrypoint fixtures;
+3. a normalized IR golden file;
+4. a compiled-plan golden file containing exact implementation identities for a fixed capability profile;
+5. a sealed worker-registry capability golden file;
+6. a store/dispatcher execution test with fake or lease-scoped JS runners;
+7. wrong-digest/missing-capability/negative/privacy tests.
 
 # Suggested fixture layout
 
 ```text
-pkg/gojamodules/workflow/testdata/v3/examples/
-  01-linear-transform.js
-  02-website-snapshot.js
-  03-partner-api-sync.js
-  04-etl-quality-gate.js
-  05-media-transcode.js
-  06-word-count-map-reduce.js
-  07-security-policy.js
-  08-image-classification.js
-  09-notification-fanout.js
-  10-verified-backup.js
-  11-inventory-reconciliation.js
-  12-cross-platform-release.js
-  13-approved-deployment.js
-  14-probe-matrix.js
-  15-document-conversion.js
+pkg/gojamodules/workflow/testdata/v3/
+  bundles/
+    acme-data-tasks/
+      catalog.js
+      authoring.js
+      tasks/normalize-customers.js
+      schemas/...
+      bundle.lock.json
+    acme-web-tasks/
+      catalog.js
+      authoring.js
+      tasks/fetch.js
+      tasks/extract-links.js
+      schemas/...
+  examples/
+    01-linear-transform.js
+    02-website-snapshot.js
+    03-partner-api-sync.js
+    04-etl-quality-gate.js
+    05-media-transcode.js
+    06-word-count-map-reduce.js
+    07-security-policy.js
+    08-image-classification.js
+    09-notification-fanout.js
+    10-verified-backup.js
+    11-inventory-reconciliation.js
+    12-cross-platform-release.js
+    13-approved-deployment.js
+    14-probe-matrix.js
+    15-document-conversion.js
   golden/
+    acme-data-tasks.catalog.json
+    workstation-v3.worker-registry.json
     01-linear-transform.ir.json
     01-linear-transform.workstation-v3.plan.json
     ...
 ```
 
-Fixture tests should run each script through an actual Goja runtime with `require("workflow")` and the relevant descriptor-only task modules. Hand-authored JSON that bypasses the module is insufficient for API parity testing.
+Fixture tests should build/load the bundle catalogs, seal a worker registry, and then run each workflow script through an actual Goja authoring runtime with `require("workflow")` and the generated descriptor-only modules. Hand-authored JSON that bypasses either module or registry phase is insufficient for API parity testing.
 
 # Author review checklist
 
 Before accepting a workflow script:
 
+- [ ] Every imported domain module is a descriptor-only module from an approved immutable task bundle.
 - [ ] Every input is a compact typed value/ref.
-- [ ] Every external call is represented by a registered bounded task.
+- [ ] Every external call is represented by a namespaced, versioned registered task.
+- [ ] Compilation resolves every task to an approved bundle digest, entrypoint, and ABI.
 - [ ] Every large fan-out uses a set ref and map expansion.
 - [ ] Every large fan-in has a bounded reduction plan.
 - [ ] Resource requests are symbolic and compiler-bindable.
@@ -1668,7 +1877,9 @@ Before accepting a workflow script:
 
 When a plan runs:
 
-- [ ] Definition, plan, capability, and input digests match the approved profile.
+- [ ] Definition, plan, capability, bundle, registry, and input digests match the approved profile.
+- [ ] Workers advertise the exact implementation identities required by ready nodes.
+- [ ] Authoring modules and execution bundles resolve to the same approved catalog.
 - [ ] Attach-versus-create identity is visible.
 - [ ] Active counts by resource match configured capacity.
 - [ ] Ready work does not remain idle while compatible capacity is free.
@@ -1682,6 +1893,8 @@ When a plan runs:
 # Related documents
 
 - [Durable dataflow workflow v3 and modern scripting architecture](../design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md)
+- [Reproducible JavaScript task bundles and worker registries](../design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md)
+- [JavaScript task-bundle registration probe](../scripts/output/js-task-bundle-registration-probe.json)
 - [Investigation diary](01-investigation-diary.md)
 - [Source catalogue and evidence map](02-source-catalogue-and-evidence-map.md)
 - [`workflow-dsl-grammar-probe.json`](../scripts/output/workflow-dsl-grammar-probe.json)
