@@ -28,7 +28,7 @@ RelatedFiles:
     - Path: repo://pkg/testfixtures/workflowv3database
       Note: Executable Slice 5 database workflow
 ExternalSources: []
-Summary: Intern-oriented architectural guide to all twelve Workflow V3 vertical slices, including implemented evidence for Slices 1-6 and implementation contracts for Slices 7-12.
+Summary: Intern-oriented architectural guide to all twelve Workflow V3 vertical slices, including implemented evidence for Slices 1-7 and implementation contracts for Slices 8-12.
 LastUpdated: 2026-07-21T20:15:00-04:00
 WhatFor: Understand why each Workflow V3 slice exists, which architectural boundary it proves, how it changes durable state, and what evidence is required before advancing.
 WhenToUse: Read before implementing, reviewing, testing, or operating any Workflow V3 slice, and before changing canonical IR, SQLite state, worker registries, task capabilities, or RAG integration.
@@ -61,7 +61,7 @@ The sequence is:
 11. **Process isolation: broader trust is viable.**
 12. **RAG/TTC: an expensive production workload is safe.**
 
-Slices 1–6 are implemented and validated. Slices 7–12 are target contracts.
+Slices 1–7 are implemented and validated. Slices 8–12 are target contracts.
 This distinction is important: a design section explains what must become true;
 it is not evidence that the behavior already exists.
 
@@ -543,9 +543,10 @@ change and cannot be substituted into an existing run.
 
 ### 8.1 Status and purpose
 
-Slice 7 is not implemented yet. It turns a large typed set into a smaller set or
-one root without creating a node with thousands of dependencies or loading all
-payloads into workflow SQLite or one runtime.
+Slice 7 is implemented. It turns a large typed set into one validated root
+without creating a node with thousands of dependencies or loading all payloads
+into workflow SQLite or one runtime. The real fixture reduces 257 map outputs
+through three levels and resumes after a level-zero partition succeeds.
 
 The reference workload is word count because its mathematical result is easy
 to verify across different concurrency and partition schedules.
@@ -1084,7 +1085,7 @@ isolation.
 | 4 | implemented and validated | preserve database-scoped admission |
 | 5 | implemented and validated | reuse stable operation keys for publication |
 | 6 | implemented and validated | preserve deterministic paged expansion, publication, and privacy invariants |
-| 7 | design target | freeze partition identity and bounded tree contract |
+| 7 | implemented and validated | preserve bounded fan-in, level recovery, deterministic root, and privacy invariants |
 | 8 | design target | freeze generation-manager admission/refcount contract |
 | 9 | design target | freeze integer budget dimensions and settlement policy |
 | 10 | design target | freeze gate CAS/operator/state contract |
