@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "js-task-bundle-registration-probe/v1",
+  "bundle": {
+    "name": "acme-customer-tasks",
+    "digest": "sha256:b349df43ce6f637dde813d2f611dff9fcef43063840709333c7d513c7688eb28",
+    "files": [
+      "catalog.cjs",
+      "tasks/normalize.cjs",
+      "tasks/validate.cjs"
+    ]
+  },
+  "workerGeneration": {
+    "registryDigest": "sha256:cc2cff85c297bd3f90b3d8ac87ab45ad0534b298caef24a299dacba5f957aedd",
+    "tasks": [
+      {
+        "kind": "acme.customer.normalize",
+        "version": "v1",
+        "resource": "cpu.transform",
+        "implementation": {
+          "language": "javascript",
+          "bundleDigest": "sha256:b349df43ce6f637dde813d2f611dff9fcef43063840709333c7d513c7688eb28",
+          "entrypoint": "./tasks/normalize.cjs#run",
+          "abiVersion": "scraper-js-task/v1"
+        }
+      },
+      {
+        "kind": "acme.customer.validate",
+        "version": "v1",
+        "resource": "cpu.transform",
+        "implementation": {
+          "language": "javascript",
+          "bundleDigest": "sha256:b349df43ce6f637dde813d2f611dff9fcef43063840709333c7d513c7688eb28",
+          "entrypoint": "./tasks/validate.cjs#run",
+          "abiVersion": "scraper-js-task/v1"
+        }
+      }
+    ]
+  },
+  "matching": {
+    "exactRequirementAccepted": true,
+    "wrongBundleRejected": true,
+    "wrongVersionRejected": true,
+    "wrongEntrypointRejected": true
+  }
+}

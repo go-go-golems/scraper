@@ -900,6 +900,23 @@ Use this boundary:
 
 This preserves module independence and allows a descriptor to cross process/repository boundaries as canonical JSON.
 
+### Domain-authored JavaScript task bundles
+
+Task catalogs must not imply that every domain task is compiled into scraper. A domain developer can publish an immutable JavaScript task bundle containing:
+
+- a registration catalog with namespaced task keys and versions;
+- input/config/output schemas and semantics;
+- bundle-local execution entrypoints;
+- a safe authoring-side descriptor module and TypeScript declarations;
+- declared modules/capabilities/resources;
+- deterministic dependency locks, self-tests, provenance, digest, and optional signature.
+
+Workers explicitly load an approved bundle lock during boot/reload, evaluate each catalog in a registration-only Goja runtime, build and self-test a candidate registry, then atomically seal and advertise a registry generation. Compiled plans pin the exact task kind/version, bundle digest, entrypoint, and task ABI. The dispatcher leases only to workers advertising that exact implementation and compatible resource/isolation capabilities.
+
+Ordinary `require()` calls do not mutate a process-global registry. Task attempts run their pinned entrypoint in a fresh lease-scoped Goja runtime with `workflow/task` and only allowlisted services. Go validates inputs and outputs outside JavaScript. Mutually untrusted bundles require process/container isolation because Goja is not a hostile-code sandbox.
+
+See [Reproducible JavaScript task bundles and worker registries](02-reproducible-javascript-task-bundles-and-worker-registries.md) for the bundle layout, registration API, worker lifecycle, exact implementation matching, rolling upgrades, security model, and acceptance criteria.
+
 ### RAG runner sequence
 
 For a combined-generation node:

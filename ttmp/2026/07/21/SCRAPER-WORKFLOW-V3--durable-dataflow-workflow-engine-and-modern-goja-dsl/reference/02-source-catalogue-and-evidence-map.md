@@ -19,6 +19,8 @@ RelatedFiles:
       Note: Measures the current JavaScript and raw-operation API surface
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/03-workflow-dsl-grammar-probe.mjs
       Note: Executable target grammar and deterministic plan probe
+    - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/05-js-task-bundle-registration-probe.mjs
+      Note: Reproducible custom JavaScript task registration experiment
 ExternalSources:
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/scraper
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/go-go-goja
@@ -28,6 +30,7 @@ LastUpdated: 2026-07-21T14:50:00Z
 WhatFor: Trace workflow-engine and JavaScript DSL recommendations back to source code, executable probes, and historical architecture notes.
 WhenToUse: Read when reviewing the primary design, validating a claim, or resuming implementation after a gap.
 ---
+
 
 
 # Source catalogue and evidence map
@@ -113,6 +116,17 @@ The probe demonstrates the target authoring shape: a pure `workflow.plan(...)` b
 
 The probe is not the production implementation. Production must keep canonical types and validation in Go and expose them through `modules.NativeModule` plus an xgoja/v2 provider.
 
+### JavaScript task-bundle registration probe
+
+```bash
+node scripts/05-js-task-bundle-registration-probe.mjs \
+  > scripts/output/js-task-bundle-registration-probe.json
+```
+
+The fixture under `scripts/fixtures/customer-task-bundle/` loads a JavaScript catalog that explicitly registers two namespaced task implementations. The probe hashes the exact bundle files, validates bundle-local entrypoint exports, seals an immutable worker registry generation, and proves that exact task/version/bundle/entrypoint/ABI requirements match while wrong bundle, version, or entrypoint values are rejected.
+
+This demonstrates the proposed extension grammar and exact matching. Production still requires Go-owned bundle/catalog types, trust verification, xgoja phase separation, worker advertisement, fresh lease-scoped runtimes, and store-backed capability/resource admission.
+
 ## Key synthesis
 
 The historical and current evidence converges on one design:
@@ -134,4 +148,6 @@ The current `ctx.emit(rawOpSpec)` API skips the normalized IR and compiler layer
 ## Related
 
 - [Primary design](../design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md)
+- [JavaScript task bundles and worker registries](../design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md)
+- [JavaScript cookbook and execution atlas](03-workflow-v3-javascript-cookbook-and-execution-atlas.md)
 - [Investigation diary](01-investigation-diary.md)

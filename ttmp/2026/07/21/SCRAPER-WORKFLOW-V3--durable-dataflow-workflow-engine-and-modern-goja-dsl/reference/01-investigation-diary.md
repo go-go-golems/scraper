@@ -15,6 +15,8 @@ Owners: []
 RelatedFiles:
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md
       Note: Primary design produced by the investigation
+    - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md
+      Note: Step 5 custom JavaScript task-bundle design
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/02-source-catalogue-and-evidence-map.md
       Note: Evidence map and continuation entry point
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md
@@ -25,6 +27,8 @@ RelatedFiles:
       Note: Reproducible DSL grammar experiment described in Step 1
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/04-check-cookbook-js.py
       Note: Step 4 reproducible JavaScript syntax validator
+    - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/05-js-task-bundle-registration-probe.mjs
+      Note: Step 5 registration and matching experiment
 ExternalSources:
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/scraper
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/go-go-goja
@@ -34,6 +38,7 @@ LastUpdated: 2026-07-21T16:35:00Z
 WhatFor: Resume or review the workflow-v3 investigation without losing the commands, failures, evidence boundaries, and implementation risks that shaped the design.
 WhenToUse: Read before continuing implementation, reviewing the architecture, or validating the ticket deliverables.
 ---
+
 
 
 
