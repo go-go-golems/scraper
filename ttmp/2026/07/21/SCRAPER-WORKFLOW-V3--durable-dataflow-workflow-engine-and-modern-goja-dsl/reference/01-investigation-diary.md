@@ -2703,6 +2703,9 @@ the immediate Slice 6–10 designs explicit enough to implement safely.
 
 **Active goal:** `f47fcc94-5a32-47e1-8a60-d6b19cd8a417`.
 
+**Commit (docs):** `84933ec` — "docs: design workflow v3 slices six
+through ten"
+
 ### What I did
 
 - Re-read the complete investigation diary, evidence catalogue, existing slice
@@ -2812,3 +2815,4 @@ the immediate Slice 6–10 designs explicit enough to implement safely.
   `design-doc/07-*.md`.
 - Bundle destination:
   `/ai/2026/07/21/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 Slices 1 Through 12 Architecture Guide.pdf`.
+- Documentation commit: `84933ec`.
