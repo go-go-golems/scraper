@@ -853,7 +853,25 @@ Scraper provides through its xgoja provider:
 
 A bundle declares modules by stable alias. Worker policy maps aliases to exact xgoja provider modules and host services. Both catalog and worker capability digest record the selection.
 
-For example, `data/records` can be a pure module. A network module should not expose raw `fetch`; use a domain capability client with policy-constrained endpoints and credential handling.
+For example, `data/records` can be a pure bundle-local module. Trusted
+first-party execution bundles may also request current go-go-goja host modules
+through policy-bound aliases:
+
+- `fetch:partner` or `fetch:public` selects a configured client with bounded
+  endpoints, redirects, response sizes, timeouts, and host-owned credentials;
+- `db:source` or `db:destination` selects a Go-preconfigured database handle
+  with JavaScript `configure()` disabled;
+- `fs:input`, `fs:workspace`, and `fs:output` select read-only or attempt-local
+  mounts;
+- `exec:media` or `exec:build` selects an allowlisted command profile and must
+  run in process/container isolation;
+- `crypto`, `path`, `yaml`, and `time` use the current pure or bounded utility
+  contracts.
+
+The suffix is a configured module instance, not a free-form authority string.
+Bundle catalogs enumerate the aliases, compiled jobs retain them, and workers
+advertise the exact selected module-profile digest. Authoring and registration
+runtimes receive none of these execution authorities.
 
 ### Runtime phase matrix
 
@@ -865,6 +883,9 @@ For example, `data/records` can be a pure module. A network module should not ex
 | `workflow` | no | yes | no |
 | `workflow/task` | no | no | yes |
 | task execution entrypoint | compile/check only | no | yes |
+| `fetch:*`, `db:*`, `fs:*` | no | no | explicit trusted bundle grant |
+| `exec:*` | no | no | explicit isolated worker grant |
+| `crypto`, `path`, `yaml`, `time` | no | no | declared task profile only |
 | `workflow/submit` | no | trusted control only | no |
 | `workflow/operator` | no | admin only | no |
 
@@ -1143,9 +1164,13 @@ Rejected. Current registry does this, but v3 requires contract version and imple
 
 Rejected as the initial model. Mutable globals/module caches can leak state and one runaway task can affect unrelated attempts.
 
-### Give custom tasks unrestricted `fetch`, filesystem, and database modules
+### Give custom tasks unrestricted ambient host modules
 
-Rejected. Use narrow named host capabilities with declared policy. For hostile code, use process isolation.
+Rejected. Current go-go-goja host module APIs are available only through exact
+profile-selected aliases, preconfigured handles, attempt mounts, bounded
+network policy, and allowlisted subprocess profiles. These controls make
+trusted first-party JavaScript useful without pretending Goja is a hostile-code
+sandbox. Hostile or third-party code still requires process isolation.
 
 ## Phased implementation plan
 

@@ -1,0 +1,211 @@
+package workflowv3
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
+
+func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
+	if ir.Schema != IRSchema {
+		return fmt.Errorf("workflow IR schema must be %q", IRSchema)
+	}
+	if strings.TrimSpace(ir.Name) == "" {
+		return fmt.Errorf("workflow name is required")
+	}
+	if catalog == nil {
+		return fmt.Errorf("task catalog is required")
+	}
+
+	inputSchemas := make(map[string]string, len(ir.Inputs))
+	for _, input := range ir.Inputs {
+		if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.Schema) == "" {
+			return fmt.Errorf("workflow input name and schema are required")
+		}
+		if _, exists := inputSchemas[input.Name]; exists {
+			return fmt.Errorf("duplicate workflow input %q", input.Name)
+		}
+		inputSchemas[input.Name] = input.Schema
+	}
+
+	nodeSpecs := make(map[NodeKey]TaskSpec, len(ir.Nodes))
+	for _, node := range ir.Nodes {
+		if strings.TrimSpace(string(node.Key)) == "" {
+			return fmt.Errorf("node key is required")
+		}
+		if _, exists := nodeSpecs[node.Key]; exists {
+			return fmt.Errorf("duplicate node key %q", node.Key)
+		}
+		spec, ok := catalog.Lookup(node.Task)
+		if !ok {
+			return fmt.Errorf("node %q references unknown task %s@%s", node.Key, node.Task.Kind, node.Task.Version)
+		}
+		nodeSpecs[node.Key] = spec
+	}
+
+	for _, node := range ir.Nodes {
+		spec := nodeSpecs[node.Key]
+		if len(node.Bindings) != len(spec.Inputs) {
+			return fmt.Errorf("node %q has %d bindings, task requires %d", node.Key, len(node.Bindings), len(spec.Inputs))
+		}
+		for port, expectedSchema := range spec.Inputs {
+			binding, ok := node.Bindings[port]
+			if !ok {
+				return fmt.Errorf("node %q is missing binding %q", node.Key, port)
+			}
+			actualSchema, err := refSchema(binding, inputSchemas, nodeSpecs)
+			if err != nil {
+				return fmt.Errorf("node %q binding %q: %w", node.Key, port, err)
+			}
+			if actualSchema != expectedSchema || binding.Schema != expectedSchema {
+				return fmt.Errorf("node %q binding %q schema %q does not match %q", node.Key, port, actualSchema, expectedSchema)
+			}
+		}
+		seenDeps := map[NodeKey]struct{}{}
+		for _, dependency := range node.DependsOn {
+			if dependency == node.Key {
+				return fmt.Errorf("node %q cannot depend on itself", node.Key)
+			}
+			if _, ok := nodeSpecs[dependency]; !ok {
+				return fmt.Errorf("node %q has unknown dependency %q", node.Key, dependency)
+			}
+			if _, exists := seenDeps[dependency]; exists {
+				return fmt.Errorf("node %q repeats dependency %q", node.Key, dependency)
+			}
+			seenDeps[dependency] = struct{}{}
+		}
+	}
+	if err := validateAcyclic(ir.Nodes); err != nil {
+		return err
+	}
+
+	outputNames := map[string]struct{}{}
+	for _, output := range ir.Outputs {
+		if strings.TrimSpace(output.Name) == "" {
+			return fmt.Errorf("workflow output name is required")
+		}
+		if _, exists := outputNames[output.Name]; exists {
+			return fmt.Errorf("duplicate workflow output %q", output.Name)
+		}
+		outputNames[output.Name] = struct{}{}
+		actual, err := refSchema(output.Value, inputSchemas, nodeSpecs)
+		if err != nil {
+			return fmt.Errorf("workflow output %q: %w", output.Name, err)
+		}
+		if actual != output.Value.Schema {
+			return fmt.Errorf("workflow output %q schema mismatch", output.Name)
+		}
+	}
+	if len(ir.Outputs) == 0 {
+		return fmt.Errorf("workflow requires at least one output")
+	}
+	return nil
+}
+
+func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
+	if err := ValidateIR(ir, catalog); err != nil {
+		return WorkflowPlan{}, err
+	}
+	irDigest, err := Digest(ir)
+	if err != nil {
+		return WorkflowPlan{}, err
+	}
+	catalogDigest, err := catalog.Digest()
+	if err != nil {
+		return WorkflowPlan{}, err
+	}
+	plan := WorkflowPlan{
+		Schema:        PlanSchema,
+		Name:          ir.Name,
+		IRDigest:      irDigest,
+		CatalogDigest: catalogDigest,
+		Inputs:        append([]IRInput(nil), ir.Inputs...),
+		Outputs:       append([]IROutput(nil), ir.Outputs...),
+	}
+	for _, node := range ir.Nodes {
+		spec, _ := catalog.Lookup(node.Task)
+		plan.Nodes = append(plan.Nodes, PlanNode{
+			Key:            node.Key,
+			Implementation: spec.Identity,
+			Bindings:       cloneBindings(node.Bindings),
+			DependsOn:      append([]NodeKey(nil), node.DependsOn...),
+			InputSchemas:   cloneStringMap(spec.Inputs),
+			OutputSchemas:  cloneStringMap(spec.Outputs),
+			Modules:        append([]string(nil), spec.Modules...),
+		})
+	}
+	withoutDigest := plan
+	withoutDigest.Digest = ""
+	plan.Digest, err = Digest(withoutDigest)
+	if err != nil {
+		return WorkflowPlan{}, err
+	}
+	return plan, nil
+}
+
+func refSchema(ref ValueRef, inputs map[string]string, nodes map[NodeKey]TaskSpec) (string, error) {
+	switch ref.Source {
+	case "input":
+		schema, ok := inputs[ref.Name]
+		if !ok {
+			return "", fmt.Errorf("unknown input %q", ref.Name)
+		}
+		return schema, nil
+	case "node-output":
+		spec, ok := nodes[ref.NodeKey]
+		if !ok {
+			return "", fmt.Errorf("unknown node %q", ref.NodeKey)
+		}
+		schema, ok := spec.Outputs[ref.Port]
+		if !ok {
+			return "", fmt.Errorf("unknown output %q on node %q", ref.Port, ref.NodeKey)
+		}
+		return schema, nil
+	default:
+		return "", fmt.Errorf("unsupported ref source %q", ref.Source)
+	}
+}
+
+func validateAcyclic(nodes []IRNode) error {
+	dependencies := make(map[NodeKey][]NodeKey, len(nodes))
+	for _, node := range nodes {
+		dependencies[node.Key] = append([]NodeKey(nil), node.DependsOn...)
+	}
+	state := map[NodeKey]int{}
+	var visit func(NodeKey) error
+	visit = func(key NodeKey) error {
+		switch state[key] {
+		case 1:
+			return fmt.Errorf("workflow dependency cycle includes %q", key)
+		case 2:
+			return nil
+		}
+		state[key] = 1
+		for _, dependency := range dependencies[key] {
+			if err := visit(dependency); err != nil {
+				return err
+			}
+		}
+		state[key] = 2
+		return nil
+	}
+	keys := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		keys = append(keys, string(node.Key))
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if err := visit(NodeKey(key)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cloneBindings(input map[string]ValueRef) map[string]ValueRef {
+	ret := make(map[string]ValueRef, len(input))
+	for key, value := range input {
+		ret[key] = value
+	}
+	return ret
+}

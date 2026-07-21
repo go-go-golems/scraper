@@ -1117,6 +1117,9 @@ This follows the widget DSL descriptor inventory and avoids three hand-maintaine
 | `rag` | authoring/compiler | build RAG definitions and task descriptors | safe when selected |
 | `workflow/submit` | trusted control host | submit/attach/cancel/snapshot through narrow service | opt-in; never generic study eval |
 | `workflow/task` | one leased worker task | read bound refs, write validated refs/progress through lease-scoped service | worker-only |
+| `fetch:*`, `db:*`, `fs:*` | trusted leased worker task | profile-configured HTTP, database, and attempt filesystem access | worker-only; explicit bundle grant |
+| `exec:*` | trusted isolated worker task | allowlisted subprocess execution | worker-only; process/container isolation required |
+| `crypto`, `path`, `yaml`, `time` | leased worker task | current go-go-goja utility contracts | worker-only when declared |
 | `workflow/operator` | administrative host | inspect/retry/cancel/repair under authenticated policy | explicit operator command only |
 
 Do not expose a generic `store` object to any module. Host services are narrow Go interfaces:
@@ -1138,6 +1141,20 @@ type TaskService interface {
 ```
 
 A task service is bound to one current lease. It cannot read another run, choose arbitrary store locators, alter dependencies, or submit a workflow.
+
+Trusted first-party bundle code may additionally import profile-selected current
+go-go-goja modules. Aliases carry authority: `fetch:partner` owns its base URL,
+authentication, redirect policy, timeout, and response limits;
+`db:destination` owns a preconfigured handle and rejects JavaScript
+`configure()`; `fs:input` is a read-only attempt mount; and `exec:media` exposes
+only an allowlisted command set inside process/container isolation. The catalog,
+compiled job, registry generation, and worker advertisement all record the exact
+module aliases. No alias is available merely because its provider was linked
+into the worker binary.
+
+This is a trusted-code boundary, not a claim that Goja is a hostile-code
+sandbox. Third-party or broadly privileged bundles require subprocess or
+container isolation before admission.
 
 ### Researchctl integration
 
@@ -1395,6 +1412,105 @@ A site or integration migrates by compiling a v3 definition and updating tests/d
 Do not implement `ctx.emit` as a thin adapter to v3. It cannot prove compact references, task schemas, or capability intent and would preserve the architectural ambiguity.
 
 ## Implementation plan
+
+### Delivery strategy: executable vertical slices
+
+Implementation proceeds as walking vertical slices rather than building every
+store, compiler, dispatcher, and module layer before exercising real work. Each
+slice must produce a reopenable artifact and add only the machinery needed by
+its workload. The original phases below remain the complete architecture
+horizon; this sequence changes delivery order, not the end-state invariants.
+
+#### Slice 1 — real linear file transform
+
+Run a real JSONL customer normalization and validation bundle from a directly
+constructed canonical Go plan. Implement the minimum v3 model/store, compact
+artifact refs, exact task identity, static sealed registry, fresh Goja runtime,
+`workflow/task`, guarded `fs:input`, output validation, append-only attempts,
+lease/cancellation fencing, reopen, and SQLite/WAL privacy scan.
+
+Exit evidence: kill/restart succeeds, output digest is stable, source canaries
+are absent from SQLite/WAL/events, and wrong bundle/entrypoint/ABI workers
+cannot lease the node.
+
+#### Slice 2 — minimal `require("workflow")` authoring DSL
+
+Implement `define`, typed `input`, descriptor-backed `task`, `after`, named
+`output`, `toIR`, `validate`, `digest`, and `compile`. Compile the cookbook
+linear transform and require byte-identical normalized IR and plan digests to
+the Slice 1 Go golden. No callback/function may survive serialization.
+
+Exit evidence: the JavaScript-authored plan executes through the same durable
+path as the direct Go plan and reopens the same validated output shape.
+
+#### Slice 3 — real allowlisted HTTP snapshot
+
+Add `fetch:public`, typed transport/status failures, response limits,
+cancellation, retry, redaction, and an HTTP resource class. Start with a bounded
+static article list before introducing lazy maps.
+
+#### Slice 4 — work-conserving dispatch
+
+Replace fixed scheduler cycles with completion-driven refill, independent
+resource capacity, deterministic single-action test hooks, fairness, and
+blocked-reason projections. Prove a released HTTP slot starts ready work while
+unrelated slow tasks remain active.
+
+#### Slice 5 — real database synchronization
+
+Add Go-preconfigured query/write aliases, disabled script-side `configure()`,
+transactions, stable node idempotency keys, typed transient failures, and a
+crash-after-side-effect test that cannot apply the logical write twice.
+
+#### Slice 6 — lazy map expansion
+
+Add typed set refs, deterministic item keys, expansion cursors, bounded pages,
+and restart-safe cardinality accounting. Exercise hundreds or thousands of
+real items before optimizing for larger plans.
+
+#### Slice 7 — bounded reduction
+
+Use the word-count workflow to add deterministic bounded fan-in, intermediate
+manifests, completion-order-independent root digests, and restart tests across
+multiple concurrency levels.
+
+#### Slice 8 — rolling registry generations
+
+Add candidate validation/self-tests, atomic sealing, immutable advertisements,
+generation reference counting, coexistence/draining, and quarantine. Prove old
+runs stay pinned to digest A while new runs use digest B.
+
+#### Slice 9 — budgets and projections
+
+Add transactional reservation/settlement and authoritative progress, resource,
+rate, blocked-reason, expansion, reduction, and attach/reopen projections using
+the already-running file, HTTP, database, and reduction workloads.
+
+#### Slice 10 — lease-free gates
+
+Implement durable waiting, authenticated operator events, expiry/cancellation,
+and continuation without holding a worker lease or resource slot.
+
+#### Slice 11 — stronger process isolation
+
+Move attempts that use writable filesystems, broad network policy, or
+`exec:*` into constrained subprocess/container workers before accepting
+untrusted publishers.
+
+#### Slice 12 — RAG preflight and TTC
+
+Run source-canary, storage-amplification, malformed-output retry, independent
+resource, cardinality, cancellation/restart, publication, reopen, and redaction
+preflights. Only then run a paid sample and the full TTC study.
+
+### Immediate implementation tranche
+
+The current ticket implements Slices 1 and 2 completely. It must not defer the
+identity, compact-reference, attempt, fencing, registry, privacy, or reopen
+invariants merely because later scheduler/map/budget features are not yet
+needed. The first implementation may use a deterministic one-node-at-a-time
+executor, but its store and plan identities must be compatible with the final
+work-conserving dispatcher.
 
 ### Phase 0 — freeze contracts and reproduce defects
 
