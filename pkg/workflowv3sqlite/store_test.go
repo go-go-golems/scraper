@@ -439,4 +439,7 @@ func TestStoreDoesNotLeaseImplementationFromDifferentBundle(t *testing.T) {
 	lease, err := store.LeaseNext(ctx, wrongRegistry, now, time.Minute)
 	require.NoError(t, err)
 	require.Nil(t, lease)
+	queue, err := store.QueueSnapshot(ctx, wrongRegistry, nil, now)
+	require.NoError(t, err)
+	require.Equal(t, 1, queue.BlockedByReason["implementation-unavailable"])
 }

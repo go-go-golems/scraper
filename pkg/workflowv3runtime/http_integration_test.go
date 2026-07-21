@@ -63,6 +63,7 @@ func TestHTTPSnapshotRetriesAndReopensWithoutPersistingRequestSecrets(t *testing
 	require.NoError(t, err)
 	require.Contains(t, string(body), responseCanary)
 	require.Contains(t, string(body), `"count":1`)
+	require.NotContains(t, string(body), secret)
 	require.NoError(t, engine.Store.Close())
 
 	reopened, err := workflowv3sqlite.Open(context.Background(), databasePath)

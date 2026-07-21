@@ -8,7 +8,10 @@ import (
 var failureCodePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]{2,63}$`)
 
 var failureClasses = map[string]struct{}{
+	"budget":           {},
 	"canceled":         {},
+	"configuration":    {},
+	"identity":         {},
 	"internal":         {},
 	"malformed-output": {},
 	"policy":           {},
