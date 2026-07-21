@@ -254,7 +254,7 @@ func (e *Engine) ExecuteLease(ctx context.Context, lease workflowv3.Lease) error
 			Class: "internal", Code: "WORKFLOW_INPUT_RESOLUTION",
 			Retryable: false, Message: "task input resolution failed",
 		}
-		if persistErr := e.Store.Fail(ctx, lease, failure, e.now()); persistErr != nil {
+		if persistErr := e.Store.FailWithoutCharge(ctx, lease, failure, e.now()); persistErr != nil {
 			return fmt.Errorf("resolve inputs: %v; persist failure: %w", err, persistErr)
 		}
 		return &AttemptExecutionError{Err: fmt.Errorf("resolve inputs: %w", err)}
@@ -272,6 +272,17 @@ func (e *Engine) ExecuteLease(ctx context.Context, lease workflowv3.Lease) error
 		Modules: e.Modules,
 	})
 	if err != nil {
+		var preparation *TaskPreparationError
+		if errors.As(err, &preparation) {
+			failure := workflowv3.Failure{
+				Class: "internal", Code: "WORKFLOW_TASK_PREPARATION",
+				Retryable: false, Message: "task preparation failed",
+			}
+			if persistErr := e.Store.FailWithoutCharge(ctx, lease, failure, e.now()); persistErr != nil {
+				return fmt.Errorf("prepare task: %v; persist failure: %w", err, persistErr)
+			}
+			return &AttemptExecutionError{Err: fmt.Errorf("prepare task: %w", err)}
+		}
 		var construction *RuntimeConstructionError
 		if errors.As(err, &construction) {
 			if recorder, ok := e.Registry.(interface {
@@ -302,13 +313,39 @@ func (e *Engine) ExecuteLease(ctx context.Context, lease workflowv3.Lease) error
 			failure = taskFailure.Failure
 			failure.Message = "task reported " + failure.Code
 		}
-		if persistErr := e.Store.Fail(ctx, lease, failure, e.now()); persistErr != nil {
+		var persistErr error
+		if taskFailure != nil && len(taskFailure.Usage) > 0 {
+			persistErr = e.Store.FailWithUsage(ctx, lease, failure, taskFailure.Usage, e.now())
+		} else {
+			persistErr = e.Store.Fail(ctx, lease, failure, e.now())
+		}
+		if errors.Is(persistErr, workflowv3sqlite.ErrBudgetUsageInvalid) ||
+			errors.Is(persistErr, workflowv3sqlite.ErrBudgetUsageExceedsReservation) {
+			failure = workflowv3.Failure{
+				Class: "budget", Code: "BUDGET_USAGE_INVALID", Retryable: false,
+				Message: "failed task reported invalid usage",
+			}
+			persistErr = e.Store.Fail(ctx, lease, failure, e.now())
+		}
+		if persistErr != nil {
 			return fmt.Errorf("execute task: %v; persist failure: %w", err, persistErr)
 		}
 		return &AttemptExecutionError{Err: fmt.Errorf("execute task: %w", err)}
 	}
-	if err := e.Store.Complete(ctx, lease, result.Outputs, e.now()); err != nil {
-		return fmt.Errorf("complete task: %w", err)
+	if err := e.Store.CompleteWithUsage(ctx, lease, result.Outputs, result.Usage, e.now()); err != nil {
+		var failure workflowv3.Failure
+		switch {
+		case errors.Is(err, workflowv3sqlite.ErrBudgetUsageExceedsReservation):
+			failure = workflowv3.Failure{Class: "budget", Code: "BUDGET_USAGE_EXCEEDS_RESERVATION", Retryable: false, Message: "task usage exceeded reservation"}
+		case errors.Is(err, workflowv3sqlite.ErrBudgetUsageInvalid):
+			failure = workflowv3.Failure{Class: "budget", Code: "BUDGET_USAGE_INVALID", Retryable: false, Message: "task usage evidence was invalid"}
+		default:
+			return fmt.Errorf("complete task: %w", err)
+		}
+		if persistErr := e.Store.Fail(ctx, lease, failure, e.now()); persistErr != nil {
+			return fmt.Errorf("complete task: %v; persist budget failure: %w", err, persistErr)
+		}
+		return &AttemptExecutionError{Err: fmt.Errorf("complete task: %w", err)}
 	}
 	return nil
 }

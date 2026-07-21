@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -206,6 +207,23 @@ func (s *authoringState) descriptorLoader(module DescriptorModule) require.Modul
 
 func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 	object := vm.NewObject()
+	mustSet(vm, object, "budget", func(call goja.FunctionCall) goja.Value {
+		b.ensureOpen(vm)
+		account := strings.TrimSpace(call.Argument(0).String())
+		options := call.Argument(1).ToObject(vm)
+		limits := budgetAmountsFromValue(vm, options.Get("limits"))
+		policyDigest := strings.TrimSpace(options.Get("policyDigest").String())
+		for _, existing := range b.ir.Budgets {
+			if existing.Account == account {
+				panic(vm.NewTypeError("budget account %s is already defined", account))
+			}
+		}
+		b.ir.Budgets = append(b.ir.Budgets, workflowv3.BudgetAccount{
+			Account: account, Limits: limits, PolicyDigest: policyDigest,
+		})
+		sort.Slice(b.ir.Budgets, func(i, j int) bool { return b.ir.Budgets[i].Account < b.ir.Budgets[j].Account })
+		return object
+	})
 	mustSet(vm, object, "input", func(call goja.FunctionCall) goja.Value {
 		b.ensureOpen(vm)
 		name := strings.TrimSpace(call.Argument(0).String())
@@ -277,6 +295,10 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 				b.ir.Nodes[index].DependsOn = appendUniqueNode(b.ir.Nodes[index].DependsOn, dependency)
 				return jobBuilder
 			})
+			mustSet(vm, jobBuilder, "budget", func(option goja.FunctionCall) goja.Value {
+				b.ir.Nodes[index].Budget = budgetClaimFromValue(vm, option.Argument(0))
+				return jobBuilder
+			})
 			if _, err := build(goja.Undefined(), jobBuilder); err != nil {
 				panic(err)
 			}
@@ -315,6 +337,7 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 		policy := workflowv3.MapPolicy{
 			PageSize: 64, MaxItems: 10000, MaxMaterializedAhead: 128,
 		}
+		var budget *workflowv3.BudgetClaim
 		if configure, configureOK := goja.AssertFunction(call.Argument(3)); configureOK {
 			mapBuilder := vm.NewObject()
 			mustSet(vm, mapBuilder, "pageSize", func(option goja.FunctionCall) goja.Value {
@@ -329,13 +352,17 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 				policy.MaxMaterializedAhead = int(option.Argument(0).ToInteger())
 				return mapBuilder
 			})
+			mustSet(vm, mapBuilder, "budget", func(option goja.FunctionCall) goja.Value {
+				budget = budgetClaimFromValue(vm, option.Argument(0))
+				return mapBuilder
+			})
 			if _, err := configure(goja.Undefined(), mapBuilder); err != nil {
 				panic(err)
 			}
 		}
 		b.ir.Maps = append(b.ir.Maps, workflowv3.IRMap{
 			Key: key, Source: source, ItemTask: invocation.key,
-			Bindings: invocation.bindings, Policy: policy,
+			Bindings: invocation.bindings, Policy: policy, Budget: budget,
 		})
 		spec, found := b.state.catalog.Lookup(invocation.key)
 		if !found || len(spec.Outputs) != 1 {
@@ -386,6 +413,7 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 			panic(vm.NewTypeError("reduce callback must return a task descriptor"))
 		}
 		policy := workflowv3.ReducePolicy{FanIn: 16, MaxLevels: 8}
+		var budget *workflowv3.BudgetClaim
 		if configure, configureOK := goja.AssertFunction(call.Argument(3)); configureOK {
 			reduceBuilder := vm.NewObject()
 			mustSet(vm, reduceBuilder, "fanIn", func(option goja.FunctionCall) goja.Value {
@@ -396,13 +424,17 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 				policy.MaxLevels = int(option.Argument(0).ToInteger())
 				return reduceBuilder
 			})
+			mustSet(vm, reduceBuilder, "budget", func(option goja.FunctionCall) goja.Value {
+				budget = budgetClaimFromValue(vm, option.Argument(0))
+				return reduceBuilder
+			})
 			if _, err := configure(goja.Undefined(), reduceBuilder); err != nil {
 				panic(err)
 			}
 		}
 		b.ir.Reductions = append(b.ir.Reductions, workflowv3.IRReduce{
 			Key: key, Source: source, PartitionTask: invocation.key,
-			Bindings: invocation.bindings, Policy: policy,
+			Bindings: invocation.bindings, Policy: policy, Budget: budget,
 		})
 		spec, found := b.state.catalog.Lookup(invocation.key)
 		if !found || len(spec.Outputs) != 1 {
@@ -498,6 +530,40 @@ func (s *authoringState) mustWorkflow(vm *goja.Runtime, value goja.Value) workfl
 	return ir
 }
 
+func budgetClaimFromValue(vm *goja.Runtime, value goja.Value) *workflowv3.BudgetClaim {
+	if value == nil || goja.IsUndefined(value) || goja.IsNull(value) {
+		panic(vm.NewTypeError("budget claim is required"))
+	}
+	object := value.ToObject(vm)
+	claim := &workflowv3.BudgetClaim{
+		Account:     strings.TrimSpace(object.Get("account").String()),
+		Reserve:     budgetAmountsFromValue(vm, object.Get("reserve")),
+		OnExhausted: strings.TrimSpace(object.Get("onExhausted").String()),
+	}
+	if err := workflowv3.ValidateBudgetClaim(*claim); err != nil {
+		panic(vm.NewTypeError("invalid budget claim: %s", err))
+	}
+	return claim
+}
+
+func budgetAmountsFromValue(vm *goja.Runtime, value goja.Value) []workflowv3.BudgetAmount {
+	if value == nil || goja.IsUndefined(value) || goja.IsNull(value) {
+		panic(vm.NewTypeError("budget dimensions are required"))
+	}
+	object := value.ToObject(vm)
+	keys := object.Keys()
+	sort.Strings(keys)
+	amounts := make([]workflowv3.BudgetAmount, 0, len(keys))
+	for _, dimension := range keys {
+		number := object.Get(dimension).ToFloat()
+		if number < 0 || number > 9007199254740991 || math.Trunc(number) != number {
+			panic(vm.NewTypeError("budget dimension %s must be a nonnegative safe integer", dimension))
+		}
+		amounts = append(amounts, workflowv3.BudgetAmount{Dimension: dimension, Units: int64(number)})
+	}
+	return amounts
+}
+
 func appendUniqueNode(nodes []workflowv3.NodeKey, key workflowv3.NodeKey) []workflowv3.NodeKey {
 	for _, existing := range nodes {
 		if existing == key {
@@ -532,17 +598,36 @@ func TypeScript() string {
   export interface JobRef<T = unknown> {
     output(name: string): ValueRef<T>;
   }
-  export interface JobBuilder { after(job: JobRef): JobBuilder }
+  export type BudgetDimension =
+    | "requests" | "input_tokens" | "output_tokens"
+    | "embedding_tokens" | "input_bytes" | "output_bytes"
+    | "cost_microunits";
+  export type BudgetAmounts = Partial<Record<BudgetDimension, number>>;
+  export interface BudgetClaim {
+    account: string;
+    reserve: BudgetAmounts;
+    onExhausted: "fail-run" | "block" | "require-approval";
+  }
+  export interface JobBuilder {
+    after(job: JobRef): JobBuilder;
+    budget(claim: BudgetClaim): JobBuilder;
+  }
   export interface MapBuilder {
     pageSize(value: number): MapBuilder;
     maxItems(value: number): MapBuilder;
     maxMaterializedAhead(value: number): MapBuilder;
+    budget(claim: BudgetClaim): MapBuilder;
   }
   export interface ReduceBuilder {
     fanIn(value: number): ReduceBuilder;
     maxLevels(value: number): ReduceBuilder;
+    budget(claim: BudgetClaim): ReduceBuilder;
   }
   export interface PlanBuilder {
+    budget(
+      account: string,
+      options: {limits: BudgetAmounts; policyDigest: string},
+    ): PlanBuilder;
     input<T = unknown>(
       name: string,
       options: {schema: string},

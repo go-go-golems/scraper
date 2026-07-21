@@ -3913,3 +3913,60 @@ The store scans incompatible candidates transactionally but must retain only the
 - Quarantine code: `TASK_RUNTIME_CONSTRUCTION`.
 - Default threshold: two construction failures.
 - Focused non-race runtime test: 39.012 seconds; race runtime test: 10.450 seconds; lint: `0 issues.`
+
+## Step 36: Make budget admission and settlement transactional
+
+Slice 9 now has its first complete implementation tranche: canonical integer accounts and claims, JavaScript authoring, lease-transaction reservations, settlement/recovery, exhaustion policy behavior, and coherent operational snapshots.
+
+### Prompt Context
+
+**User prompt (verbatim):** `Continue working toward the active thread goal.`
+
+**Assistant interpretation:** Continue from completed Slice 8 into the next concrete Slice 9 implementation and evidence tranche.
+
+**Inferred user intent:** Do not stop at planning; build production-quality budget accounting without weakening prior slices.
+
+### What I did
+
+- Added closed integer dimensions, account policy digests, requested/effective claims, host task maxima, checked microunit arithmetic, and exact IR/plan/DTS evidence.
+- Added `plan.budget(...)` and task/map/reduction builder claims.
+- Added budget account, node claim, and immutable attempt reservation tables plus additive node columns and migration coverage.
+- Reserved every dimension in the same immediate SQLite transaction as attempt creation; two independent connections racing for one request unit produce one winner.
+- Added actual, conservative, and zero-charge settlement; retry creates a fresh reservation, lease loss and in-flight cancellation charge conservatively, and pre-execution input preparation releases all units.
+- Added CAS/versioned authenticated increases, `block`, `fail-run`, and lease-free `require-approval` bridge behavior.
+- Added a real JavaScript fixture reporting requests/output tokens, overage rejection, failed-task actual usage, reopen, and SQLite/WAL/output/projection canary checks.
+- Propagated claims to dynamically materialized map children and reduction partitions.
+- Added one-read-transaction operational snapshots, explicit 60/300-second terminal windows, event high-water cursors, and bounded continuation reads.
+- Added startup reconciliation that refuses admission when account totals and live reservations disagree.
+
+### What worked
+
+- Focused core, authoring, runtime, and SQLite suites pass.
+- Focused race tests pass for budget/store and budget/registry runtime behavior.
+- TypeScript declarations compile and isolated lint reports `0 issues`.
+- A completion/cancellation race settles exactly once.
+- Usage below reservation releases remainder; overage rolls back before conservative terminal charge.
+- Budgeted maps and reductions block the second dynamic child/partition at the exact shared unit limit.
+
+### What didn't work
+
+The first no-contact integration expected zero usage but observed the full five-token reservation. Input refs resolve before artifact bodies are materialized, so the missing body failed inside `RunTask` and was classified as ambiguous execution. I introduced `TaskPreparationError` around ref validation/materialization and route it through zero-charge failure settlement.
+
+The first failed-task actual-usage assertion expected two tokens but observed five. Synchronous failure propagation attached usage, but the fixture is async and rejected through the promise waiter. I attached the same sorted usage evidence to promise-rejection `TaskFailureError`; the failed attempt then settled exactly two tokens and one request.
+
+Lint also found an ineffectual initialized failure value and one unused clone helper. I changed the former to a declaration and removed the latter; lint then returned `0 issues`.
+
+### Decisions and invariants
+
+- Attempt history and semantic retry debt remain separate from budget history.
+- All dimensions reserve atomically; partial account mutation rolls back.
+- Missing/ambiguous task usage charges conservatively, but validated failed-task usage settles actual units.
+- Events are notifications; the read-transaction snapshot plus event sequence is authoritative.
+- JavaScript reports only closed dimensions and safe integers; arbitrary dimensions and floating currency are rejected.
+
+### Review risks and next steps
+
+- Review reservation settlement before node/attempt terminal mutation and startup reconciliation together.
+- Review fail-run event evidence because no task lease/attempt is created on admission denial.
+- Finish comprehensive Slice 9 documentation/help, full validation, and publication before checking task `gkai`.
+- Then implement Slice 10 durable lease-free approval gates.

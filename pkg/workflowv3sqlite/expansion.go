@@ -226,18 +226,26 @@ WHERE run_id = ? AND map_key = ? AND next_index = ?`,
 		outputSchemas, _ := workflowv3.CanonicalJSON(mapped.OutputSchemas)
 		modules, _ := workflowv3.CanonicalJSON(mapped.Modules)
 		identity := mapped.Implementation
+		var budgetAccount, budgetOnExhausted any
+		if mapped.Budget != nil {
+			budgetAccount, budgetOnExhausted = mapped.Budget.Account, mapped.Budget.OnExhausted
+		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO v3_nodes(
   run_id, node_key, ordinal, task_kind, task_version, bundle_digest,
   entrypoint, task_abi, bindings_json, input_schemas_json,
   output_schemas_json, modules_json, resource_class, max_attempts,
-  retry_backoff_ms, status
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+  retry_backoff_ms, budget_account, budget_on_exhausted, status
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
 			runID, nodeKey, ordinalBase+itemIndex, identity.Kind, identity.Version,
 			identity.BundleDigest, identity.Entrypoint, identity.ABI,
 			bindingsBody, inputSchemas, outputSchemas, modules, mapped.ResourceClass,
-			mapped.Retry.MaxAttempts, mapped.Retry.BackoffMillis); err != nil {
+			mapped.Retry.MaxAttempts, mapped.Retry.BackoffMillis,
+			budgetAccount, budgetOnExhausted); err != nil {
 			return nil, fmt.Errorf("insert map child %s: %w", item.Key, err)
+		}
+		if err := insertNodeBudget(ctx, tx, runID, nodeKey, mapped.Budget); err != nil {
+			return nil, err
 		}
 		if err := insertRef(ctx, tx, `
 INSERT INTO v3_map_items(

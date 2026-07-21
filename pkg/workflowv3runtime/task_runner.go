@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -29,11 +30,20 @@ type TaskRequest struct {
 
 type TaskResult struct {
 	Outputs map[string]workflowv3.ArtifactRef
+	Usage   []workflowv3.BudgetAmount
 }
 
 type TaskFailureError struct {
 	Failure workflowv3.Failure
+	Usage   []workflowv3.BudgetAmount
 }
+
+type TaskPreparationError struct {
+	Err error
+}
+
+func (e *TaskPreparationError) Error() string { return e.Err.Error() }
+func (e *TaskPreparationError) Unwrap() error { return e.Err }
 
 type RuntimeConstructionError struct {
 	Err error
@@ -51,6 +61,7 @@ type outputState struct {
 	store    workflowv3.ArtifactStore
 	expected map[string]string
 	outputs  map[string]workflowv3.ArtifactRef
+	usage    map[string]int64
 }
 
 var safePort = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
@@ -60,11 +71,11 @@ func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
 		return TaskResult{}, fmt.Errorf("task bundle, artifact store, and module registry are required")
 	}
 	if err := validateInputRefs(request.Task.Spec, request.Inputs); err != nil {
-		return TaskResult{}, err
+		return TaskResult{}, &TaskPreparationError{Err: err}
 	}
 	workspace, inputValues, err := materializeInputs(ctx, request.Artifacts, request.Inputs)
 	if err != nil {
-		return TaskResult{}, err
+		return TaskResult{}, &TaskPreparationError{Err: err}
 	}
 	defer func() { _ = os.RemoveAll(workspace) }()
 
@@ -72,6 +83,7 @@ func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
 		ctx: ctx, store: request.Artifacts,
 		expected: request.Task.Spec.Outputs,
 		outputs:  map[string]workflowv3.ArtifactRef{},
+		usage:    map[string]int64{},
 	}
 	modules := []gggengine.RuntimeModuleRegistrar{
 		gggengine.NativeModuleRegistrar{
@@ -130,18 +142,39 @@ func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
 		return value.Export(), nil
 	})
 	if err != nil {
+		var taskFailure *TaskFailureError
+		if errors.As(err, &taskFailure) {
+			taskFailure.Usage = usageFromState(state)
+		}
 		return TaskResult{}, fmt.Errorf("execute task: %w", err)
 	}
 	if promise, ok := returned.(*goja.Promise); ok {
 		returned, err = waitForTaskPromise(ctx, runtime, promise)
 		if err != nil {
+			var taskFailure *TaskFailureError
+			if errors.As(err, &taskFailure) {
+				taskFailure.Usage = usageFromState(state)
+			}
 			return TaskResult{}, fmt.Errorf("await task: %w", err)
 		}
 	}
 	if err := validateReturnedOutputs(returned, state); err != nil {
 		return TaskResult{}, err
 	}
-	return TaskResult{Outputs: cloneRefs(state.outputs)}, nil
+	usage := usageFromState(state)
+	if err := workflowv3.ValidateBudgetUsage(usage); err != nil {
+		return TaskResult{}, err
+	}
+	return TaskResult{Outputs: cloneRefs(state.outputs), Usage: usage}, nil
+}
+
+func usageFromState(state *outputState) []workflowv3.BudgetAmount {
+	usage := make([]workflowv3.BudgetAmount, 0, len(state.usage))
+	for dimension, units := range state.usage {
+		usage = append(usage, workflowv3.BudgetAmount{Dimension: dimension, Units: units})
+	}
+	workflowv3.SortBudgetAmounts(usage)
+	return usage
 }
 
 func taskModuleLoader(state *outputState) require.ModuleLoader {
@@ -199,6 +232,24 @@ func taskContextObject(vm *goja.Runtime, request TaskRequest, inputs map[string]
 			panic(vm.NewGoError(err))
 		}
 	})
+	usage := vm.NewObject()
+	mustSet(vm, usage, "report", func(call goja.FunctionCall) goja.Value {
+		dimension := strings.TrimSpace(call.Argument(0).String())
+		units := call.Argument(1).ToFloat()
+		if units < 0 || units > 9007199254740991 || math.Trunc(units) != units {
+			panic(vm.NewTypeError("usage units must be a nonnegative safe integer"))
+		}
+		if _, exists := state.usage[dimension]; exists {
+			panic(vm.NewTypeError("usage dimension %s was already reported", dimension))
+		}
+		probe := []workflowv3.BudgetAmount{{Dimension: dimension, Units: int64(units)}}
+		if err := workflowv3.ValidateBudgetUsage(probe); err != nil {
+			panic(vm.NewTypeError("invalid usage: %s", err))
+		}
+		state.usage[dimension] = int64(units)
+		return goja.Undefined()
+	})
+	mustSet(vm, object, "usage", usage)
 	outputs := vm.NewObject()
 	mustSet(vm, outputs, "putJSON", func(call goja.FunctionCall) goja.Value {
 		port := strings.TrimSpace(call.Argument(0).String())

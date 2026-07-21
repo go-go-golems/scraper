@@ -17,6 +17,7 @@ type BundleTask struct {
 	Modules       []string          `json:"modules,omitempty"`
 	ResourceClass string            `json:"resourceClass"`
 	Retry         RetryPolicy       `json:"retry"`
+	BudgetMaximum *BudgetClaim      `json:"budgetMaximum,omitempty"`
 }
 
 type BundleManifest struct {
@@ -96,6 +97,7 @@ func NewBundle(manifest BundleManifest, files map[string][]byte) (*Bundle, error
 			},
 			Inputs: task.Inputs, Outputs: task.Outputs, Modules: task.Modules,
 			ResourceClass: task.ResourceClass, Retry: task.Retry,
+			BudgetMaximum: cloneBudgetClaim(task.BudgetMaximum),
 		}
 		if err := validateTaskSpec(probe); err != nil {
 			return nil, err
@@ -145,6 +147,7 @@ func (b *Bundle) TaskSpecs() []TaskSpec {
 			Inputs: cloneStringMap(task.Inputs), Outputs: cloneStringMap(task.Outputs),
 			Modules:       append([]string(nil), task.Modules...),
 			ResourceClass: task.ResourceClass, Retry: task.Retry,
+			BudgetMaximum: cloneBudgetClaim(task.BudgetMaximum),
 		})
 	}
 	sort.Slice(ret, func(i, j int) bool {
@@ -185,6 +188,7 @@ func cloneManifest(manifest BundleManifest) BundleManifest {
 		ret.Tasks[i].Inputs = cloneStringMap(task.Inputs)
 		ret.Tasks[i].Outputs = cloneStringMap(task.Outputs)
 		ret.Tasks[i].Modules = append([]string(nil), task.Modules...)
+		ret.Tasks[i].BudgetMaximum = cloneBudgetClaim(task.BudgetMaximum)
 		sort.Strings(ret.Tasks[i].Modules)
 	}
 	sort.Slice(ret.Tasks, func(i, j int) bool {

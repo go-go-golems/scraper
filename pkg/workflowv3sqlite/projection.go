@@ -8,6 +8,10 @@ import (
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 )
 
+type projectionQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
 // QueueSnapshot derives bounded scheduler observability from authoritative
 // run/node/lease records. It does not persist a second mutable queue state.
 func (s *Store) QueueSnapshot(
@@ -16,30 +20,44 @@ func (s *Store) QueueSnapshot(
 	capacities map[string]int,
 	now time.Time,
 ) (workflowv3.QueueSnapshot, error) {
+	return queueSnapshot(ctx, s.db, registry, capacities, nil, now)
+}
+
+func queueSnapshot(
+	ctx context.Context,
+	queryer projectionQueryer,
+	registry workflowv3.RegistryResolver,
+	capacities map[string]int,
+	runFilter *workflowv3.RunID,
+	now time.Time,
+) (workflowv3.QueueSnapshot, error) {
 	snapshot := workflowv3.QueueSnapshot{
 		ActiveByResource: map[string]int{},
 		BlockedByReason:  map[string]int{},
 	}
-	rows, err := s.db.QueryContext(ctx, `
-SELECT resource_class, COUNT(*) FROM v3_nodes
-WHERE status = 'running' GROUP BY resource_class`)
+	rows, err := queryer.QueryContext(ctx, `
+SELECT run_id, resource_class, COUNT(*) FROM v3_nodes
+WHERE status = 'running' GROUP BY run_id, resource_class`)
 	if err != nil {
 		return snapshot, err
 	}
 	for rows.Next() {
+		var runID workflowv3.RunID
 		var resource string
 		var count int
-		if err := rows.Scan(&resource, &count); err != nil {
+		if err := rows.Scan(&runID, &resource, &count); err != nil {
 			_ = rows.Close()
 			return snapshot, err
 		}
-		snapshot.ActiveByResource[resource] = count
+		if runFilter == nil || runID == *runFilter {
+			snapshot.ActiveByResource[resource] += count
+		}
 	}
 	if err := rows.Close(); err != nil {
 		return snapshot, err
 	}
 
-	rows, err = s.db.QueryContext(ctx, `
+	rows, err = queryer.QueryContext(ctx, `
 SELECT e.run_id, e.map_key, e.status, e.total_items, e.next_index,
   e.materialized_items, e.terminal_items, e.max_materialized_ahead
 FROM v3_expansions e JOIN v3_runs r ON r.run_id = e.run_id
@@ -59,6 +77,9 @@ ORDER BY e.run_id, e.map_key`)
 			_ = rows.Close()
 			return snapshot, err
 		}
+		if runFilter != nil && progress.RunID != *runFilter {
+			continue
+		}
 		if progress.TotalItems >= 0 {
 			progress.BacklogToMaterialize = progress.TotalItems - progress.NextIndex
 		}
@@ -73,7 +94,7 @@ ORDER BY e.run_id, e.map_key`)
 		return snapshot, err
 	}
 
-	rows, err = s.db.QueryContext(ctx, `
+	rows, err = queryer.QueryContext(ctx, `
 SELECT reduction.run_id, reduction.reduce_key, reduction.status,
   reduction.source_items, reduction.current_level,
   COUNT(partition.node_key),
@@ -108,6 +129,9 @@ ORDER BY reduction.run_id, reduction.reduce_key`)
 			_ = rows.Close()
 			return snapshot, err
 		}
+		if runFilter != nil && progress.RunID != *runFilter {
+			continue
+		}
 		switch {
 		case progress.Status == "pending" && !sourceReady:
 			snapshot.BlockedByReason["reduction-source"]++
@@ -120,10 +144,23 @@ ORDER BY reduction.run_id, reduction.reduce_key`)
 		return snapshot, err
 	}
 
-	rows, err = s.db.QueryContext(ctx, `
-SELECT n.task_kind, n.task_version, n.bundle_digest, n.entrypoint,
+	rows, err = queryer.QueryContext(ctx, `
+SELECT n.run_id, n.task_kind, n.task_version, n.bundle_digest, n.entrypoint,
   n.task_abi, n.modules_json, n.resource_class, n.max_attempts,
-  n.retry_backoff_ms, n.ready_at,
+  n.retry_backoff_ms, n.ready_at, n.budget_account,
+  n.budget_on_exhausted,
+  COALESCE((
+    SELECT claim.dimension
+    FROM v3_node_budget_claims claim
+    JOIN v3_budget_accounts account
+      ON account.run_id = claim.run_id
+     AND account.account = n.budget_account
+     AND account.dimension = claim.dimension
+    WHERE claim.run_id = n.run_id AND claim.node_key = n.node_key
+      AND account.used_units + account.reserved_units + claim.reserve_units
+          > account.limit_units
+    ORDER BY claim.dimension LIMIT 1
+  ), ''),
   EXISTS (
     SELECT 1 FROM v3_dependencies d
     JOIN v3_nodes dependency
@@ -139,11 +176,14 @@ WHERE n.status = 'pending' AND r.status = 'running'`)
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
+		var runID workflowv3.RunID
 		var node workflowv3.PlanNode
 		var modules []byte
-		var readyAt sql.NullString
+		var readyAt, budgetAccount, budgetPolicy sql.NullString
+		var exhaustedDimension string
 		var blockedByDependency bool
 		if err := rows.Scan(
+			&runID,
 			&node.Implementation.Kind,
 			&node.Implementation.Version,
 			&node.Implementation.BundleDigest,
@@ -154,9 +194,15 @@ WHERE n.status = 'pending' AND r.status = 'running'`)
 			&node.Retry.MaxAttempts,
 			&node.Retry.BackoffMillis,
 			&readyAt,
+			&budgetAccount,
+			&budgetPolicy,
+			&exhaustedDimension,
 			&blockedByDependency,
 		); err != nil {
 			return snapshot, err
+		}
+		if runFilter != nil && runID != *runFilter {
+			continue
 		}
 		if err := workflowv3.StrictDecode(modules, &node.Modules); err != nil {
 			return snapshot, err
@@ -175,6 +221,10 @@ WHERE n.status = 'pending' AND r.status = 'running'`)
 			reason = "dependency"
 		case backoffBlocked:
 			reason = "retry-backoff"
+		case exhaustedDimension != "" && budgetPolicy.String == workflowv3.BudgetExhaustRequireApproval:
+			reason = "budget-approval:" + budgetAccount.String + ":" + exhaustedDimension
+		case exhaustedDimension != "":
+			reason = "budget:" + budgetAccount.String + ":" + exhaustedDimension
 		case registry == nil:
 			reason = "implementation-unavailable"
 		default:

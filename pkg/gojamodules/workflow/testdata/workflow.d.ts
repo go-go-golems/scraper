@@ -4,17 +4,36 @@ declare module "workflow" {
   export interface JobRef<T = unknown> {
     output(name: string): ValueRef<T>;
   }
-  export interface JobBuilder { after(job: JobRef): JobBuilder }
+  export type BudgetDimension =
+    | "requests" | "input_tokens" | "output_tokens"
+    | "embedding_tokens" | "input_bytes" | "output_bytes"
+    | "cost_microunits";
+  export type BudgetAmounts = Partial<Record<BudgetDimension, number>>;
+  export interface BudgetClaim {
+    account: string;
+    reserve: BudgetAmounts;
+    onExhausted: "fail-run" | "block" | "require-approval";
+  }
+  export interface JobBuilder {
+    after(job: JobRef): JobBuilder;
+    budget(claim: BudgetClaim): JobBuilder;
+  }
   export interface MapBuilder {
     pageSize(value: number): MapBuilder;
     maxItems(value: number): MapBuilder;
     maxMaterializedAhead(value: number): MapBuilder;
+    budget(claim: BudgetClaim): MapBuilder;
   }
   export interface ReduceBuilder {
     fanIn(value: number): ReduceBuilder;
     maxLevels(value: number): ReduceBuilder;
+    budget(claim: BudgetClaim): ReduceBuilder;
   }
   export interface PlanBuilder {
+    budget(
+      account: string,
+      options: {limits: BudgetAmounts; policyDigest: string},
+    ): PlanBuilder;
     input<T = unknown>(
       name: string,
       options: {schema: string},
