@@ -1930,3 +1930,291 @@ completion claim can be independently reproduced.
 - Final implementation commit range: `ff286a1..3136cd6`.
 - Final diary/bookkeeping commits continue through this step.
 - Active goal: `a7904295-8b3c-4259-851f-e6a69a9522cb`.
+
+## Step 19: Start Slices 3–5 from the proven minimal runtime
+
+### Prompt Context
+
+**User prompt (verbatim):**
+
+> slices 3-5
+
+**Assistant interpretation:** Implement the next three documented executable
+vertical slices completely: a policy-bound real HTTP snapshot, a
+completion-driven work-conserving dispatcher with independent resources, and
+an idempotent real database synchronization through host-preconfigured handles.
+
+**Inferred user intent:** Continue directly from the completed minimal DSL
+without revisiting or weakening its exact identity, compact persistence,
+fencing, privacy, fresh-runtime, and reopen contracts.
+
+**Active goal:** `dafed540-d78f-4507-968d-e24ef5fc2a20`.
+
+### What I did
+
+- Inspected the active goal and confirmed the branch is clean at `8dd8a34`.
+- Re-read the architecture's Slice 3–5 exit criteria and current workflow-v3
+  compiler, registry, runtime, SQLite store, schema, fixtures, and integration
+  tests.
+- Re-read the installed go-go-goja fetch policy/runtime and preconfigured
+  database module APIs rather than inventing incompatible wrappers.
+- Added four docmgr tasks:
+  - `by9j` — Slice 3 HTTP snapshot;
+  - `bjbi` — Slice 4 dispatcher;
+  - `7gmp` — Slice 5 database synchronization;
+  - `v8h8` — validation, documentation, and completion audit.
+- Updated the ticket changelog immediately.
+
+### Why
+
+- The three slices share module-profile and resource metadata, so their durable
+  contracts must be designed together even though implementation will proceed
+  in focused commits.
+- Existing go-go-goja already provides origin policy, response limits,
+  cancellation-aware async fetch, abstract transaction wrappers, and explicit
+  denial of `configure()` for preconfigured databases. Reusing those trusted
+  APIs avoids duplicated host logic.
+
+### What worked
+
+- The completed minimal implementation exposes clean extension seams:
+  `BundleTask`, `TaskSpec`, `PlanNode`, `Lease`, `RunTask`, and `LeaseNext`.
+- Existing tests already cover exact implementation mismatch, basic module
+  rejection, lease races, stale completion, and compact source privacy.
+
+### What didn't work
+
+- N/A. This step was evidence-backed scope setup and architecture inspection.
+
+### What I learned
+
+- Current `Engine.RunUntilIdle` is deliberately serial; Slice 4 needs a new
+  dispatcher rather than making `RunOne` internally batch.
+- Current retryable task failures terminate the run. Slice 3 requires retry
+  policy and ready-time persistence before HTTP transient failures can be
+  proven correctly.
+- Resource identity is absent from current task/plan/lease/attempt records.
+  Slice 4 must add it canonically rather than relying on module aliases.
+- Database side effects need a stable host-owned idempotency key derived from
+  run/node, not an attempt token, so lease loss cannot duplicate a logical
+  write.
+
+### What was tricky to build
+
+- N/A yet. The main design pressure is keeping policy configuration out of the
+  canonical plan while still making module/resource identities exact and
+  worker-advertised.
+
+### What warrants a second pair of eyes
+
+- Retry-count semantics and whether lease loss consumes the task retry budget.
+- Fairness ordering across runs within each resource class.
+- SQL policy boundaries for the first write alias and transaction wrapper.
+
+### What should be done next
+
+1. Freeze resource and retry metadata in canonical IR/plan/bundle goldens.
+2. Add a runtime profile registry for exact `fetch:public` and `db:sync`
+   aliases, with no ambient default module fallback.
+3. Build Slice 3 fixture and negative policy/redaction tests.
+4. Introduce the store-backed dispatcher/resource admission contract.
+5. Build the idempotent database synchronization fixture and crash test.
+
+### Code review instructions
+
+- Compare new metadata against the existing canonical goldens before reviewing
+  runtime behavior.
+- Verify policy values and secrets never enter bundle manifests or plans.
+
+### Technical details
+
+- Starting commit: `8dd8a34`.
+- Goja dependency: `github.com/go-go-golems/go-go-goja v0.8.3`.
+- Current runtime aliases: only `workflow/task` and `fs:input`.
+
+## Step 20: Implement the HTTP, dispatcher, and database vertical paths
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 19)
+
+**Assistant interpretation:** Move immediately from contract setup to executable
+Slices 3–5 and preserve failure evidence while iterating.
+
+**Inferred user intent:** See useful real HTTP and database work running through
+the durable engine, with the scheduler barrier actually removed rather than
+merely redesigned.
+
+**Commit:** `b05e5a0` — "workflowv3: implement HTTP dispatch and database slices"
+
+### What I did
+
+- Added canonical task policy to bundle/catalog/plan identity:
+  `resourceClass` and typed `retry {maxAttempts, backoffMillis}`.
+- Kept completed Slice 1–2 plans compatible through documented canonical
+  defaults (`cpu.default`, one attempt), and regenerated the exact plan golden.
+- Extended sealed worker registries with explicit module-alias advertisement;
+  registry generation now digests both implementations and aliases.
+- Added exact node admission checks for implementation, modules, resource, and
+  retry policy.
+- Added an immutable lease-scoped `TaskModuleRegistry` with factories for:
+  - read-only `fs:input`;
+  - policy-selected `fetch:*`;
+  - Go-preconfigured `db:*`.
+- Upgraded go-go-goja from v0.8.3 to v0.10.6 because that is the first available
+  tagged dependency in this repository line containing the reviewed fetch
+  module.
+- Wrapped HTTP redirect following with the same origin policy as the initial
+  URL; disabled credential environment/file sources in the public test profile.
+- Added durable retry deadlines, redacted failed attempts, resource class facts,
+  per-resource fair dispatch counters, database-scoped active-capacity checks,
+  and derived queue projections.
+- Added `Dispatcher.Run` and deterministic `DispatchOnce`; a completion wakes
+  refill without waiting for unrelated attempts.
+- Added a lease watcher so durable cancellation/expiry cancels active Goja and
+  HTTP contexts.
+- Added a real authored HTTP snapshot fixture using `fs:input` and
+  `fetch:public`, with typed status/transport failures and bounded cardinality.
+- Added a real authored database synchronization fixture using `fs:input` and
+  `db:sync`, with script-side `configure()` denial, transactions, stable
+  run/node operation keys, and post-commit retry idempotency.
+- Added exact IR/plan goldens for HTTP and database workflows.
+- Added integration evidence for allowlist denial, redirect denial, response
+  limits, cancellation, typed 503 retry, reopen, mixed-resource refill,
+  capacity, fairness, blocked reasons, retry backoff across reopen, cardinality,
+  failure isolation, and crash-after-side-effect recovery.
+
+### Why
+
+- Resource and retry policy affect lease eligibility and must be canonical plan
+  facts, not runtime guesses.
+- Module aliases carry authority; registering code must not silently advertise
+  host services.
+- A stable idempotency key must exclude attempt number so a lease-loss retry
+  observes the same logical side effect.
+- Fairness must be per resource class; a run's database work must not consume
+  its HTTP scheduling share.
+
+### What worked
+
+- The HTTP workflow retries one 503 and succeeds on attempt two; URL query and
+  response canaries are absent from SQLite/WAL/SHM.
+- Denied origins and denied cross-origin redirects are never contacted; all
+  three bounded retry attempts persist only stable failure codes and redacted
+  messages.
+- A blocked HTTP response is canceled after durable run cancellation.
+- The dispatcher test holds one HTTP task and one unrelated slow task active,
+  releases only the HTTP slot, and observes the next HTTP task begin before the
+  slow task finishes. Peak HTTP concurrency remains exactly one.
+- Queue projection reports both active resource classes and the capacity block.
+- Store fairness selects run B after one run-A dispatch even though run A has
+  another ready node in the same class.
+- Retry backoff remains blocked after store close/reopen and leases attempt two
+  only after its durable deadline.
+- The database task commits 500 customer writes, deliberately reports a
+  retryable post-commit crash, survives workflow-store restart, then succeeds
+  without a second audit or operation row.
+- The database receipt proves `configureDenied=true`, second-attempt
+  `applied=false`, and exact cardinality 500.
+- Database privacy/storage evidence:
+
+  `source=499554 persistedSQLite=90112 ratio=0.1804`
+
+- Focused tests, race suites, isolated lint, JavaScript syntax, and deterministic
+  goldens pass after fixes.
+
+### What didn't work
+
+- Initial compilation failed because pinned go-go-goja v0.8.3 did not ship the
+  reviewed fetch package:
+
+  `no required module provides package github.com/go-go-golems/go-go-goja/modules/fetch`
+
+  I inspected published versions, confirmed v0.10.6 contains `modules/fetch`
+  and supports the repository's Go 1.26.5, then upgraded exactly to v0.10.6.
+
+- The first authoring test failed with the expected stale plan golden after
+  resource/retry and normalized bundle identity became canonical. I reviewed
+  the diff and regenerated it with:
+
+  `UPDATE_GOLDEN=1 GOWORK=off go test ./pkg/gojamodules/workflow`
+
+- The first fairness projection assertion expected one dependency block but
+  observed two. Both runs' validation nodes were correctly dependency-blocked;
+  I corrected the assertion rather than changing the projection.
+
+- The first combined validation command stopped at:
+
+  `changelog.md:158: new blank line at EOF.`
+
+  I normalized ticket text files before rerunning `git diff --check`.
+
+- The first race-suite cancellation run returned:
+
+  `sql: transaction has already been committed or rolled back`
+
+  instead of `context canceled`. The dispatcher could enter a lease transaction
+  concurrently with context cancellation. I now return `ctx.Err()` when a
+  dispatch transaction fails after cancellation. The full focused race suite
+  then passed.
+
+### What I learned
+
+- The released go-go-goja module surface, not the local checkout, is the actual
+  build contract; trusted-module design must verify the tagged dependency.
+- Redirect policy must be enforced separately from initial URL policy when an
+  injected `http.Client` follows redirects.
+- Per-run dispatch counts are insufficient for independent resources; fairness
+  accounting must key `(run_id, resource_class)`.
+- A task failure can be durably handled while still being returned to
+  deterministic `RunOne` callers; the long-lived dispatcher needs a typed
+  handled-attempt wrapper so unrelated runs continue.
+
+### What was tricky to build
+
+- Completion channels must be sized to the sum of local resource capacities so
+  canceled dispatcher callers cannot strand task goroutines.
+- Retry state must leave the attempt immutable and failed while returning the
+  node to pending with a separate `ready_at` deadline.
+- The database transaction must commit the operation marker atomically with
+  side effects, while the simulated crash must occur strictly after commit.
+- The workflow database and target database have intentionally different
+  privacy roles: the target stores domain rows; workflow SQLite stores only
+  compact refs and redacted attempt facts.
+
+### What warrants a second pair of eyes
+
+- Cancellation polling interval and behavior during transient store read
+  errors.
+- The go-go-goja fetch module's future redirect behavior relative to this host
+  wrapper.
+- SQL statement policy if less-trusted bundles are introduced before process
+  isolation Slice 11.
+- Whether retry backoff should add capped exponential policy in a later slice;
+  this slice pins deterministic fixed backoff.
+
+### What should be done next
+
+1. Add public documentation and update both design implementation-status
+   sections.
+2. Add migration and dispatcher edge tests where needed.
+3. Run repository-wide validation under `GOWORK=off` and inspect dependency
+   upgrade impact.
+4. Check tasks only after docs and fresh complete evidence pass.
+
+### Code review instructions
+
+- Start with the HTTP, dispatcher, and database integration tests.
+- Trace exact resource/retry/module metadata from bundle through plan, SQLite,
+  lease, attempt, and registry resolution.
+- Verify HTTP origins and database handles exist only in host configuration,
+  never in plans.
+- Inspect target audit count before and after workflow restart.
+
+### Technical details
+
+- HTTP resource: `network.http.public`.
+- Database resource: `database.sync.primary`.
+- Retry bounds: three attempts, 10 ms deterministic fixture backoff.
+- Dispatcher wake fallback: 50 ms production default, configurable in tests.
+- Operation key: canonical SHA-256 of `{runId,nodeKey}`.

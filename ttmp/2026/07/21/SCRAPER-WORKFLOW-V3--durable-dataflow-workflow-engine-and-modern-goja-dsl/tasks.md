@@ -18,3 +18,7 @@
 - [x] Implement compact SQLite v3 runs nodes attempts outputs leases and restart-safe executor <!-- t:eyzy -->
 - [x] Prove end-to-end linear file transform, privacy, restart/reopen, stale fencing, and identity mismatch behavior <!-- t:8cs8 -->
 - [x] Run repository validation, update ticket evidence, and audit minimal DSL completion <!-- t:awrp -->
+- [x] Implement Slice 3 allowlisted HTTP snapshot with typed failures retries cancellation limits redaction and HTTP resources <!-- t:by9j -->
+- [x] Implement Slice 4 work-conserving dispatcher with independent capacity fairness restart and blocked evidence <!-- t:bjbi -->
+- [x] Implement Slice 5 idempotent preconfigured database synchronization with denied configure crash recovery and privacy <!-- t:7gmp -->
+- [ ] Validate document audit and publish evidence for workflow v3 Slices 3 through 5 <!-- t:v8h8 -->
