@@ -15,6 +15,8 @@ Owners: []
 RelatedFiles:
     - Path: repo://pkg/gojamodules/workflow/authoring.go
       Note: Go-backed reduce authoring handles
+    - Path: repo://pkg/testfixtures/workflowv3reduce/fixture.go
+      Note: Executable bounded word-count bundle and workflow
     - Path: repo://pkg/workflowv3/compiler.go
       Note: Reduction schema policy and graph validation
     - Path: repo://pkg/workflowv3/types.go
@@ -23,6 +25,8 @@ RelatedFiles:
         Canonical bounded reduction contract will extend this model
     - Path: repo://pkg/workflowv3runtime/dispatcher.go
       Note: Interleaved reducer admission under normal resource limits
+    - Path: repo://pkg/workflowv3runtime/reduction_integration_test.go
+      Note: Multi-level restart concurrency failure and privacy acceptance evidence
     - Path: repo://pkg/workflowv3sqlite/schema.sql
       Note: Durable reduction level and partition state
     - Path: repo://pkg/workflowv3sqlite/store.go
@@ -35,6 +39,7 @@ LastUpdated: 2026-07-21T20:35:00-04:00
 WhatFor: Freeze Slice 7 partition identity ordering state transitions recovery and root publication before implementation.
 WhenToUse: Read before adding reduce authoring partition manifests dynamic reducer nodes or aggregate progress to Workflow V3.
 ---
+
 
 
 # Slice 7 Bounded Reductions - Deterministic Durable Scale-In
@@ -50,6 +55,27 @@ restart and are not recomputed because siblings failed.
 The reference fixture is word count. The same input must produce byte-identical
 root output and digest at different concurrency levels and under randomized
 completion schedules.
+
+## Implementation status on 2026-07-21
+
+The executable Slice 7 path exists in commits `e760069` and `e2c48f2`:
+
+- canonical homogeneous reduction IR/plan, safe JavaScript authoring, exact
+  policy/implementation identity, DTS, and goldens;
+- strict compact partition artifacts and deterministic node identities;
+- additive reduction/partition state and idempotent level materialization;
+- bounded reducer nodes through normal leases/resources/retries/fencing;
+- lease-local read-only member rehydration;
+- multi-level progression, single-item identity, empty-source failure, and
+  idempotent root publication;
+- cancellation, terminal failure, projections, and migration coverage;
+- a 257-item word-count fixture with fan-in eight and levels 33 → 5 → 1;
+- restart during level zero, exact 296-attempt cardinality, concurrency-stable
+  root digest, two-connection planning, malformed-shard isolation, and privacy.
+
+Race mode runs 65 source items through the same recovery path. Remaining work
+is repository-wide validation and final documentation audit rather than
+missing Slice 7 behavior.
 
 ## Problem statement
 

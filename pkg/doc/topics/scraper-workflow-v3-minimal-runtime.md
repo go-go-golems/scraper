@@ -1,7 +1,7 @@
 ---
-Title: Workflow V3 Runtime Slices 1–6
+Title: Workflow V3 Runtime Slices 1–7
 Slug: scraper-workflow-v3-minimal-runtime
-Short: "Explains executable workflow-v3 file, HTTP, dispatcher, database, and lazy-map slices with exact capabilities and durable privacy boundaries."
+Short: "Explains executable workflow-v3 file, HTTP, dispatcher, database, lazy-map, and reduction slices with exact capabilities and durable privacy boundaries."
 Topics:
 - scraper
 - runtime
@@ -17,12 +17,12 @@ ShowPerDefault: true
 SectionType: GeneralTopic
 ---
 
-Workflow v3 has six executable vertical slices for trusted first-party
+Workflow v3 has seven executable vertical slices for trusted first-party
 JavaScript tasks: linear file processing, typed authoring, allowlisted HTTP,
-work-conserving resource dispatch, idempotent database synchronization, and
-deterministic lazy maps. It remains intentionally separate from the existing
-v2 site and submission runtime while later reduction/budget capabilities are
-added.
+work-conserving resource dispatch, idempotent database synchronization,
+deterministic lazy maps, and bounded reduction trees. It remains intentionally
+separate from the existing v2 site and submission runtime while later
+upgrade/budget capabilities are added.
 
 ## What runs today
 
@@ -34,6 +34,7 @@ module, then use:
 - `plan.inputSet(name, {itemSchema, manifestSchema})`;
 - `plan.task(nodeKey, taskDescriptor, callback?)`;
 - `plan.map(name, set, itemCallback, mapPolicyCallback?)`;
+- `plan.reduce(name, set, partitionCallback, reducePolicyCallback?)`;
 - `job.after(otherJob)`;
 - `job.output(port)`;
 - `plan.output(name, value)` and `plan.outputSet(name, set)`;
@@ -119,6 +120,30 @@ manifest from validated child refs. The run cannot succeed until that manifest
 artifact reference reaches durable `published` state. Empty maps publish an
 empty manifest without acquiring a task lease.
 
+## Bounded reduction behavior
+
+A reduction consumes a typed set through immutable partition artifacts. The
+compiled plan pins one exact homogeneous reducer, maximum fan-in, maximum
+levels, resource class, modules, and retry policy. Partition identity covers
+the original source digest, reduction key, level, ordinal, and ordered member
+keys/digests; completion timing does not affect membership or root identity.
+
+The engine materializes each member artifact only inside the reducer's private
+lease workspace and exposes read-only member paths through typed
+`workflow/task` input metadata. Workflow SQLite stores partition and output
+refs, counts, identities, and state—not member payloads.
+
+Completed partitions survive restart. When one level finishes, its outputs are
+ordered by partition ordinal and become the next bounded level. The run cannot
+succeed until one validated root ref is published. A single source item is its
+identity root; an empty source fails without a worker lease.
+
+The real word-count fixture reduces 257 map outputs through partition counts
+33 → 5 → 1 with fan-in eight, closes/reopens after a level-zero partition
+succeeds, and finishes with 296 total attempts. Capacity 1 and capacity 4
+produce the same root digest. Malformed-shard failure remains isolated from an
+unrelated successful run.
+
 ## HTTP and database behavior
 
 The HTTP fixture snapshots at most eight explicitly supplied article URLs.
@@ -157,7 +182,8 @@ cd web && pnpm exec tsc --noEmit --skipLibCheck \
 ```
 
 The focused tests cover the 12,000-row file workflow, real local HTTP and
-SQLite target servers, and a 1,807-item JavaScript lazy map. They prove typed
+SQLite target servers, a 1,807-item JavaScript lazy map, and a 257-item
+multi-level JavaScript reduction. They prove typed
 retry, allowlist and redirect denial,
 response limits, in-flight cancellation, independent resource refill,
 per-resource fairness, blocked projections, database reconfiguration denial,
@@ -184,7 +210,8 @@ control persistence and the published output manifest.
   workflow.
 - `pkg/testfixtures/workflowv3map` — real 1,807-item lazy-map workflow and
   trusted JavaScript bundle.
+- `pkg/testfixtures/workflowv3reduce` — real bounded word-count map/reduction
+  workflow and trusted JavaScript bundle.
 
-Later slices add bounded reductions, rolling registry generations, budgets,
-gates, and stronger process isolation. V3 does not translate or silently accept
-v2 raw operations.
+Later slices add rolling registry generations, budgets, gates, and stronger
+process isolation. V3 does not translate or silently accept v2 raw operations.

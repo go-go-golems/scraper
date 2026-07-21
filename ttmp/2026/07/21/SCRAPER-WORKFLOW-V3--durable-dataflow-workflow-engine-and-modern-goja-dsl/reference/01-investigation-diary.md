@@ -3731,3 +3731,110 @@ and isolated before worker-upgrade work begins.
 - Code commit: `e2c48f2`.
 - Normal source items: 257; fan-in: 8; levels: 3; reducer partitions: 39.
 - Race source items: 65.
+
+## Step 34: Complete the Slice 7 validation audit
+
+The bounded reduction slice now passes repository-wide validation and every
+explicit dedicated-design acceptance boundary has concrete evidence. Public
+help and architecture documents describe Slices 1–7 as implemented; Slice 8
+remains the next target.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 25)
+
+**Assistant interpretation:** Audit Slice 7 against its design, run the complete
+validation matrix, update public/design status, and close its task only if no
+reduction behavior is deferred.
+
+**Inferred user intent:** Preserve the strict slice-by-slice completion standard
+before introducing rolling code upgrades.
+
+### Outcome audit
+
+| Slice 7 requirement | Fresh evidence |
+|---|---|
+| Typed reduction authoring | `reduce<I,O>`, opaque partition ref, fan-in/max-level builder, exact DTS and authored goldens |
+| Bounded partition identity | Exact partition schema/key tests cover source digest, level, ordinal, ordered keys/digests, fan-in, order, and schema |
+| Bounded runtime input | Reducer rejects zero or more than eight members; lease workspace exposes only validated read-only member paths |
+| Deterministic tree | 257 items produce 33 → 5 → 1 partitions; capacity 1 and 4 produce identical root digest |
+| Restart recovery | Store closes after a level-zero partition succeeds; reopen reuses completed outputs and reaches exact 296 attempts |
+| Concurrent planning | Two independent SQLite connections materialize the same direct-set level idempotently with exactly two partitions |
+| Partial failure/retry isolation | Malformed shard records `REDUCTION_SHARD_INVALID`; unrelated run succeeds; successful siblings remain immutable |
+| Edge cardinality | One item publishes identity root without reducer; empty source fails without attempt |
+| Root publication | Run success requires published root ref; snapshot reopens root and verifies direct word-count oracle |
+| Cancellation/fencing | Cancel marks reduction/partitions; reducer nodes use existing lease token/cancel epoch and stale completion tests |
+| Projections | Source-wait and level-wait reasons plus source/level/partition/root fields derive from authoritative rows |
+| Privacy | Private document canary absent from root and SQLite/WAL/SHM; partition/member payloads stay in external artifacts/workspaces |
+| Migration | Old minimal database opens with additive reduction and partition tables/columns |
+
+### Verification audit
+
+- `make validate` passed all Go tests, web unit tests, generation, Go binary
+  build, TypeScript application build, and Vite production build.
+- Full isolated Go lint reported `0 issues`.
+- Runtime/store race suites passed.
+- Both JavaScript fixture files pass `node --check`.
+- Authoring/task DTS files compile with TypeScript and exact goldens pass.
+- Core partition identities and real fixture IR/plan goldens pass.
+- Public help renders `Workflow V3 Runtime Slices 1–7`.
+- Logcopter generated check, placeholder scan, docmgr frontmatter/doctor, and
+  `git diff --check` pass.
+
+### What I did
+
+- Updated public help, primary architecture, dedicated Slice 7 design, and the
+  all-slice guide with implementation/evidence status.
+- Repeated repository CI and every focused validation after the final
+  single-item, empty-source, concurrency, and failure-isolation changes.
+- Mapped the dedicated design and active goal clauses to the evidence above.
+
+### What worked
+
+- Final `make validate` passed; the runtime package completed in 37.401 seconds.
+- Race suites completed in about ten seconds.
+- No new build warning exists beyond the previously documented non-failing Vite
+  chunk advisory.
+
+### What didn't work
+
+- N/A during the final audit. The earlier lint style finding and its fix are
+  preserved in Step 33.
+
+### What I learned
+
+- Separate tests for large multi-level recovery, cross-connection planning,
+  completion-order identity, edge cardinality, and malformed input provide
+  clearer evidence than one oversized scenario attempting every fault.
+
+### What was tricky to build
+
+- The completion audit had to prove reducer input fan-in at both construction
+  and execution. Core validation enforces partition size, and trusted
+  JavaScript rejects an oversized lease-local member list.
+- Root publication for one item and many levels uses one final durable ref path
+  despite different execution histories.
+
+### What warrants a second pair of eyes
+
+- Level insertion is one bounded transaction for current 1,807-scale goals;
+  introduce paged level insertion before materially larger sources.
+- Reduction progress is currently part of queue snapshots for running runs;
+  Slice 9 will provide richer historical/attach projections.
+
+### What should be done in the future
+
+- Begin Slice 8 immutable rolling registry generations from its dedicated
+  candidate/activation/acquisition/draining/quarantine design.
+
+### Code review instructions
+
+- Review `e760069` and `e2c48f2`, then diary Steps 32–34.
+- Reproduce the verification matrix above.
+- Inspect three-level attempt cardinality and root oracle in the real integration
+  test.
+
+### Technical details
+
+- Slice 7 implementation commits: `e760069`, `e2c48f2`.
+- Normal tree: 257 map children + 39 reducer partitions = 296 attempts.
