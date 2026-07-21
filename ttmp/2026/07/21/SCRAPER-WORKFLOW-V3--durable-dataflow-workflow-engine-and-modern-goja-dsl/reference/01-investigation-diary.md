@@ -17,10 +17,14 @@ RelatedFiles:
       Note: Primary design produced by the investigation
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/02-source-catalogue-and-evidence-map.md
       Note: Evidence map and continuation entry point
+    - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md
+      Note: Step 4 cookbook deliverable
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/02-inventory-current-scripting.py
       Note: Reproducible scripting inventory described in Step 1
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/03-workflow-dsl-grammar-probe.mjs
       Note: Reproducible DSL grammar experiment described in Step 1
+    - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/04-check-cookbook-js.py
+      Note: Step 4 reproducible JavaScript syntax validator
 ExternalSources:
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/scraper
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/go-go-goja
@@ -30,6 +34,7 @@ LastUpdated: 2026-07-21T16:35:00Z
 WhatFor: Resume or review the workflow-v3 investigation without losing the commands, failures, evidence boundaries, and implementation risks that shaped the design.
 WhenToUse: Read before continuing implementation, reviewing the architecture, or validating the ticket deliverables.
 ---
+
 
 
 # Diary

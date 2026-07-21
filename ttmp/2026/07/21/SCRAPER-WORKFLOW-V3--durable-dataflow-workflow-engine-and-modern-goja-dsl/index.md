@@ -14,22 +14,28 @@ Intent: long-term
 Owners: []
 RelatedFiles: []
 ExternalSources: []
-Summary: ""
-LastUpdated: 2026-07-21T10:40:10.26018175-04:00
-WhatFor: ""
-WhenToUse: ""
+Summary: Ticket hub for the workflow-v3 architecture, JavaScript cookbook, evidence catalogue, experiments, and implementation diary.
+LastUpdated: 2026-07-21T17:50:00Z
+WhatFor: Navigate the complete design and examples for scraper's compact durable dataflow engine and modern Goja workflow DSL.
+WhenToUse: Start here when reviewing or implementing workflow v3.
 ---
 
 # Durable dataflow workflow engine and modern Goja DSL
 
 ## Overview
 
-<!-- Provide a brief overview of the ticket, its goals, and current status -->
+This ticket designs scraper workflow v3 as a generic durable dataflow engine with compact references, continuous resource-aware dispatch, immutable attempts, projections, lazy expansion, bounded reduction, transactional budgets, and a typed `require("workflow")` authoring module. It also preserves the evidence and executable probes that motivated the design.
+
+The architecture is proposed and documented; production implementation and the blocked real-provider TTC rerun remain future work.
 
 ## Key Links
 
-- **Related Files**: See frontmatter RelatedFiles field
-- **External Sources**: See frontmatter ExternalSources field
+- [Primary architecture and implementation guide](design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md)
+- [JavaScript cookbook and execution atlas](reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md)
+- [Source catalogue and evidence map](reference/02-source-catalogue-and-evidence-map.md)
+- [Investigation diary](reference/01-investigation-diary.md)
+- [Tasks](tasks.md)
+- [Changelog](changelog.md)
 
 ## Status
 
@@ -54,9 +60,8 @@ See [changelog.md](./changelog.md) for recent changes and decisions.
 
 ## Structure
 
-- design/ - Architecture and design documents
-- reference/ - Prompt packs, API contracts, context summaries
-- playbooks/ - Command sequences and test procedures
-- scripts/ - Temporary code and tooling
-- various/ - Working notes and research
-- archive/ - Deprecated or reference-only artifacts
+- `design-doc/` — architecture and implementation guide
+- `reference/` — diary, evidence map, and JavaScript cookbook
+- `scripts/` — reproducible evidence and syntax-validation tools
+- `scripts/output/` — deterministic probe/check results
+- `sources/` — preserved historical and xgoja reference material

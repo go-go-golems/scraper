@@ -1,0 +1,111 @@
+{
+  "blockCount": 17,
+  "checks": [
+    {
+      "error": null,
+      "index": 1,
+      "ok": true,
+      "startLine": 154
+    },
+    {
+      "error": null,
+      "index": 2,
+      "ok": true,
+      "startLine": 283
+    },
+    {
+      "error": null,
+      "index": 3,
+      "ok": true,
+      "startLine": 354
+    },
+    {
+      "error": null,
+      "index": 4,
+      "ok": true,
+      "startLine": 452
+    },
+    {
+      "error": null,
+      "index": 5,
+      "ok": true,
+      "startLine": 519
+    },
+    {
+      "error": null,
+      "index": 6,
+      "ok": true,
+      "startLine": 597
+    },
+    {
+      "error": null,
+      "index": 7,
+      "ok": true,
+      "startLine": 670
+    },
+    {
+      "error": null,
+      "index": 8,
+      "ok": true,
+      "startLine": 721
+    },
+    {
+      "error": null,
+      "index": 9,
+      "ok": true,
+      "startLine": 778
+    },
+    {
+      "error": null,
+      "index": 10,
+      "ok": true,
+      "startLine": 831
+    },
+    {
+      "error": null,
+      "index": 11,
+      "ok": true,
+      "startLine": 891
+    },
+    {
+      "error": null,
+      "index": 12,
+      "ok": true,
+      "startLine": 945
+    },
+    {
+      "error": null,
+      "index": 13,
+      "ok": true,
+      "startLine": 994
+    },
+    {
+      "error": null,
+      "index": 14,
+      "ok": true,
+      "startLine": 1048
+    },
+    {
+      "error": null,
+      "index": 15,
+      "ok": true,
+      "startLine": 1110
+    },
+    {
+      "error": null,
+      "index": 16,
+      "ok": true,
+      "startLine": 1157
+    },
+    {
+      "error": null,
+      "index": 17,
+      "ok": true,
+      "startLine": 1523
+    }
+  ],
+  "document": "ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md",
+  "failed": 0,
+  "passed": 17,
+  "schemaVersion": "workflow-cookbook-js-check/v1"
+}
