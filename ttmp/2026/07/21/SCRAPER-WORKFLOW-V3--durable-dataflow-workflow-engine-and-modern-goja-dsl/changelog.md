@@ -241,3 +241,12 @@ Step 28: froze strict item manifests and opaque deterministic map child keys; ha
 ### Related Files
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/manifest.go — Canonical lazy-map manifest and child identity
+
+## 2026-07-21
+
+Step 29: added additive expansion tables and atomic deterministic map-page materialization with backpressure, reopen, item resolution, and cross-connection evidence (commit 5ae1f14).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/expansion.go — Atomic lazy-map page state machine
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/schema.sql — Additive expansion persistence

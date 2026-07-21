@@ -3105,3 +3105,119 @@ child keys"
 
 - Code commit: `e88f95d`.
 - Item manifest schema: `scraper-workflow-item-manifest/v1`.
+
+## Step 29: Materialize durable lazy-map pages
+
+The v3 store now persists map control state separately from ordinary static
+plans and materializes deterministic child nodes in bounded atomic pages.
+Each child uses the exact compiled task template and one compact item artifact
+reference. Existing node leasing, attempts, resource admission, retries,
+fencing, and output validation execute dynamic children without a second task
+path.
+
+Expansion respects materialized-ahead backpressure, survives store close/reopen,
+and serializes correctly across independent SQLite connections. Child
+completion advances authoritative terminal counts in the same fenced
+completion transaction.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 25)
+
+**Assistant interpretation:** Implement the first durable expansion transaction
+and prove restart, backpressure, item resolution, and multi-connection safety.
+
+**Inferred user intent:** Make map scale-out a real store-backed state machine,
+not only a canonical DSL feature.
+
+**Commit (code):** `5ae1f14` — "workflowv3: materialize durable lazy map pages"
+
+### What I did
+
+- Added additive `v3_expansions`, `v3_expansion_pages`, and `v3_map_items`
+  tables and indexes.
+- Extended run submission to validate/store set input refs and initialize map
+  state without payloads.
+- Added `ExpandNextPage` with manifest/ref verification, cardinality ceiling,
+  source identity checks, deterministic page digest, child key/ordinal,
+  dynamic exact `v3_nodes`, item refs, dependencies, cursor CAS, event, and
+  bounded backpressure.
+- Added `map-item` lease input resolution through compact item rows.
+- Made fenced child completion advance map terminal state and prevented run
+  success while any expansion is nonterminal.
+- Added zero-cardinality completion without a worker lease.
+- Hardened legacy store test artifact helpers after strict hex validation.
+- Added reopen/backpressure/resolve, independent-connection concurrency,
+  empty-map, cardinality, and identity-drift tests.
+
+### Why
+
+- Dynamic children should reuse normal durable execution instead of introducing
+  map-specific attempts or leases.
+- Cursor, child rows, and page evidence must commit together so every crash is
+  either before or after one complete page.
+
+### What worked
+
+- `GOWORK=off go test ./pkg/workflowv3sqlite -count=1` passed.
+- `GOWORK=off go test -race ./pkg/workflowv3sqlite -count=1` passed.
+- Focused isolated lint reported `0 issues`.
+- Core, authoring, runtime, and SQLite focused package suites pass together.
+- Two independent connections materialize two exact pages with four unique
+  items and no duplicate node.
+- Closing after page one and reopening resumes at index two.
+
+### What didn't work
+
+- Strict SHA-256 validation exposed old test helpers that constructed digests
+  from non-hex run-name seeds. The store tests failed with errors such as:
+
+  `run input "source": artifact digest: must be sha256 hex: encoding/hex: invalid byte`
+
+  The helper now hashes seeds with SHA-256 and emits real hex; all suites pass.
+
+### What I learned
+
+- Backpressure must refuse an entire page when available ahead capacity is
+  smaller than the next deterministic page; partial pages would make page
+  boundaries dependent on completion timing.
+- Dynamic nodes can keep symbolic `map-item` bindings because the node key joins
+  to exactly one compact item ref at lease input resolution.
+
+### What was tricky to build
+
+- The source artifact must match every submitted ref field, not only digest,
+  while canonical manifest bytes must independently reproduce digest and size.
+- Dynamic ordinals need deterministic nonoverlapping ranges per map while node
+  identity remains independent of ordinal.
+- Empty input has no child completion to advance state, so the expansion
+  transaction must terminalize the map/run directly without creating an
+  attempt.
+
+### What warrants a second pair of eyes
+
+- Dynamic ordinal range arithmetic based on preceding maps' `MaxItems`.
+- Page planning currently decodes the complete manifest before the transaction;
+  the 1,807-item fixture is bounded, but larger production manifests may need a
+  verified page index.
+- Map result-manifest publication is still the next required boundary before
+  Slice 6 can complete.
+
+### What should be done in the future
+
+- Add dispatcher maintenance integration so expansion and execution interleave
+  automatically.
+- Build/publish the ordered map output manifest and expose authoritative map
+  projections.
+- Add cancellation state updates and the 1,807-item real fixture.
+
+### Code review instructions
+
+- Start with `expansion_test.go`, then read `ExpandNextPage` transaction order.
+- Verify dynamic nodes enter the existing lease/attempt/complete path.
+- Review `Complete` expansion update and run-terminal predicate together.
+
+### Technical details
+
+- Code commit: `5ae1f14`.
+- First page test policy: page size 2, materialized-ahead 2.
