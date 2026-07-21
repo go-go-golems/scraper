@@ -425,8 +425,9 @@ WHERE run_id = ? AND map_key = ? AND status = 'succeeded'`,
 UPDATE v3_runs SET status = 'succeeded', updated_at = ?
 WHERE run_id = ? AND status = 'running'
   AND NOT EXISTS (SELECT 1 FROM v3_nodes WHERE run_id = ? AND status != 'succeeded')
-  AND NOT EXISTS (SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'published')`,
-		formatTime(now), runID, runID, runID); err != nil {
+  AND NOT EXISTS (SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'published')
+  AND NOT EXISTS (SELECT 1 FROM v3_reductions WHERE run_id = ? AND status != 'published')`,
+		formatTime(now), runID, runID, runID, runID); err != nil {
 		return err
 	}
 	if err := insertEvent(ctx, tx, runID, "", "map.published", map[string]any{

@@ -106,6 +106,53 @@ CREATE TABLE IF NOT EXISTS v3_map_items (
   FOREIGN KEY (run_id, node_key) REFERENCES v3_nodes(run_id, node_key) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS v3_reductions (
+  run_id TEXT NOT NULL,
+  reduce_key TEXT NOT NULL,
+  source_kind TEXT NOT NULL,
+  source_name TEXT,
+  source_map_key TEXT,
+  source_schema TEXT,
+  source_digest TEXT,
+  source_media_type TEXT,
+  source_size_bytes INTEGER,
+  source_locator TEXT,
+  fan_in INTEGER NOT NULL,
+  max_levels INTEGER NOT NULL,
+  current_level INTEGER NOT NULL DEFAULT -1,
+  source_items INTEGER NOT NULL DEFAULT -1,
+  current_items INTEGER NOT NULL DEFAULT -1,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'executing', 'succeeded', 'published', 'failed', 'canceled')),
+  root_schema TEXT,
+  root_digest TEXT,
+  root_media_type TEXT,
+  root_size_bytes INTEGER,
+  root_locator TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (run_id, reduce_key),
+  FOREIGN KEY (run_id) REFERENCES v3_runs(run_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS v3_reduction_partitions (
+  run_id TEXT NOT NULL,
+  reduce_key TEXT NOT NULL,
+  level INTEGER NOT NULL,
+  ordinal INTEGER NOT NULL,
+  partition_digest TEXT NOT NULL,
+  member_count INTEGER NOT NULL,
+  node_key TEXT NOT NULL,
+  input_schema TEXT NOT NULL,
+  input_digest TEXT NOT NULL,
+  input_media_type TEXT NOT NULL,
+  input_size_bytes INTEGER NOT NULL,
+  input_locator TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'canceled')),
+  PRIMARY KEY (run_id, reduce_key, level, ordinal),
+  UNIQUE (run_id, node_key),
+  FOREIGN KEY (run_id, reduce_key) REFERENCES v3_reductions(run_id, reduce_key) ON DELETE CASCADE,
+  FOREIGN KEY (run_id, node_key) REFERENCES v3_nodes(run_id, node_key) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS v3_run_resource_dispatch (
   run_id TEXT NOT NULL,
   resource_class TEXT NOT NULL,
@@ -175,3 +222,7 @@ CREATE INDEX IF NOT EXISTS v3_expansions_status_idx
   ON v3_expansions(status, updated_at, run_id, map_key);
 CREATE INDEX IF NOT EXISTS v3_map_items_node_idx
   ON v3_map_items(run_id, node_key);
+CREATE INDEX IF NOT EXISTS v3_reductions_status_idx
+  ON v3_reductions(status, updated_at, run_id, reduce_key);
+CREATE INDEX IF NOT EXISTS v3_reduction_partitions_node_idx
+  ON v3_reduction_partitions(run_id, node_key);

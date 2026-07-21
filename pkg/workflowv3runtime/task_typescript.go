@@ -4,12 +4,21 @@ package workflowv3runtime
 // require("workflow/task") and the lease-scoped context passed to entrypoints.
 func TaskTypeScript() string {
 	return `declare module "workflow/task" {
+  export interface ArtifactMember {
+    readonly key: string;
+    readonly schema: string;
+    readonly digest: string;
+    readonly mediaType: string;
+    readonly size: number;
+    readonly path: string;
+  }
   export interface ArtifactInput {
     readonly schema: string;
     readonly digest: string;
     readonly mediaType: string;
     readonly size: number;
     readonly path: string;
+    readonly members?: readonly ArtifactMember[];
   }
   export interface TaskIdentity {
     readonly runId: string;

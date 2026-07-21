@@ -86,6 +86,129 @@ func (e *Engine) FinalizeOneMap(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+func (e *Engine) ReduceOne(ctx context.Context) (bool, error) {
+	if err := e.validate(); err != nil {
+		return false, err
+	}
+	candidates, err := e.Store.ReductionCandidates(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, candidate := range candidates {
+		if candidate.Status == "pending" {
+			body, err := workflowv3.ReadArtifact(ctx, e.Artifacts, candidate.Source)
+			if err != nil {
+				return e.failReduction(ctx, candidate, "validation", "REDUCTION_SOURCE_ARTIFACT")
+			}
+			manifest, err := workflowv3.DecodeItemManifest(body)
+			if err != nil {
+				return e.failReduction(ctx, candidate, "validation", "REDUCTION_SOURCE_MANIFEST")
+			}
+			if len(manifest.Items) == 0 {
+				return e.failReduction(ctx, candidate, "validation", "REDUCTION_SOURCE_EMPTY")
+			}
+			if len(manifest.Items) == 1 {
+				if err := e.Store.PublishReductionRoot(
+					ctx, candidate.RunID, candidate.ReduceKey, candidate.Source,
+					1, manifest.Items[0].Value, e.now(),
+				); err != nil {
+					return false, err
+				}
+				return true, nil
+			}
+			if err := e.materializeReductionPartitions(ctx, candidate, manifest.Items, 0, len(manifest.Items)); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+		members, _, nextLevel, ready, err := e.Store.ReductionLevelMembers(
+			ctx, candidate.RunID, candidate.ReduceKey,
+		)
+		if err != nil {
+			return false, err
+		}
+		if !ready {
+			continue
+		}
+		if len(members) == 1 {
+			if err := e.Store.PublishReductionRoot(
+				ctx, candidate.RunID, candidate.ReduceKey, candidate.Source,
+				candidate.SourceItems, members[0].Value, e.now(),
+			); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+		if nextLevel >= candidate.MaxLevels {
+			return e.failReduction(ctx, candidate, "configuration", "REDUCTION_LEVEL_LIMIT")
+		}
+		if err := e.materializeReductionPartitions(
+			ctx, candidate, members, nextLevel, candidate.SourceItems,
+		); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func (e *Engine) failReduction(
+	ctx context.Context,
+	candidate workflowv3sqlite.ReductionCandidate,
+	class, code string,
+) (bool, error) {
+	failure := workflowv3.Failure{
+		Class: class, Code: code, Retryable: false,
+		Message: "reduction failed validation",
+	}
+	if err := e.Store.FailReduction(
+		ctx, candidate.RunID, candidate.ReduceKey, failure, e.now(),
+	); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (e *Engine) materializeReductionPartitions(
+	ctx context.Context,
+	candidate workflowv3sqlite.ReductionCandidate,
+	members []workflowv3.ManifestItem,
+	level, sourceItems int,
+) error {
+	partitions := make([]workflowv3sqlite.ReductionPartitionInput, 0,
+		(len(members)+candidate.FanIn-1)/candidate.FanIn)
+	for first, ordinal := 0, 0; first < len(members); first, ordinal = first+candidate.FanIn, ordinal+1 {
+		last := first + candidate.FanIn
+		if last > len(members) {
+			last = len(members)
+		}
+		partition, err := workflowv3.NewReductionPartition(
+			candidate.ReduceKey, candidate.Source.Digest, members[first].Value.Schema,
+			level, ordinal, candidate.FanIn, members[first:last],
+		)
+		if err != nil {
+			return err
+		}
+		body, err := workflowv3.EncodeReductionPartition(partition, candidate.FanIn)
+		if err != nil {
+			return err
+		}
+		ref, err := e.Artifacts.Put(
+			ctx, workflowv3.ReductionPartitionSchemaV1, "application/json", body,
+		)
+		if err != nil {
+			return err
+		}
+		partitions = append(partitions, workflowv3sqlite.ReductionPartitionInput{
+			Partition: partition, Ref: ref,
+		})
+	}
+	return e.Store.MaterializeReductionLevel(
+		ctx, candidate.RunID, candidate.ReduceKey, candidate.Source,
+		sourceItems, level, partitions, e.now(),
+	)
+}
+
 func (e *Engine) RunOne(ctx context.Context) (bool, error) {
 	if err := e.validate(); err != nil {
 		return false, err
@@ -98,9 +221,13 @@ func (e *Engine) RunOne(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	reduced, err := e.ReduceOne(ctx)
+	if err != nil {
+		return false, err
+	}
 	lease, err := e.Store.LeaseNext(ctx, e.Registry, e.now(), e.leaseDuration())
 	if err != nil || lease == nil {
-		return expanded || finalized, err
+		return expanded || finalized || reduced, err
 	}
 	return true, e.ExecuteLease(ctx, *lease)
 }

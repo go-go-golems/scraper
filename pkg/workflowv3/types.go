@@ -238,9 +238,21 @@ type MapProgress struct {
 	BacklogToExecute     int    `json:"backlogToExecute"`
 }
 
+type ReductionProgress struct {
+	RunID               RunID  `json:"runId"`
+	ReduceKey           string `json:"reduceKey"`
+	Status              string `json:"status"`
+	SourceItems         int    `json:"sourceItems"`
+	CurrentLevel        int    `json:"currentLevel"`
+	PartitionsTotal     int    `json:"partitionsTotal"`
+	PartitionsSucceeded int    `json:"partitionsSucceeded"`
+	RootReady           bool   `json:"rootReady"`
+}
+
 type QueueSnapshot struct {
-	Ready            int            `json:"ready"`
-	ActiveByResource map[string]int `json:"activeByResource"`
-	BlockedByReason  map[string]int `json:"blockedByReason"`
-	Maps             []MapProgress  `json:"maps,omitempty"`
+	Ready            int                 `json:"ready"`
+	ActiveByResource map[string]int      `json:"activeByResource"`
+	BlockedByReason  map[string]int      `json:"blockedByReason"`
+	Maps             []MapProgress       `json:"maps,omitempty"`
+	Reductions       []ReductionProgress `json:"reductions,omitempty"`
 }

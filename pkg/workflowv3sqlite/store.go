@@ -155,6 +155,34 @@ INSERT INTO v3_expansions(
 			return fmt.Errorf("insert expansion %s: %w", mapped.Key, err)
 		}
 	}
+	for _, reduced := range plan.Reductions {
+		var source *workflowv3.ArtifactRef
+		var sourceName, sourceMapKey any
+		switch reduced.Source.Source {
+		case "set-input":
+			ref := inputs[reduced.Source.Name]
+			source = &ref
+			sourceName = reduced.Source.Name
+		case "map-output":
+			sourceMapKey = reduced.Source.MapKey
+		}
+		var sourceSchema, sourceDigest, sourceMediaType, sourceSize, sourceLocator any
+		if source != nil {
+			sourceSchema, sourceDigest = source.Schema, source.Digest
+			sourceMediaType, sourceSize, sourceLocator = source.MediaType, source.Size, source.Locator
+		}
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO v3_reductions(
+  run_id, reduce_key, source_kind, source_name, source_map_key,
+  source_schema, source_digest, source_media_type, source_size_bytes,
+  source_locator, fan_in, max_levels, status, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+			runID, reduced.Key, reduced.Source.Source, sourceName, sourceMapKey,
+			sourceSchema, sourceDigest, sourceMediaType, sourceSize, sourceLocator,
+			reduced.Policy.FanIn, reduced.Policy.MaxLevels, stamp); err != nil {
+			return fmt.Errorf("insert reduction %s: %w", reduced.Key, err)
+		}
+	}
 	if err := insertEvent(ctx, tx, runID, "", "run.created", map[string]any{
 		"planDigest": plan.Digest,
 	}, now); err != nil {
@@ -346,6 +374,12 @@ FROM v3_node_outputs WHERE run_id = ? AND node_key = ? AND port = ?`,
 SELECT input_schema, input_digest, input_media_type, input_size_bytes, input_locator
 FROM v3_map_items WHERE run_id = ? AND map_key = ? AND node_key = ?`,
 				lease.RunID, binding.MapKey, lease.NodeKey)
+		case "reduction-partition":
+			row = s.db.QueryRowContext(ctx, `
+SELECT input_schema, input_digest, input_media_type, input_size_bytes, input_locator
+FROM v3_reduction_partitions
+WHERE run_id = ? AND reduce_key = ? AND node_key = ?`,
+				lease.RunID, binding.ReduceKey, lease.NodeKey)
 		default:
 			return nil, fmt.Errorf("unsupported binding source %q", binding.Source)
 		}
@@ -417,6 +451,12 @@ WHERE run_id = ? AND EXISTS (
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
+UPDATE v3_reduction_partitions SET status = 'succeeded'
+WHERE run_id = ? AND node_key = ? AND status IN ('pending','running')`,
+		lease.RunID, lease.NodeKey); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
 UPDATE v3_runs SET status = 'succeeded', updated_at = ?
 WHERE run_id = ? AND status = 'running'
   AND NOT EXISTS (
@@ -424,7 +464,10 @@ WHERE run_id = ? AND status = 'running'
   )
   AND NOT EXISTS (
     SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'published'
-  )`, stamp, lease.RunID, lease.RunID, lease.RunID); err != nil {
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM v3_reductions WHERE run_id = ? AND status != 'published'
+  )`, stamp, lease.RunID, lease.RunID, lease.RunID, lease.RunID); err != nil {
 		return err
 	}
 	if err := insertEvent(ctx, tx, lease.RunID, lease.NodeKey, "node.succeeded", map[string]any{
@@ -493,6 +536,23 @@ WHERE run_id = ? AND status NOT IN ('published','failed','canceled')
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `
+UPDATE v3_reduction_partitions SET status = 'failed'
+WHERE run_id = ? AND node_key = ? AND status IN ('pending','running')`,
+			lease.RunID, lease.NodeKey); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+UPDATE v3_reductions SET status = 'failed', updated_at = ?
+WHERE run_id = ? AND status NOT IN ('published','failed','canceled')
+  AND EXISTS (
+    SELECT 1 FROM v3_reduction_partitions partition
+    WHERE partition.run_id = v3_reductions.run_id
+      AND partition.reduce_key = v3_reductions.reduce_key
+      AND partition.node_key = ?
+  )`, stamp, lease.RunID, lease.NodeKey); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
 UPDATE v3_runs SET status = 'failed', updated_at = ?
 WHERE run_id = ? AND status = 'running'`, stamp, lease.RunID); err != nil {
 			return err
@@ -539,6 +599,16 @@ UPDATE v3_expansions SET status = 'canceled', updated_at = ?
 WHERE run_id = ? AND status != 'published'`, stamp, runID); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE v3_reductions SET status = 'canceled', updated_at = ?
+WHERE run_id = ? AND status != 'published'`, stamp, runID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE v3_reduction_partitions SET status = 'canceled'
+WHERE run_id = ? AND status IN ('pending','running')`, runID); err != nil {
+		return err
+	}
 	if err := insertEvent(ctx, tx, runID, "", "run.canceled", map[string]any{}, now); err != nil {
 		return err
 	}
@@ -571,6 +641,11 @@ FROM v3_run_inputs WHERE run_id = ? AND name = ?`, runID, output.Value.Name)
 SELECT schema_id, digest, media_type, size_bytes, locator
 FROM v3_node_outputs WHERE run_id = ? AND node_key = ? AND port = ?`,
 				runID, output.Value.NodeKey, output.Value.Port)
+		case "reduction-output":
+			row = s.db.QueryRowContext(ctx, `
+SELECT root_schema, root_digest, root_media_type, root_size_bytes, root_locator
+FROM v3_reductions WHERE run_id = ? AND reduce_key = ? AND status = 'published'`,
+				runID, output.Value.ReduceKey)
 		default:
 			return workflowv3.RunSnapshot{}, fmt.Errorf("unsupported output source %q", output.Value.Source)
 		}

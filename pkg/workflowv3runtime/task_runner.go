@@ -240,12 +240,60 @@ func materializeInputs(ctx context.Context, store workflowv3.ArtifactStore, refs
 			_ = os.RemoveAll(workspace)
 			return "", nil, fmt.Errorf("write task input %s: %w", port, err)
 		}
-		values[port] = map[string]any{
+		value := map[string]any{
 			"schema": ref.Schema, "digest": ref.Digest, "mediaType": ref.MediaType,
 			"size": ref.Size, "path": "/" + name,
 		}
+		if ref.Schema == workflowv3.ReductionPartitionSchemaV1 {
+			members, err := materializeReductionMembers(ctx, store, workspace, port, body)
+			if err != nil {
+				_ = os.RemoveAll(workspace)
+				return "", nil, fmt.Errorf("materialize reduction input %s: %w", port, err)
+			}
+			value["members"] = members
+		}
+		values[port] = value
 	}
 	return workspace, values, nil
+}
+
+func materializeReductionMembers(
+	ctx context.Context,
+	store workflowv3.ArtifactStore,
+	workspace, port string,
+	body []byte,
+) ([]map[string]any, error) {
+	var partition workflowv3.ReductionPartition
+	if err := workflowv3.StrictDecode(body, &partition); err != nil {
+		return nil, err
+	}
+	if err := workflowv3.ValidateReductionPartition(partition, len(partition.Members)); err != nil {
+		return nil, err
+	}
+	directory := port + "-members"
+	if err := os.Mkdir(filepath.Join(workspace, directory), 0o700); err != nil {
+		return nil, err
+	}
+	members := make([]map[string]any, 0, len(partition.Members))
+	for index, member := range partition.Members {
+		memberBody, err := workflowv3.ReadArtifact(ctx, store, member.Value)
+		if err != nil {
+			return nil, fmt.Errorf("read member %q: %w", member.Key, err)
+		}
+		name := fmt.Sprintf("%04d.artifact", index)
+		if err := os.WriteFile(filepath.Join(workspace, directory, name), memberBody, 0o400); err != nil {
+			return nil, err
+		}
+		members = append(members, map[string]any{
+			"key": member.Key, "schema": member.Value.Schema,
+			"digest": member.Value.Digest, "mediaType": member.Value.MediaType,
+			"size": member.Value.Size, "path": "/" + directory + "/" + name,
+		})
+	}
+	if err := os.Chmod(filepath.Join(workspace, directory), 0o500); err != nil {
+		return nil, err
+	}
+	return members, nil
 }
 
 func validateInputRefs(spec workflowv3.TaskSpec, refs map[string]workflowv3.ArtifactRef) error {

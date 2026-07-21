@@ -74,6 +74,53 @@ ORDER BY e.run_id, e.map_key`)
 	}
 
 	rows, err = s.db.QueryContext(ctx, `
+SELECT reduction.run_id, reduction.reduce_key, reduction.status,
+  reduction.source_items, reduction.current_level,
+  COUNT(partition.node_key),
+  COALESCE(SUM(CASE WHEN partition.status = 'succeeded' THEN 1 ELSE 0 END), 0),
+  reduction.root_digest IS NOT NULL,
+  COALESCE(reduction.source_digest, expansion.output_digest) IS NOT NULL
+FROM v3_reductions reduction
+JOIN v3_runs run ON run.run_id = reduction.run_id
+LEFT JOIN v3_reduction_partitions partition
+  ON partition.run_id = reduction.run_id
+ AND partition.reduce_key = reduction.reduce_key
+ AND partition.level = reduction.current_level
+LEFT JOIN v3_expansions expansion
+  ON expansion.run_id = reduction.run_id
+ AND expansion.map_key = reduction.source_map_key
+ AND expansion.status = 'published'
+WHERE run.status = 'running'
+GROUP BY reduction.run_id, reduction.reduce_key
+ORDER BY reduction.run_id, reduction.reduce_key`)
+	if err != nil {
+		return snapshot, err
+	}
+	for rows.Next() {
+		var progress workflowv3.ReductionProgress
+		var sourceReady bool
+		if err := rows.Scan(
+			&progress.RunID, &progress.ReduceKey, &progress.Status,
+			&progress.SourceItems, &progress.CurrentLevel,
+			&progress.PartitionsTotal, &progress.PartitionsSucceeded,
+			&progress.RootReady, &sourceReady,
+		); err != nil {
+			_ = rows.Close()
+			return snapshot, err
+		}
+		switch {
+		case progress.Status == "pending" && !sourceReady:
+			snapshot.BlockedByReason["reduction-source"]++
+		case progress.Status == "executing" && progress.PartitionsSucceeded < progress.PartitionsTotal:
+			snapshot.BlockedByReason["reduction-level"]++
+		}
+		snapshot.Reductions = append(snapshot.Reductions, progress)
+	}
+	if err := rows.Close(); err != nil {
+		return snapshot, err
+	}
+
+	rows, err = s.db.QueryContext(ctx, `
 SELECT n.task_kind, n.task_version, n.bundle_digest, n.entrypoint,
   n.task_abi, n.modules_json, n.resource_class, n.max_attempts,
   n.retry_backoff_ms, n.ready_at,
