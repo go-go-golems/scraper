@@ -28,9 +28,9 @@ RelatedFiles:
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/04-check-cookbook-js.py
       Note: Extracts and syntax-checks every JavaScript fence
 ExternalSources: []
-Summary: A broad non-RAG cookbook showing custom task-bundle authoring modules and exact worker implementations transforming through workflow IR, compiled jobs, durable nodes, leases, attempts, and outputs.
-LastUpdated: 2026-07-21T19:05:00Z
-WhatFor: Pressure-test and teach workflow v3 by showing how custom domain JavaScript bundles supply task descriptors and worker implementations for varied durable workflows.
+Summary: A self-contained non-RAG cookbook with fifteen workflows, one companion JavaScript task-bundle catalog per example, and complete authoring-to-worker execution mappings.
+LastUpdated: 2026-07-21T20:00:00Z
+WhatFor: Teach and pressure-test workflow v3 with paired workflow scripts and task bundles that map through descriptors, compiled plans, sealed worker registries, durable nodes, attempts, and outputs.
 WhenToUse: Read when implementing the workflow module/compiler, writing workflow definitions, adding task providers, or reviewing how authored scripts become durable execution.
 ---
 
@@ -53,7 +53,7 @@ The examples cover linear pipelines, web scraping, paginated API synchronization
 
 These scripts are **executable design examples for the proposed workflow-v3 API**. They are not expected to run against scraper v2 today. In particular:
 
-- `require("workflow")` is a proposed native module, while example domain imports such as `require("acme-web-tasks")` are descriptor-only authoring modules generated from immutable JavaScript task bundles;
+- `require("workflow")` is a proposed native module, while example domain imports such as `require("cookbook-news-snapshot-tasks")` are descriptor-only authoring modules generated from immutable JavaScript task bundles;
 - task factories such as `web.tasks.fetch(...)` return portable task descriptors; they neither register implementations nor perform network access while the authoring script runs;
 - workers load the corresponding execution bundles separately from an approved bundle lock, verify them, seal a registry generation, and advertise exact implementation digests;
 - `workflow.compile(...)` is pure with respect to execution;
@@ -114,7 +114,7 @@ Every example follows the same pipeline regardless of domain.
 
 ```text
 1. Load authoring modules
-   require("workflow"), require("acme-web-tasks"), require("acme-data-tasks"), ...
+   require("workflow"), require("cookbook-news-snapshot-tasks"), ...
                            │
 2. Invoke workflow.define callback immediately
    Go-backed builders create hidden typed handles
@@ -178,7 +178,7 @@ A simplified normalized job is:
   "item": {"name": "$item", "schema": "web-url-ref/v1"},
   "task": {
     "schemaVersion": "scraper-task-descriptor/v1",
-    "kind": "acme.web.fetch",
+    "kind": "cookbook.news.fetch",
     "version": "v1",
     "inputSchema": "web-fetch-input/v1",
     "outputSchema": "web-fetch-output/v1",
@@ -191,7 +191,7 @@ A simplified normalized job is:
 }
 ```
 
-At compile time the host may bind `internet` to `http.public.egress`, select exact implementation `acme.web.fetch@v1 + bundle digest + entrypoint + ABI`, cap requested concurrency, and add a host-required retry ceiling. The compiled plan records both requested/effective policy and exact executable identity.
+At compile time the host may bind `internet` to `http.public.egress`, select exact implementation `cookbook.news.fetch@v1 + bundle digest + entrypoint + ABI`, cap requested concurrency, and add a host-required retry ceiling. The compiled plan records both requested/effective policy and exact executable identity.
 
 ### What the authoring modules may and may not do
 
@@ -265,29 +265,32 @@ The workflow can request lower limits but cannot raise these ceilings. Credentia
 
 These are proposed **domain-authored JavaScript task bundles**, not scraper-native modules. The workflow script imports each bundle's generated descriptor-only authoring module. Workers load its execution artifact independently and advertise the exact implementation digest.
 
-| Authoring import | Local variable | Task namespace | Worker authority requested by bundle |
-|---|---|---|---|
-| `acme-web-tasks` | `web` | `acme.web.*` | bounded HTTP and HTML artifact resolution |
-| `acme-partner-api-tasks` | `api` | `acme.partner-api.*` | named partner APIs through host clients |
-| `acme-data-tasks` | `data` | `acme.data.*` | compact refs and content-addressed datasets |
-| `acme-file-tasks` | `files` | `acme.files.*` | named artifact stores, not arbitrary host paths |
-| `studio-media-tasks` | `media` | `studio.media.*` | sandboxed media tools and object storage |
-| `acme-analytics-tasks` | `analytics` | `acme.analytics.*` | CPU and compact shard manifests |
-| `company-security-tasks` | `security` | `company.security.*` | sandboxed scanners and signing service |
-| `acme-ml-tasks` | `ml` | `acme.ml.*` | named model profile and GPU resource |
-| `company-notification-tasks` | `notify` | `company.notify.*` | configured channel clients |
-| `company-database-tasks` | `database` | `company.database.*` | named source/destination handles |
-| `company-build-tasks` | `build` | `company.build.*` | sandboxed build tools, artifact store, signer |
-| `company-ops-tasks` | `ops` | `company.ops.*` | operator signals and bounded probes/deployments |
+| Example | Companion authoring import | Export shape | Task namespace |
+|---:|---|---|---|
+| 1 | `cookbook-linear-transform-tasks` | `data` | `cookbook.linear.*` |
+| 2 | `cookbook-news-snapshot-tasks` | `{web, data}` | `cookbook.news.*` |
+| 3 | `cookbook-partner-sync-tasks` | `{api, data}` | `cookbook.partner-sync.*` |
+| 4 | `cookbook-etl-quality-tasks` | `data` | `cookbook.etl.*` |
+| 5 | `cookbook-media-package-tasks` | `{media, files}` | `cookbook.media.*` |
+| 6 | `cookbook-word-count-tasks` | `analytics` | `cookbook.word-count.*` |
+| 7 | `cookbook-security-gate-tasks` | `security` | `cookbook.security.*` |
+| 8 | `cookbook-image-classification-tasks` | `ml` | `cookbook.image-classification.*` |
+| 9 | `cookbook-notification-tasks` | `notify` | `cookbook.notification.*` |
+| 10 | `cookbook-database-backup-tasks` | `database` | `cookbook.database-backup.*` |
+| 11 | `cookbook-inventory-reconciliation-tasks` | `{data, api}` | `cookbook.inventory.*` |
+| 12 | `cookbook-release-build-tasks` | `build` | `cookbook.release.*` |
+| 13 | `cookbook-approved-deployment-tasks` | `ops` | `cookbook.deployment.*` |
+| 14 | `cookbook-probe-slo-tasks` | `{ops, notify}` | `cookbook.probe.*` |
+| 15 | `cookbook-document-conversion-tasks` | `files` | `cookbook.document.*` |
 
 A real deployment can split or combine bundles differently. Names are globally namespaced, contract versions are immutable, and a compiled plan pins bundle digest, entrypoint, and task ABI in addition to task kind/version. See [Reproducible JavaScript task bundles and worker registries](../design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md).
 
 ## How a custom bundle supplies a cookbook task
 
-The `acme-data-tasks` import in Example 1 represents the descriptor-only authoring half of an immutable task bundle. The domain developer owns a source tree such as:
+The `cookbook-linear-transform-tasks` import in Example 1 represents the descriptor-only authoring half of an immutable task bundle. The domain developer owns a source tree such as:
 
 ```text
-acme-data-tasks/
+cookbook-linear-transform-tasks/
   task-bundle.yaml
   catalog.js
   authoring.js
@@ -307,13 +310,13 @@ acme-data-tasks/
 const taskBundle = require("workflow/task-bundle");
 
 module.exports = taskBundle.define({
-  name: "acme-data-tasks",
-  version: "1.4.2",
-  namespace: "acme.data",
+  name: "cookbook-linear-transform-tasks",
+  version: "1.0.0",
+  namespace: "cookbook.linear",
   abiVersion: "scraper-js-task/v1",
 }, bundle => {
   bundle.task({
-    kind: "acme.data.normalize-customers",
+    kind: "cookbook.linear.normalize-customers",
     version: "v1",
     entrypoint: "./tasks/normalize-customers.js#run",
     inputSchema: "normalize-customer-input/v1",
@@ -322,6 +325,24 @@ module.exports = taskBundle.define({
     },
     defaultResource: "cpu.transform",
     timeoutCeiling: "10m",
+    semantics: {
+      determinism: "deterministic",
+      idempotency: "pure",
+      sideEffects: ["artifact-read", "artifact-write"],
+    },
+    modules: ["workflow/task", "data/records"],
+  });
+
+  bundle.task({
+    kind: "cookbook.linear.validate-dataset",
+    version: "v1",
+    entrypoint: "./tasks/validate-dataset.js#run",
+    inputSchema: "validate-dataset-input/v1",
+    outputs: {
+      validatedDataset: "validated-customer-dataset-ref/v1",
+    },
+    defaultResource: "cpu.transform",
+    timeoutCeiling: "5m",
     semantics: {
       determinism: "deterministic",
       idempotency: "pure",
@@ -363,7 +384,7 @@ exports.run = task.implementation(async ctx => {
 });
 ```
 
-This module executes only under a node lease. It receives a fresh runtime and lease-scoped task context; it cannot register tasks, submit workflows, open arbitrary stores, or access undeclared native modules.
+The companion `tasks/validate-dataset.js` uses the same `workflow/task` wrapper, opens the normalized dataset by schema, checks cardinality and uniqueness, and commits `validatedDataset` only after every rule passes. Both entrypoints execute only under a node lease. They receive fresh runtimes and lease-scoped task contexts; they cannot register tasks, submit workflows, open arbitrary stores, or access undeclared native modules.
 
 ### Descriptor-only authoring module
 
@@ -375,23 +396,31 @@ const descriptors = require("workflow/task-descriptors");
 exports.tasks = {
   normalizeCustomers(options) {
     return descriptors.task({
-      kind: "acme.data.normalize-customers",
+      kind: "cookbook.linear.normalize-customers",
       version: "v1",
       config: {source: options.source},
+    });
+  },
+
+  validateDataset(options) {
+    return descriptors.task({
+      kind: "cookbook.linear.validate-dataset",
+      version: "v1",
+      config: {dataset: options.dataset},
     });
   },
 };
 ```
 
-This is what `require("acme-data-tasks")` resolves to in a safe workflow authoring host. It creates portable descriptors; it does not import or invoke `normalize-customers.js`.
+This is what `require("cookbook-linear-transform-tasks")` resolves to in a safe workflow authoring host. It creates portable descriptors; it does not import or invoke the execution entrypoints.
 
 ### Worker bundle lock
 
 ```yaml
 schemaVersion: scraper-task-bundle-lock/v1
 bundles:
-  - name: acme-data-tasks
-    version: 1.4.2
+  - name: cookbook-linear-transform-tasks
+    version: 1.0.0
     digest: sha256:4c7f0d...
     manifestDigest: sha256:933e11...
     locator: registry://internal/task-bundles/sha256:4c7f0d...
@@ -406,13 +435,13 @@ Every compatible worker uses the lock to fetch and verify the exact artifact, ev
 Domain bundle source
   ├─ catalog.js + schemas + task entrypoints + dependency lock
   ↓ deterministic build, tests, provenance, signature
-TaskBundle artifact: acme-data-tasks@1.4.2 / sha256:4c7f0d...
+TaskBundle artifact: cookbook-linear-transform-tasks@1.0.0 / sha256:4c7f0d...
   ├─ authoring.cjs ── safe workflow host ──► TaskDescriptor
   └─ execution.cjs ── worker bundle lock ──► sealed registry generation
                                                │ advertises exact implementation
 Workflow compiler
   ├─ validates descriptor against approved catalog snapshot
-  ├─ binds acme.data.normalize-customers@v1
+  ├─ binds cookbook.linear.normalize-customers@v1
   ├─ pins bundle sha256:4c7f0d...
   ├─ pins ./tasks/normalize-customers.js#run
   └─ pins scraper-js-task/v1 ABI
@@ -449,11 +478,15 @@ Privileged generic capabilities such as artifact access, HTTP policy clients, da
 
 Normalize one input dataset, validate it, and publish a compact output manifest. This is the smallest useful durable pipeline.
 
+## Companion task bundle
+
+[`cookbook-linear-transform-tasks`](#bundle-1--cookbook-linear-transform-tasks) supplies both task factories and exact worker entrypoints.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const data = require("acme-data-tasks");
+const data = require("cookbook-linear-transform-tasks");
 
 const definition = workflow.define("normalize-customer-export", p => {
   const source = p.input("source", {
@@ -495,7 +528,7 @@ input:source → [normalize] → [validate] → output:dataset
 | Layer | Result |
 |---|---|
 | IR | two `task` jobs with one data dependency |
-| Compiled jobs | `acme.data.normalize-customers@v1` and `acme.data.validate-dataset@v1`, each pinned to its bundle digest/entrypoint/ABI and bound to `cpu.transform` |
+| Compiled jobs | `cookbook.linear.normalize-customers@v1` and `cookbook.linear.validate-dataset@v1`, each pinned to its bundle digest/entrypoint/ABI and bound to `cpu.transform` |
 | Initial durable nodes | `normalize` only is ready; `validate` is pending |
 | After normalize success | output `dataset` ref commits; `validate` becomes ready with that ref bound |
 | Attempts | normally two; more only if configured retry class occurs |
@@ -520,12 +553,15 @@ A malformed source is a non-retryable `validation` failure. A transient artifact
 
 Fetch a seed page, extract same-origin article links, fetch each article with rate limits, parse records, and publish one ordered snapshot manifest.
 
+## Companion task bundle
+
+[`cookbook-news-snapshot-tasks`](#bundle-2--cookbook-news-snapshot-tasks) supplies grouped `web` and `data` descriptor exports and four worker entrypoints.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const web = require("acme-web-tasks");
-const data = require("acme-data-tasks");
+const {web, data} = require("cookbook-news-snapshot-tasks");
 
 const definition = workflow.define("news-site-snapshot", p => {
   const seed = p.input("seed", {schema: "web-url-ref/v1", role: "seed-url"});
@@ -618,12 +654,15 @@ A required failed article fetch normally fails its dependent parse node and even
 
 Discover immutable page cursors, fetch pages with a partner-specific rate limit, normalize records, and apply idempotent destination upserts.
 
+## Companion task bundle
+
+[`cookbook-partner-sync-tasks`](#bundle-3--cookbook-partner-sync-tasks) supplies grouped API/data factories and five worker entrypoints.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const api = require("acme-partner-api-tasks");
-const data = require("acme-data-tasks");
+const {api, data} = require("cookbook-partner-sync-tasks");
 
 const definition = workflow.define("partner-catalog-sync", p => {
   const account = p.input("account", {schema: "partner-account-ref/v1"});
@@ -685,11 +724,15 @@ The authoring script cannot call the partner API to discover pages: that would m
 
 Normalize customer and order exports independently, join them, evaluate quality, and publish only an accepted dataset.
 
+## Companion task bundle
+
+[`cookbook-etl-quality-tasks`](#bundle-4--cookbook-etl-quality-tasks) supplies normalization, join, quality, and publication implementations.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const data = require("acme-data-tasks");
+const data = require("cookbook-etl-quality-tasks");
 
 const definition = workflow.define("customer-order-mart", p => {
   const customers = p.inputSet("customers", {schema: "customer-shard-ref-set/v1"});
@@ -763,12 +806,15 @@ This example treats `acceptedReport` as a typed output that exists only when qua
 
 Probe uploaded videos, transcode each video into three renditions, generate thumbnails, and publish one media-package manifest.
 
+## Companion task bundle
+
+[`cookbook-media-package-tasks`](#bundle-5--cookbook-media-package-tasks) supplies grouped media/file factories and sandboxed media capability requirements.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const media = require("studio-media-tasks");
-const files = require("acme-file-tasks");
+const {media, files} = require("cookbook-media-package-tasks");
 
 const definition = workflow.define("video-rendition-package", p => {
   const videos = p.inputSet("videos", {schema: "video-ref-set/v1"});
@@ -836,11 +882,15 @@ Choose granularity based on retry boundary, provider/tool invocation boundary, o
 
 Count normalized tokens across a large document collection using bounded map tasks and a deterministic reduction tree.
 
+## Companion task bundle
+
+[`cookbook-word-count-tasks`](#bundle-6--cookbook-word-count-tasks) supplies deterministic map and reduction entrypoints.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const analytics = require("acme-analytics-tasks");
+const analytics = require("cookbook-word-count-tasks");
 
 const definition = workflow.define("document-word-count", p => {
   const documents = p.inputSet("documents", {schema: "text-document-ref-set/v1"});
@@ -887,11 +937,15 @@ The expander maintains a bounded ready backlog. Each completed CPU map attempt r
 
 Scan a source snapshot with several independent tools, normalize findings, evaluate one policy, and sign the accepted report.
 
+## Companion task bundle
+
+[`cookbook-security-gate-tasks`](#bundle-7--cookbook-security-gate-tasks) supplies scan expansion, sandboxed scanners, policy evaluation, and signing.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const security = require("company-security-tasks");
+const security = require("cookbook-security-gate-tasks");
 
 const definition = workflow.define("release-security-gate", p => {
   const source = p.input("source", {schema: "source-snapshot-ref/v1"});
@@ -944,11 +998,15 @@ module.exports = workflow.compile(definition);
 
 Preprocess images on CPU, run one model inference per item on a serial GPU, aggregate class distributions, and publish predictions.
 
+## Companion task bundle
+
+[`cookbook-image-classification-tasks`](#bundle-8--cookbook-image-classification-tasks) supplies CPU preprocessing, pinned-model inference, and aggregation.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const ml = require("acme-ml-tasks");
+const ml = require("cookbook-image-classification-tasks");
 
 const definition = workflow.define("image-classification-batch", p => {
   const images = p.inputSet("images", {schema: "image-ref-set/v1"});
@@ -997,11 +1055,15 @@ Tensor bytes should be short-lived external artifacts with retention policy, not
 
 Render one notification, deliver it to a set of recipients/channels under separate rate limits, and aggregate durable receipts.
 
+## Companion task bundle
+
+[`cookbook-notification-tasks`](#bundle-9--cookbook-notification-tasks) supplies rendering, finite channel delivery, and receipt reduction.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const notify = require("company-notification-tasks");
+const notify = require("cookbook-notification-tasks");
 
 const definition = workflow.define("incident-notification", p => {
   const incident = p.input("incident", {schema: "incident-ref/v1"});
@@ -1057,11 +1119,15 @@ Each destination item key becomes the idempotency key. A provider timeout may be
 
 Snapshot a consistent database identity, dump table/range shards, build a root backup manifest, restore into an isolated verifier, and publish only a verified backup.
 
+## Companion task bundle
+
+[`cookbook-database-backup-tasks`](#bundle-10--cookbook-database-backup-tasks) supplies opaque snapshot, shard dump, manifest, and restore-verification tasks.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const database = require("company-database-tasks");
+const database = require("cookbook-database-backup-tasks");
 
 const definition = workflow.define("verified-database-backup", p => {
   const databaseRef = p.input("database", {schema: "database-handle-ref/v1"});
@@ -1111,12 +1177,15 @@ module.exports = workflow.compile(definition);
 
 Compare warehouse and storefront inventory snapshots, calculate discrepancies, apply bounded repairs, and produce an audit report.
 
+## Companion task bundle
+
+[`cookbook-inventory-reconciliation-tasks`](#bundle-11--cookbook-inventory-reconciliation-tasks) supplies diff, idempotent repair, and audit reduction tasks.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const data = require("acme-data-tasks");
-const api = require("acme-partner-api-tasks");
+const {data, api} = require("cookbook-inventory-reconciliation-tasks");
 
 const definition = workflow.define("inventory-reconciliation", p => {
   const warehouse = p.input("warehouse", {schema: "inventory-snapshot-ref/v1"});
@@ -1160,11 +1229,15 @@ A recurring schedule is not part of the pure definition. Trusted host configurat
 
 Build a source snapshot for a platform matrix, run tests, package successful builds, and sign the release manifest.
 
+## Companion task bundle
+
+[`cookbook-release-build-tasks`](#bundle-12--cookbook-release-build-tasks) supplies structured hermetic build, test, package, reduction, and signing tasks.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const build = require("company-build-tasks");
+const build = require("cookbook-release-build-tasks");
 
 const definition = workflow.define("cross-platform-release", p => {
   const source = p.input("source", {schema: "source-snapshot-ref/v1"});
@@ -1214,11 +1287,15 @@ Signing uses the public key alias `release-primary`; secret key bytes stay in th
 
 Prepare a deployment, wait durably for operator approval, then deploy and verify. Waiting must not occupy a worker goroutine, lease, or resource slot.
 
+## Companion task bundle
+
+[`cookbook-approved-deployment-tasks`](#bundle-13--cookbook-approved-deployment-tasks) supplies planning, gate initialization, idempotent deployment, and verification tasks.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const ops = require("company-ops-tasks");
+const ops = require("cookbook-approved-deployment-tasks");
 
 const definition = workflow.define("approved-deployment", p => {
   const release = p.input("release", {schema: "signed-release-ref/v1"});
@@ -1275,12 +1352,15 @@ The minimal `PlanBuilder` sketch does not yet declare `p.gate`. This example jus
 
 Probe a finite matrix of endpoints and regions, evaluate SLO rules, and emit one status report and optional notification plan.
 
+## Companion task bundle
+
+[`cookbook-probe-slo-tasks`](#bundle-14--cookbook-probe-slo-tasks) supplies network probes, SLO reduction, and notification planning.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const ops = require("company-ops-tasks");
-const notify = require("company-notification-tasks");
+const {ops, notify} = require("cookbook-probe-slo-tasks");
 
 const definition = workflow.define("service-probe-matrix", p => {
   const probes = p.inputSet("probes", {schema: "service-probe-ref-set/v1"});
@@ -1322,11 +1402,15 @@ The task config requests three samples inside one bounded probe attempt. Those s
 
 Detect file types, route office documents, images, and plain text through appropriate converters, then bundle outputs with one manifest.
 
+## Companion task bundle
+
+[`cookbook-document-conversion-tasks`](#bundle-15--cookbook-document-conversion-tasks) supplies inspection, finite routing, sandboxed conversion, and bundle reduction.
+
 ## JavaScript
 
 ```js
 const workflow = require("workflow");
-const files = require("acme-file-tasks");
+const files = require("cookbook-document-conversion-tasks");
 
 const definition = workflow.define("document-conversion-bundle", p => {
   const documents = p.inputSet("documents", {schema: "document-ref-set/v1"});
@@ -1367,6 +1451,370 @@ module.exports = workflow.compile(definition);
 ## Why routing is normalized data
 
 The route task outputs a finite set of compact conversion request descriptors. The converter runner registry maps each request kind to an approved implementation. The script cannot put an arbitrary executable path or command line in a request. Unsupported file types fail routing before converter nodes are created.
+
+# Companion task bundles for all examples
+
+Each workflow above now imports one companion bundle. The following `catalog.js` files make every task factory, task key, execution entrypoint, output port, and primary resource explicit. The bundle builder generates the descriptor-only authoring export shown in the workflow from each entry's `authoring` metadata.
+
+All companion bundles also contain:
+
+```text
+task-bundle.yaml
+catalog.js
+execution/tasks.cjs
+schemas/*.json
+pnpm-lock.yaml
+tests/*.test.js
+```
+
+The catalogs below are self-contained at the workflow contract level. `execution/tasks.cjs` must export every named entrypoint using `task.implementation(...)`; its domain algorithm uses only the modules/capabilities declared by that bundle. The cookbook remains proposed API documentation, so capability modules and schemas are named contracts rather than current production implementations.
+
+A compact helper keeps the catalogs readable:
+
+```js
+const taskBundle = require("workflow/task-bundle");
+
+exports.defineCookbookBundle = function defineCookbookBundle(options, build) {
+  return taskBundle.define({
+    name: options.name,
+    version: "1.0.0",
+    namespace: options.namespace,
+    abiVersion: "scraper-js-task/v1",
+  }, bundle => {
+    const task = (name, spec) => bundle.task({
+      kind: `${options.namespace}.${spec.kind || name}`,
+      version: "v1",
+      entrypoint: `./execution/tasks.cjs#${name}`,
+      inputSchema: `${options.namespace}.${spec.kind || name}.input/v1`,
+      outputs: spec.outputs,
+      defaultResource: spec.resource,
+      semantics: spec.semantics || {
+        determinism: "externally-dependent",
+        idempotency: "pure",
+        sideEffects: ["artifact-read", "artifact-write"],
+      },
+      modules: ["workflow/task", ...(spec.modules || [])],
+      authoring: {group: spec.group, factory: name},
+    });
+    build(task);
+  });
+};
+```
+
+In actual fixture files this helper is imported from a build-only cookbook support module. It is unavailable during task attempts.
+
+## Bundle 1 — `cookbook-linear-transform-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-linear-transform-tasks",
+  namespace: "cookbook.linear",
+}, task => {
+  task("normalizeCustomers", {
+    group: "data",
+    resource: "cpu.transform",
+    outputs: {dataset: "normalized-customer-dataset-ref/v1"},
+    modules: ["data/records"],
+  });
+  task("validateDataset", {
+    group: "data",
+    resource: "cpu.transform",
+    outputs: {validatedDataset: "validated-customer-dataset-ref/v1"},
+    modules: ["data/records"],
+  });
+});
+```
+
+Entrypoints normalize a JSON-lines artifact and then verify schema, uniqueness, and cardinality. Both are deterministic and artifact-only.
+
+## Bundle 2 — `cookbook-news-snapshot-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-news-snapshot-tasks",
+  namespace: "cookbook.news",
+}, task => {
+  task("fetch", {
+    group: "web",
+    resource: "http.public.egress",
+    outputs: {html: "web-html-ref/v1", finalUrl: "web-url-ref/v1"},
+    modules: ["capability/web-client"],
+    semantics: {determinism: "externally-dependent", idempotency: "pure", sideEffects: ["network-read", "artifact-write"]},
+  });
+  task("extractLinks", {group: "web", resource: "cpu.transform", outputs: {urls: "web-url-ref-set/v1"}, modules: ["web/html"]});
+  task("parseArticle", {group: "web", resource: "cpu.transform", outputs: {article: "article-record-ref/v1"}, modules: ["web/html"]});
+  task("reduceManifest", {group: "data", resource: "cpu.transform", outputs: {manifest: "article-snapshot-manifest-ref/v1"}});
+});
+```
+
+`fetch` uses a policy-constrained host HTTP client; the other entrypoints process immutable HTML/article refs and produce ordered manifests.
+
+## Bundle 3 — `cookbook-partner-sync-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-partner-sync-tasks",
+  namespace: "cookbook.partner-sync",
+}, task => {
+  task("enumeratePages", {group: "api", resource: "http.partner-api", outputs: {pages: "partner-page-ref-set/v1"}, modules: ["capability/partner-api"]});
+  task("fetchPage", {group: "api", resource: "http.partner-api", outputs: {page: "partner-page-data-ref/v1"}, modules: ["capability/partner-api"]});
+  task("normalizeCatalogPage", {group: "data", resource: "cpu.transform", outputs: {page: "normalized-catalog-page-ref/v1"}, modules: ["data/records"]});
+  task("applyCatalogPage", {
+    group: "api",
+    resource: "db.destination.write",
+    outputs: {receipt: "catalog-apply-receipt-ref/v1"},
+    modules: ["capability/catalog-destination"],
+    semantics: {determinism: "externally-dependent", idempotency: "keyed-side-effect", sideEffects: ["database-write"]},
+  });
+  task("reduceSyncCheckpoint", {group: "api", resource: "db.destination.write", outputs: {checkpoint: "sync-checkpoint-ref/v1"}});
+});
+```
+
+The worker capability supplies account credentials. Catalog page application uses the stable node idempotency key, never the attempt number.
+
+## Bundle 4 — `cookbook-etl-quality-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-etl-quality-tasks",
+  namespace: "cookbook.etl",
+}, task => {
+  task("normalizeCustomerShard", {group: "data", resource: "cpu.transform", outputs: {shard: "normalized-customer-shard-ref/v1"}, modules: ["data/records"]});
+  task("normalizeOrderShard", {group: "data", resource: "cpu.transform", outputs: {shard: "normalized-order-shard-ref/v1"}, modules: ["data/records"]});
+  task("joinDatasets", {group: "data", resource: "cpu.transform", outputs: {dataset: "customer-order-dataset-ref/v1"}, modules: ["data/join"]});
+  task("evaluateQuality", {group: "data", resource: "cpu.transform", outputs: {acceptedReport: "accepted-quality-report-ref/v1"}, modules: ["data/quality"]});
+  task("publishDataset", {group: "data", resource: "storage.object", outputs: {manifest: "published-dataset-manifest-ref/v1"}, modules: ["capability/artifacts"]});
+});
+```
+
+Quality rejection is a typed non-retryable validation failure; no `acceptedReport` means publication never becomes ready.
+
+## Bundle 5 — `cookbook-media-package-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-media-package-tasks",
+  namespace: "cookbook.media",
+}, task => {
+  task("probe", {group: "media", resource: "cpu.transform", outputs: {video: "video-ref/v1", metadata: "video-metadata-ref/v1"}, modules: ["capability/media-probe"]});
+  task("transcodeMatrix", {group: "media", resource: "media.ffmpeg", outputs: {renditions: "video-rendition-ref-set/v1"}, modules: ["capability/media-transcode"]});
+  task("thumbnailSheet", {group: "media", resource: "media.ffmpeg", outputs: {thumbnails: "thumbnail-sheet-ref/v1"}, modules: ["capability/media-transcode"]});
+  task("bundleMediaPackage", {group: "files", resource: "storage.object", outputs: {manifest: "media-package-manifest-ref/v1"}, modules: ["capability/artifacts"]});
+});
+```
+
+The media capability runs sandboxed tools. Output bytes go directly to content-addressed storage, while task outputs remain compact refs.
+
+## Bundle 6 — `cookbook-word-count-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-word-count-tasks",
+  namespace: "cookbook.word-count",
+}, task => {
+  task("tokenCount", {group: "analytics", resource: "cpu.transform", outputs: {counts: "token-count-shard-ref/v1"}, modules: ["text/tokenize"]});
+  task("reduceTokenCounts", {group: "analytics", resource: "cpu.transform", outputs: {countManifest: "token-count-manifest-ref/v1"}, modules: ["data/reduce"]});
+});
+```
+
+The entrypoints are deterministic: normalization is fixed, token keys are sorted, and reducers merge canonical shard manifests.
+
+## Bundle 7 — `cookbook-security-gate-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-security-gate-tasks",
+  namespace: "cookbook.security",
+}, task => {
+  task("expandScanMatrix", {group: "security", resource: "control.local", outputs: {requests: "security-scan-request-ref-set/v1"}});
+  task("scan", {group: "security", resource: "cpu.security-scan", outputs: {findings: "security-finding-ref-set/v1"}, modules: ["capability/security-scanners"]});
+  task("mergeFindings", {group: "security", resource: "control.local", outputs: {report: "security-report-ref/v1"}, modules: ["data/reduce"]});
+  task("evaluatePolicy", {group: "security", resource: "control.local", outputs: {acceptedReport: "accepted-security-report-ref/v1"}, modules: ["security/policy"]});
+  task("signReport", {
+    group: "security",
+    resource: "control.local",
+    outputs: {attestation: "security-attestation-ref/v1"},
+    modules: ["capability/signer"],
+    semantics: {determinism: "externally-dependent", idempotency: "keyed-side-effect", sideEffects: ["sign"]},
+  });
+});
+```
+
+The signing alias is public configuration; private key material stays inside the host signer capability.
+
+## Bundle 8 — `cookbook-image-classification-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-image-classification-tasks",
+  namespace: "cookbook.image-classification",
+}, task => {
+  task("preprocessImage", {group: "ml", resource: "cpu.transform", outputs: {tensor: "image-tensor-ref/v1"}, modules: ["image/transform"]});
+  task("classifyImage", {group: "ml", resource: "gpu.inference", outputs: {prediction: "image-prediction-ref/v1"}, modules: ["capability/model-runtime"]});
+  task("aggregatePredictions", {group: "ml", resource: "cpu.transform", outputs: {summary: "prediction-summary-ref/v1"}, modules: ["data/reduce"]});
+});
+```
+
+The model capability verifies the immutable model-profile digest before inference; tensor artifacts can use short retention.
+
+## Bundle 9 — `cookbook-notification-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-notification-tasks",
+  namespace: "cookbook.notification",
+}, task => {
+  task("renderIncident", {group: "notify", resource: "cpu.transform", outputs: {message: "notification-message-ref/v1"}, modules: ["notification/template"]});
+  task("deliver", {
+    group: "notify",
+    resource: "notification.dynamic",
+    outputs: {receipt: "notification-delivery-receipt-ref/v1"},
+    modules: ["capability/notification-channels"],
+    semantics: {determinism: "externally-dependent", idempotency: "keyed-side-effect", sideEffects: ["notification-send"]},
+  });
+  task("reduceReceipts", {group: "notify", resource: "cpu.transform", outputs: {receipt: "notification-batch-receipt-ref/v1"}, modules: ["data/reduce"]});
+});
+```
+
+The compiler expands `notification.dynamic` into a finite approved channel-resource mapping; task JavaScript cannot select arbitrary resources.
+
+## Bundle 10 — `cookbook-database-backup-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-database-backup-tasks",
+  namespace: "cookbook.database-backup",
+}, task => {
+  task("openConsistentSnapshot", {group: "database", resource: "db.source.read", outputs: {snapshot: "database-snapshot-ref/v1"}, modules: ["capability/source-database"]});
+  task("planSnapshotShards", {group: "database", resource: "db.source.read", outputs: {shards: "database-shard-plan-ref-set/v1"}, modules: ["capability/source-database"]});
+  task("dumpSnapshotShard", {group: "database", resource: "db.source.read", outputs: {dump: "database-shard-dump-ref/v1"}, modules: ["capability/source-database", "capability/artifacts"]});
+  task("reduceBackupManifest", {group: "database", resource: "storage.object", outputs: {manifest: "database-backup-manifest-ref/v1"}, modules: ["data/reduce"]});
+  task("restoreVerify", {group: "database", resource: "db.destination.write", outputs: {verifiedBackup: "verified-database-backup-ref/v1"}, modules: ["capability/restore-sandbox"]});
+});
+```
+
+Database handles are opaque host references, never DSNs. Restore verification runs in an isolated destination capability.
+
+## Bundle 11 — `cookbook-inventory-reconciliation-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-inventory-reconciliation-tasks",
+  namespace: "cookbook.inventory",
+}, task => {
+  task("diffInventory", {group: "data", resource: "cpu.transform", outputs: {repairs: "inventory-repair-ref-set/v1", summary: "inventory-diff-summary-ref/v1"}, modules: ["data/join"]});
+  task("applyInventoryRepair", {
+    group: "api",
+    resource: "http.partner-api",
+    outputs: {receipt: "inventory-repair-receipt-ref/v1"},
+    modules: ["capability/storefront-api"],
+    semantics: {determinism: "externally-dependent", idempotency: "keyed-side-effect", sideEffects: ["inventory-write"]},
+  });
+  task("reduceRepairAudit", {group: "data", resource: "cpu.transform", outputs: {report: "inventory-repair-audit-ref/v1"}, modules: ["data/reduce"]});
+});
+```
+
+Each repair's canonical key is the side-effect idempotency key and remains stable across attempts.
+
+## Bundle 12 — `cookbook-release-build-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-release-build-tasks",
+  namespace: "cookbook.release",
+}, task => {
+  task("compile", {group: "build", resource: "cpu.transform", outputs: {binary: "build-binary-ref/v1"}, modules: ["capability/hermetic-build"]});
+  task("testBinary", {group: "build", resource: "cpu.transform", outputs: {binary: "tested-binary-ref/v1", report: "test-report-ref/v1"}, modules: ["capability/hermetic-build"]});
+  task("packageBinary", {group: "build", resource: "cpu.transform", outputs: {package: "release-package-ref/v1"}, modules: ["capability/hermetic-build"]});
+  task("reduceReleaseManifest", {group: "build", resource: "cpu.transform", outputs: {manifest: "release-manifest-ref/v1"}, modules: ["data/reduce"]});
+  task("signRelease", {group: "build", resource: "control.local", outputs: {signedManifest: "signed-release-ref/v1"}, modules: ["capability/signer"]});
+});
+```
+
+The hermetic-build capability exposes structured target/toolchain operations, not arbitrary shell strings.
+
+## Bundle 13 — `cookbook-approved-deployment-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-approved-deployment-tasks",
+  namespace: "cookbook.deployment",
+}, task => {
+  task("prepareDeployment", {group: "ops", resource: "control.local", outputs: {deploymentPlan: "deployment-plan-ref/v1"}, modules: ["deployment/plan"]});
+  task("awaitApproval", {group: "ops", kind: "approval-gate", resource: "operator.approval", outputs: {approvedPlan: "approved-deployment-plan-ref/v1"}, modules: ["capability/operator-approval"]});
+  task("deploy", {
+    group: "ops",
+    resource: "control.local",
+    outputs: {deployment: "deployment-ref/v1"},
+    modules: ["capability/deployment-target"],
+    semantics: {determinism: "externally-dependent", idempotency: "keyed-side-effect", sideEffects: ["deployment-write"]},
+  });
+  task("verifyDeployment", {group: "ops", resource: "control.local", outputs: {verifiedDeployment: "verified-deployment-ref/v1"}, modules: ["capability/deployment-target"]});
+});
+```
+
+`approval-gate` is initialized by this bundle but waiting/signals are managed by the engine's lease-free gate state machine.
+
+## Bundle 14 — `cookbook-probe-slo-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-probe-slo-tasks",
+  namespace: "cookbook.probe",
+}, task => {
+  task("probe", {group: "ops", resource: "http.public.egress", outputs: {observation: "probe-observation-ref/v1"}, modules: ["capability/probe-client"]});
+  task("evaluateSLO", {group: "ops", resource: "cpu.transform", outputs: {report: "slo-report-ref/v1"}, modules: ["data/reduce"]});
+  task("planFromSLOReport", {group: "notify", resource: "cpu.transform", outputs: {plan: "notification-plan-ref/v1"}, modules: ["notification/template"]});
+});
+```
+
+Probe samples remain task-domain observations; workflow attempts remain engine execution evidence.
+
+## Bundle 15 — `cookbook-document-conversion-tasks`
+
+```js
+const {defineCookbookBundle} = require("cookbook-bundle-support");
+
+module.exports = defineCookbookBundle({
+  name: "cookbook-document-conversion-tasks",
+  namespace: "cookbook.document",
+}, task => {
+  task("inspect", {group: "files", resource: "cpu.transform", outputs: {document: "document-ref/v1", metadata: "document-metadata-ref/v1"}, modules: ["files/inspect"]});
+  task("routeConversions", {group: "files", resource: "cpu.transform", outputs: {requests: "conversion-request-ref-set/v1"}, modules: ["files/routing"]});
+  task("convert", {group: "files", resource: "media.ffmpeg", outputs: {document: "converted-document-ref/v1"}, modules: ["capability/document-converters"]});
+  task("reduceBundleManifest", {group: "files", resource: "storage.object", outputs: {manifest: "document-bundle-manifest-ref/v1"}, modules: ["data/reduce"]});
+});
+```
+
+The converter capability maps finite request kinds to sandboxed implementations; task input cannot name an executable.
 
 # Deep transformation atlas: website snapshot example
 
@@ -1415,14 +1863,14 @@ The native module emits data equivalent to:
     {
       "key": "fetch-front-page",
       "mode": "task",
-      "task": {"kind": "acme.web.fetch", "version": "v1"},
+      "task": {"kind": "cookbook.news.fetch", "version": "v1"},
       "bindings": {"url": {"$ref": "input", "key": "seed"}},
       "resource": "http"
     },
     {
       "key": "extract-links",
       "mode": "task",
-      "task": {"kind": "acme.web.extract-links", "version": "v1"},
+      "task": {"kind": "cookbook.news.extract-links", "version": "v1"},
       "bindings": {"html": {"$ref": "job-output", "job": "fetch-front-page", "port": "html"}},
       "resource": "cpu"
     },
@@ -1430,7 +1878,7 @@ The native module emits data equivalent to:
       "key": "fetch-articles",
       "mode": "map",
       "source": {"$ref": "job-output", "job": "extract-links", "port": "urls"},
-      "task": {"kind": "acme.web.fetch", "version": "v1"},
+      "task": {"kind": "cookbook.news.fetch", "version": "v1"},
       "bindings": {"url": {"$ref": "map-item"}},
       "resource": "http"
     },
@@ -1438,7 +1886,7 @@ The native module emits data equivalent to:
       "key": "parse-articles",
       "mode": "map",
       "source": {"$ref": "job-output-set", "job": "fetch-articles"},
-      "task": {"kind": "acme.web.parse-article", "version": "v1"},
+      "task": {"kind": "cookbook.news.parse-article", "version": "v1"},
       "bindings": {"html": {"$ref": "map-item-output", "port": "html"}},
       "resource": "cpu"
     },
@@ -1446,7 +1894,7 @@ The native module emits data equivalent to:
       "key": "build-snapshot",
       "mode": "reduce",
       "source": {"$ref": "job-output-set", "job": "parse-articles"},
-      "task": {"kind": "acme.data.reduce-manifest", "version": "v1"},
+      "task": {"kind": "cookbook.news.reduce-manifest", "version": "v1"},
       "fanIn": 128,
       "orderedBy": "itemKey",
       "resource": "cpu"
@@ -1467,7 +1915,7 @@ Go validates:
 - all keys are unique and normalized;
 - every reference points to an existing input/job/port;
 - the graph is acyclic;
-- `extract-links.html` expects the schema produced by `acme.web.fetch.html`;
+- `extract-links.html` expects the schema produced by `cookbook.news.fetch.html`;
 - the map source is a set with stable item keys;
 - the reduction is associative/deterministic according to task catalog metadata;
 - fan-in and requested concurrency are within absolute structural limits;
@@ -1495,7 +1943,7 @@ Suppose the host profile permits only three HTTP calls for this tenant. Compilat
   "jobs": [
     {
       "key": "fetch-front-page",
-      "task": {"kind": "acme.web.fetch", "version": "v1"},
+      "task": {"kind": "cookbook.news.fetch", "version": "v1"},
       "implementation": {
         "language": "javascript",
         "bundleDigest": "sha256:web-task-bundle...",
@@ -1553,7 +2001,7 @@ The worker receives a lease grant containing compact refs and task identity.
 
 ## Stage G — Runner execution
 
-The JavaScript implementation `acme.web.fetch@v1`, pinned to its exact bundle digest and entrypoint:
+The JavaScript implementation `cookbook.news.fetch@v1`, pinned to its exact bundle digest and entrypoint:
 
 1. resolves `URLRef` through its allowed codec;
 2. applies host egress policy and configured HTTP client;
@@ -1816,18 +2264,24 @@ Every example should eventually become:
 ```text
 pkg/gojamodules/workflow/testdata/v3/
   bundles/
-    acme-data-tasks/
-      catalog.js
-      authoring.js
-      tasks/normalize-customers.js
-      schemas/...
-      bundle.lock.json
-    acme-web-tasks/
-      catalog.js
-      authoring.js
-      tasks/fetch.js
-      tasks/extract-links.js
-      schemas/...
+    cookbook-linear-transform-tasks/
+    cookbook-news-snapshot-tasks/
+    cookbook-partner-sync-tasks/
+    cookbook-etl-quality-tasks/
+    cookbook-media-package-tasks/
+    cookbook-word-count-tasks/
+    cookbook-security-gate-tasks/
+    cookbook-image-classification-tasks/
+    cookbook-notification-tasks/
+    cookbook-database-backup-tasks/
+    cookbook-inventory-reconciliation-tasks/
+    cookbook-release-build-tasks/
+    cookbook-approved-deployment-tasks/
+    cookbook-probe-slo-tasks/
+    cookbook-document-conversion-tasks/
+    # Each directory contains:
+    # task-bundle.yaml, catalog.js, generated authoring.js,
+    # execution/tasks.cjs, schemas/, tests/, and bundle.lock.json.
   examples/
     01-linear-transform.js
     02-website-snapshot.js
@@ -1845,7 +2299,7 @@ pkg/gojamodules/workflow/testdata/v3/
     14-probe-matrix.js
     15-document-conversion.js
   golden/
-    acme-data-tasks.catalog.json
+    cookbook-linear-transform-tasks.catalog.json
     workstation-v3.worker-registry.json
     01-linear-transform.ir.json
     01-linear-transform.workstation-v3.plan.json
