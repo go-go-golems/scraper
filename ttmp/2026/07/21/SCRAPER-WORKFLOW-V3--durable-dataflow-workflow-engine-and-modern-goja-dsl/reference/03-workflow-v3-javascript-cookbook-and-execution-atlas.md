@@ -269,7 +269,7 @@ These are proposed examples of domain-owned native modules. Each `tasks.*` funct
 | `build` | `build.checkout`, `build.test`, `build.package`, `build.sign` | sandboxed command runner and artifact store |
 | `ops` | `ops.await-approval`, `ops.probe`, `ops.evaluate-slo` | operator signal or bounded network probe |
 
-The table is an API design aid, not a claim that these modules already exist.
+The table is an API design aid, not a claim that these modules already exist. Most should be domain-authored JavaScript task bundles rather than scraper built-ins. For example, an organization can publish `acme-customer`, `studio-media-tasks`, or `company-security-tasks`; each bundle provides a safe descriptor-only authoring module and exact worker execution implementations pinned by digest. See [Reproducible JavaScript task bundles and worker registries](../design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md).
 
 # Example 1 — Minimal linear transform
 

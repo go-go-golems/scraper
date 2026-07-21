@@ -31,6 +31,7 @@ The architecture is proposed and documented; production implementation and the b
 ## Key Links
 
 - [Primary architecture and implementation guide](design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md)
+- [Reproducible JavaScript task bundles and worker registries](design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md)
 - [JavaScript cookbook and execution atlas](reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md)
 - [Source catalogue and evidence map](reference/02-source-catalogue-and-evidence-map.md)
 - [Investigation diary](reference/01-investigation-diary.md)
