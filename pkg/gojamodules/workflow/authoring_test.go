@@ -100,6 +100,9 @@ module.exports = workflow.compile(workflow.define("bad", p => {
 
 func TestTypeScriptDeclaresMinimalSurface(t *testing.T) {
 	declaration := workflowmodule.TypeScript()
+	expectedDeclaration, err := os.ReadFile("testdata/workflow.d.ts")
+	require.NoError(t, err)
+	require.Equal(t, string(expectedDeclaration), declaration)
 	for _, expected := range []string{
 		"declare module \"workflow\"", "function define", "function compile",
 		"input(name: string", "task(", "output(name: string",

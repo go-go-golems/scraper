@@ -59,7 +59,7 @@ func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
 	if err != nil {
 		return TaskResult{}, err
 	}
-	defer os.RemoveAll(workspace)
+	defer func() { _ = os.RemoveAll(workspace) }()
 
 	state := &outputState{
 		ctx: ctx, store: request.Artifacts,
@@ -101,7 +101,7 @@ func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
 	if err != nil {
 		return TaskResult{}, fmt.Errorf("create task runtime: %w", err)
 	}
-	defer runtime.Close(context.Background())
+	defer func() { _ = runtime.Close(context.Background()) }()
 
 	modulePath, exportName, err := splitEntrypoint(request.Task.Spec.Identity.Entrypoint)
 	if err != nil {
@@ -228,17 +228,17 @@ func materializeInputs(ctx context.Context, store workflowv3.ArtifactStore, refs
 	values := make(map[string]any, len(refs))
 	for port, ref := range refs {
 		if !safePort.MatchString(port) {
-			os.RemoveAll(workspace)
+			_ = os.RemoveAll(workspace)
 			return "", nil, fmt.Errorf("invalid input port %q", port)
 		}
 		body, err := workflowv3.ReadArtifact(ctx, store, ref)
 		if err != nil {
-			os.RemoveAll(workspace)
+			_ = os.RemoveAll(workspace)
 			return "", nil, fmt.Errorf("materialize input %s: %w", port, err)
 		}
 		name := port + ".artifact"
 		if err := os.WriteFile(filepath.Join(workspace, name), body, 0o400); err != nil {
-			os.RemoveAll(workspace)
+			_ = os.RemoveAll(workspace)
 			return "", nil, fmt.Errorf("write task input %s: %w", port, err)
 		}
 		values[port] = map[string]any{
@@ -308,6 +308,8 @@ func waitForTaskPromise(ctx context.Context, runtime *gggengine.Runtime, promise
 		result, err := runtime.Owner.Call(ctx, "workflowv3.task.promise", func(_ context.Context, _ *goja.Runtime) (any, error) {
 			snapshot := taskPromiseSnapshot{state: promise.State()}
 			switch snapshot.state {
+			case goja.PromiseStatePending:
+				// The outer loop waits without exporting a Goja value.
 			case goja.PromiseStateFulfilled:
 				value := promise.Result()
 				if value != nil && !goja.IsUndefined(value) && !goja.IsNull(value) {

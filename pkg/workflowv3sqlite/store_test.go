@@ -116,7 +116,7 @@ func TestStorePersistsAppendOnlyAttemptsAndReopens(t *testing.T) {
 
 	reopened, err := Open(ctx, path)
 	require.NoError(t, err)
-	defer reopened.Close()
+	t.Cleanup(func() { require.NoError(t, reopened.Close()) })
 	snapshot, err := reopened.Snapshot(ctx, "run-1")
 	require.NoError(t, err)
 	require.Equal(t, "succeeded", snapshot.Status)
@@ -131,7 +131,7 @@ func TestStoreRejectsStaleCompletionAfterCancel(t *testing.T) {
 	registry, plan := storeFixture(t, "first")
 	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
 	require.NoError(t, err)
-	defer store.Close()
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	now := time.Now().UTC()
 	require.NoError(t, store.CreateRun(ctx, "run", plan, map[string]workflowv3.ArtifactRef{
 		"source": artifactRef("source/v1", "1"),
@@ -150,7 +150,7 @@ func TestStoreReclaimsExpiredLeaseAsNewAttempt(t *testing.T) {
 	registry, plan := storeFixture(t, "first")
 	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
 	require.NoError(t, err)
-	defer store.Close()
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	now := time.Now().UTC()
 	require.NoError(t, store.CreateRun(ctx, "run", plan, map[string]workflowv3.ArtifactRef{
 		"source": artifactRef("source/v1", "1"),
@@ -176,7 +176,7 @@ func TestStoreConcurrentLeaseRaceHasSingleWinner(t *testing.T) {
 	registry, plan := storeFixture(t, "first")
 	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
 	require.NoError(t, err)
-	defer store.Close()
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	now := time.Now().UTC()
 	require.NoError(t, store.CreateRun(ctx, "run", plan, map[string]workflowv3.ArtifactRef{
 		"source": artifactRef("source/v1", "1"),
@@ -219,7 +219,7 @@ func TestStoreDoesNotLeaseImplementationFromDifferentBundle(t *testing.T) {
 	wrongRegistry, _ := storeFixture(t, "different source")
 	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
 	require.NoError(t, err)
-	defer store.Close()
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	now := time.Now().UTC()
 	require.NoError(t, store.CreateRun(ctx, "run", plan, map[string]workflowv3.ArtifactRef{
 		"source": artifactRef("source/v1", "1"),

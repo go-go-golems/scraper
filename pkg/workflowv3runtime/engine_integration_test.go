@@ -137,7 +137,7 @@ func TestEnginePersistsTypedTaskFailureWithoutTaskMessage(t *testing.T) {
 	require.NoError(t, err)
 	store, err := workflowv3sqlite.Open(ctx, filepath.Join(t.TempDir(), "failure.db"))
 	require.NoError(t, err)
-	defer store.Close()
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	engine := &Engine{Store: store, Registry: registry, Artifacts: artifacts}
 	require.NoError(t, engine.Submit(ctx, "duplicate", authored.Plan, map[string]workflowv3.ArtifactRef{
 		"source": source,
