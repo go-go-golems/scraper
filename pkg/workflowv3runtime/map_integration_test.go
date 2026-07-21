@@ -17,6 +17,78 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestLazyMapOutputDigestIsIndependentOfConcurrency(t *testing.T) {
+	serial := runMapDigest(t, 1)
+	concurrent := runMapDigest(t, 8)
+	require.Equal(t, serial, concurrent)
+}
+
+func runMapDigest(t *testing.T, capacity int) string {
+	t.Helper()
+	ctx := context.Background()
+	root := t.TempDir()
+	artifacts, err := workflowv3.NewFileArtifactStore(filepath.Join(root, "artifacts"), 1<<20)
+	require.NoError(t, err)
+	registry, err := workflowv3map.Registry()
+	require.NoError(t, err)
+	catalog, err := registry.Catalog()
+	require.NoError(t, err)
+	authored, err := workflowmodule.Author(
+		ctx, workflowv3map.WorkflowSource(), catalog, workflowv3map.DescriptorModule(),
+	)
+	require.NoError(t, err)
+	itemCount := 65
+	if raceDetectorEnabled {
+		itemCount = 9
+	}
+	items := make([]workflowv3.ManifestItem, 0, itemCount)
+	for index := 0; index < itemCount; index++ {
+		body, err := json.Marshal(map[string]any{
+			"index": index, "value": fmt.Sprintf("record-%04d", index),
+		})
+		require.NoError(t, err)
+		ref, err := artifacts.Put(ctx, "map-record/v1", "application/json", body)
+		require.NoError(t, err)
+		items = append(items, workflowv3.ManifestItem{
+			Key: fmt.Sprintf("record-%04d", index), Value: ref,
+		})
+	}
+	manifest, err := workflowv3.NewItemManifest("map-record/v1", items)
+	require.NoError(t, err)
+	body, err := workflowv3.EncodeItemManifest(manifest)
+	require.NoError(t, err)
+	manifestRef, err := artifacts.Put(ctx, workflowv3.ItemManifestSchemaV1, "application/json", body)
+	require.NoError(t, err)
+	store, err := workflowv3sqlite.Open(ctx, filepath.Join(root, "workflow.db"))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, store.Close()) }()
+	modules, err := NewTaskModuleRegistry(FSInputModule())
+	require.NoError(t, err)
+	engine := &Engine{Store: store, Registry: registry, Artifacts: artifacts, Modules: modules}
+	require.NoError(t, engine.Submit(ctx, "digest-run", authored.Plan, map[string]workflowv3.ArtifactRef{"records": manifestRef}))
+	dispatcher := &Dispatcher{
+		Engine: engine, Capacities: map[string]int{workflowv3map.ResourceClass: capacity},
+		PollInterval: time.Millisecond,
+	}
+	dispatchCtx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() { done <- dispatcher.Run(dispatchCtx) }()
+	timeout := 20 * time.Second
+	if raceDetectorEnabled {
+		timeout = 90 * time.Second
+	}
+	require.Eventually(t, func() bool {
+		snapshot, snapshotErr := engine.Snapshot(ctx, "digest-run")
+		return snapshotErr == nil && snapshot.Status == "succeeded"
+	}, timeout, 5*time.Millisecond)
+	cancel()
+	require.ErrorIs(t, <-done, context.Canceled)
+	snapshot, err := engine.Snapshot(ctx, "digest-run")
+	require.NoError(t, err)
+	return snapshot.Outputs["records"].Digest
+}
+
 func TestLazyMapScaleAcrossRestartWithDeterministicOutput(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
