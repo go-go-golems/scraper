@@ -46,8 +46,8 @@ func ValidateArtifactRef(ref ArtifactRef) error {
 	if strings.TrimSpace(ref.Schema) == "" {
 		return fmt.Errorf("artifact schema is required")
 	}
-	if !strings.HasPrefix(ref.Digest, "sha256:") || len(ref.Digest) != 71 {
-		return fmt.Errorf("artifact digest must be sha256 hex")
+	if err := validateSHA256Digest(ref.Digest); err != nil {
+		return fmt.Errorf("artifact digest: %w", err)
 	}
 	if strings.TrimSpace(ref.MediaType) == "" {
 		return fmt.Errorf("artifact media type is required")
@@ -60,6 +60,16 @@ func ValidateArtifactRef(ref ArtifactRef) error {
 	}
 	if len(ref.Locator) > 256 {
 		return fmt.Errorf("artifact locator exceeds 256 bytes")
+	}
+	return nil
+}
+
+func validateSHA256Digest(digest string) error {
+	if !strings.HasPrefix(digest, "sha256:") || len(digest) != 71 {
+		return fmt.Errorf("must be sha256 hex")
+	}
+	if _, err := hex.DecodeString(strings.TrimPrefix(digest, "sha256:")); err != nil {
+		return fmt.Errorf("must be sha256 hex: %w", err)
 	}
 	return nil
 }
