@@ -1741,3 +1741,72 @@ running and maintainable, not merely passing isolated package tests.
 - Web unit tests: 4/4 passed.
 - Minimal runtime help slug: `scraper-workflow-v3-minimal-runtime`.
 - Completed ticket task: `awrp`.
+
+## Step 17: Make the minimal input handle generically typed
+
+The completion audit caught that runtime inputs carried exact schemas but the
+TypeScript declaration returned an unparameterized `ValueRef`. The public
+minimal DSL now exposes `input<T = unknown>(...) -> ValueRef<T>`, preserving the
+author's value type without weakening Go-owned runtime schema validation.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 10)
+
+**Assistant interpretation:** Verify that “typed input” is true in both runtime
+contracts and the published TypeScript surface.
+
+**Inferred user intent:** Ensure the minimal DSL is genuinely usable as a typed
+JavaScript/TypeScript authoring API, not merely schema-tagged internally.
+
+**Commit (code):** 3136cd6 — "workflowv3: type minimal DSL inputs"
+
+### What I did
+
+- Changed the DTS `PlanBuilder.input` signature to generic `input<T = unknown>`.
+- Updated the exact DTS golden and semantic declaration assertion.
+- Reran authoring/runtime tests and focused isolated lint.
+
+### Why
+
+- The active completion contract explicitly requires typed input.
+- Schema IDs enforce runtime compatibility, while `ValueRef<T>` preserves
+  compile-time author ergonomics; both layers are necessary.
+
+### What worked
+
+- Authoring and end-to-end runtime tests passed.
+- Exact DTS comparison passed.
+- Focused isolated lint reported zero issues.
+
+### What didn't work
+
+- N/A. This was an audit-found contract improvement, not a failing test.
+
+### What I learned
+
+- A requirement audit should inspect declarations semantically rather than only
+  treating the existence of a DTS golden as sufficient evidence.
+
+### What was tricky to build
+
+- The generic type remains phantom authoring information; the schema string is
+  still the authoritative runtime contract and must never be inferred from a
+  TypeScript-only type.
+
+### What warrants a second pair of eyes
+
+- Review task descriptor generics when the generated domain-module DTS is
+  expanded beyond this minimal slice.
+
+### What should be done in the future
+
+- Add typed task input/output descriptor generation in the next DSL expansion.
+
+### Code review instructions
+
+- Compare `TypeScript()` to `testdata/workflow.d.ts` and run the authoring test.
+
+### Technical details
+
+- Generic signature: `input<T = unknown>(..., {schema}): ValueRef<T>`.
