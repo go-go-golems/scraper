@@ -307,3 +307,19 @@ Completed Slice 9 transactional budgets and authoritative projections: canonical
 - pkg/testfixtures/workflowv3budget — Real JavaScript usage reporting fixture
 - pkg/workflowv3sqlite/budget.go — Transactional reservation settlement recovery and operator increases
 - pkg/workflowv3sqlite/operational.go — One-read-transaction operational snapshots and event continuation
+
+## 2026-07-22
+
+Implemented Slice 10 durable approval gates with typed JavaScript authoring, lease-free waiting, versioned operator decisions, durable expiry/cancellation, typed continuation, budget activation, bounded projections, multi-connection races, restart, authority separation, and privacy evidence
+
+### Related Files
+
+- pkg/workflowv3/gate.go — Canonical gate policies, commands, validation, errors, and progress
+- pkg/gojamodules/workflow/authoring.go — Safe descriptor-only gate authoring
+- pkg/workflowv3sqlite/gate.go — Durable waiting, decision, expiry, pagination, and terminal transactions
+- pkg/workflowv3runtime/dispatcher.go — Lease-free gate maintenance and cancellation normalization
+- pkg/testfixtures/workflowv3gate — Real JavaScript wait/restart/continuation fixture
+- pkg/workflowv3runtime/gate_integration_test.go — Dispatcher, restart, failure-isolation, authority, and privacy evidence
+- ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/07-slice-10-approval-gates-durable-lease-free-waiting.md — Implemented contract and evidence
+
+Implementation commit: `00f36b3` (`workflowv3: add durable approval gates`). Fresh `make validate`, full runtime/store race suites, isolated lint, JavaScript/TypeScript checks, help, migration/goldens, docmgr, privacy, and diff checks passed before commit.

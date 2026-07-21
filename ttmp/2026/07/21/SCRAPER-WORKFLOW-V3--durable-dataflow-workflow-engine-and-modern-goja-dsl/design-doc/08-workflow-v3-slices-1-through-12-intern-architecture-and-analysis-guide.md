@@ -61,7 +61,7 @@ The sequence is:
 11. **Process isolation: broader trust is viable.**
 12. **RAG/TTC: an expensive production workload is safe.**
 
-Slices 1–9 are implemented and validated. Slices 10–12 are target contracts.
+Slices 1–10 are implemented and validated. Slices 11–12 are target contracts.
 This distinction is important: a design section explains what must become true;
 it is not evidence that the behavior already exists.
 
@@ -777,14 +777,14 @@ missed events or reconnect.
 
 ### 11.1 Status and purpose
 
-Slice 10 is not implemented yet. A human or external decision may take minutes
+Slice 10 is implemented. A human or external decision may take minutes
 or days. Modeling this as a sleeping JavaScript task would hold a lease,
 resource slot, runtime, and possibly budget reservation for the entire wait.
 A gate is therefore first-class durable control state, not a long task.
 
 ### 11.2 Gate lifecycle
 
-A gate node has states such as:
+A gate control record has the exact states:
 
 ```text
 pending dependencies
@@ -793,8 +793,9 @@ pending dependencies
 ```
 
 Entering `waiting` creates no attempt and holds no execution lease or resource
-capacity. Approval may make the gate node succeed and release downstream
-dependencies. Rejection follows compiled terminal policy. Expiry is evaluated
+capacity. Approval publishes a typed decision ref and releases downstream dependencies.
+Rejection follows compiled fail-run policy; unsupported branch cancellation is
+rejected by the compiler. Expiry is evaluated
 from a durable deadline, not an in-memory timer.
 
 ### 11.3 Durable schema
@@ -802,8 +803,8 @@ from a durable deadline, not an in-memory timer.
 A logical gate record contains:
 
 ```text
-run_id, gate_key, status, policy_digest, requested_at, expires_at,
-decided_at, decision_code, actor_id, expected_version
+run_id, gate_key, status, version, policy_digest, requested_at, expires_at,
+decided_at, decision_code, actor_id, typed decision ref, budget_activation
 ```
 
 It must not contain authentication tokens, free-form sensitive comments, or
@@ -817,8 +818,8 @@ The store receives an authenticated actor identity, allowed decision, expected
 current version, and bounded reason code. A compare-and-swap transaction
 prevents duplicate or stale decisions.
 
-`require("workflow")` may declare a gate. `workflow/task` may request a gate
-output through a narrowly defined transition if the plan allows it. Neither
+`require("workflow")` may declare a gate. `workflow/task` may consume a typed
+gate output if the plan allows it. Neither
 surface receives general operator authority. Ordinary task code cannot approve
 its own gate.
 
@@ -829,18 +830,25 @@ cancel must yield exactly one committed result. Expiry can be advanced by any
 maintenance worker through a conditional transaction and survives process
 restart. Reopening a run reconstructs waiting state from the store.
 
-### 11.6 Required evidence
+### 11.6 Implemented evidence
 
-- enter waiting with zero running attempt and zero resource usage;
+- enter waiting exactly once across connections with zero attempt, lease,
+  runtime, resource usage, or budget reservation;
 - close/reopen and preserve exact gate identity/deadline;
 - approve once and start downstream work;
 - reject and enforce compiled terminal policy;
 - expire after durable deadline without an in-memory timer dependency;
 - cancel while waiting;
-- race approve/reject/cancel across connections and commit one outcome;
+- race approve/reject/expire/cancel across connections and commit one outcome;
 - deny unauthorized/stale operator commands before store mutation;
 - keep credentials and comments out of SQLite/events;
-- project waiting age and decision state accurately.
+- project waiting age and decision state accurately through bounded pages;
+- run a real JavaScript gate across dispatcher/store restart while an unrelated
+  run completes, then publish the typed decision without persisting source or
+  decision-body canaries;
+- activate a budget exhaustion gate, apply an authenticated account increase,
+  and admit exactly one attempt; leave an unused budget gate pending without
+  blocking successful completion.
 
 ## 12. Slice 11 — process isolation: broader trust is viable
 

@@ -1,7 +1,7 @@
 ---
 Title: Slice 10 Approval Gates - Durable Lease-Free Waiting
 Ticket: SCRAPER-WORKFLOW-V3
-Status: active
+Status: complete
 Topics:
     - architecture
     - scheduler
@@ -16,23 +16,29 @@ RelatedFiles:
     - Path: repo://pkg/gojamodules/workflow/authoring.go
       Note: Safe gate declaration without operator authority
     - Path: repo://pkg/workflowv3/compiler.go
-      Note: Gate dependency output and expiry validation
+      Note: Gate dependency output budget relation cycle and expiry validation
+    - Path: repo://pkg/workflowv3/gate.go
+      Note: Canonical policy command validation errors and progress contracts
     - Path: repo://pkg/workflowv3/types.go
       Note: Canonical gate declarations policies and decisions
     - Path: repo://pkg/workflowv3runtime/dispatcher.go
       Note: Gates must wait without dispatcher lease or resource use
+    - Path: repo://pkg/workflowv3sqlite/gate.go
+      Note: Waiting decision expiry pagination and terminal transactions
     - Path: repo://pkg/workflowv3sqlite/projection.go
-      Note: Waiting age and decision projections
+      Note: Run and attempt projections integrated with gate state
     - Path: repo://pkg/workflowv3sqlite/schema.sql
       Note: Durable waiting and decision records
     - Path: repo://pkg/workflowv3sqlite/store.go
-      Note: |-
-        Compare-and-swap approve reject expire and cancel transitions
-        Gate compare-and-swap transitions extend durable control state
+      Note: Gate submission cancellation compact outputs and ordinary node admission
+    - Path: repo://pkg/testfixtures/workflowv3gate/workflow.js
+      Note: Real typed wait restart and downstream continuation workflow
+    - Path: repo://pkg/workflowv3runtime/gate_integration_test.go
+      Note: Dispatcher capacity authority restart and privacy evidence
 ExternalSources: []
 Summary: Implementation contract for durable approval and external-event gates that wait across restart without consuming attempts leases resources runtimes or budgets.
-LastUpdated: 2026-07-21T20:50:00-04:00
-WhatFor: Freeze Slice 10 authoring state operator transaction race privacy and continuation behavior before implementation.
+LastUpdated: 2026-07-22T00:35:00-04:00
+WhatFor: Define and record the implemented Slice 10 authoring state operator transaction race privacy and continuation contracts and evidence.
 WhenToUse: Read before adding human approval budget escalation external callbacks or any workflow step that may wait longer than an execution lease.
 ---
 
@@ -61,10 +67,10 @@ provider traffic.
 
 ## Scope
 
-Included: canonical gate declarations, gate node mode, waiting state, expiry,
-approve/reject/cancel CAS transitions, authenticated operator boundary,
-optional signed decision artifact refs, continuation, events, projections,
-restart, and concurrency tests.
+Included: canonical gate declarations, independent durable gate control rows,
+waiting state, expiry, approve/reject/cancel CAS transitions, authenticated
+operator boundary, externally verified immutable decision artifact refs,
+continuation, events, projections, restart, and concurrency tests.
 
 Excluded: identity-provider implementation, UI, notification delivery, general
 message queues, and arbitrary comments in control rows. Those systems call the
@@ -141,15 +147,16 @@ CREATE TABLE v3_gates (
   decision_ref_media_type TEXT,
   decision_ref_size_bytes INTEGER,
   decision_ref_locator TEXT,
+  budget_activation INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (run_id,gate_key),
   FOREIGN KEY (run_id) REFERENCES v3_runs(run_id) ON DELETE CASCADE
 );
 ```
 
-The gate may also have a row in `v3_nodes` with mode/status support so existing
-dependency queries remain unified. It never has a `v3_attempts` row. If node
-status vocabulary is extended with `waiting`, migration and all status queries
-must be updated explicitly.
+The implementation deliberately keeps gates out of `v3_nodes`: immutable
+`v3_gate_dependencies` and `v3_gate_consumers` edges connect them to ordinary
+nodes without contaminating executable-node status or attempt invariants. A
+gate never has a `v3_attempts` row.
 
 No auth token, session cookie, raw request, arbitrary comment, or external
 payload is stored. Long/signed evidence is an immutable validated artifact ref.
@@ -202,6 +209,7 @@ type GateDecisionCommand struct {
     Decision string // approve | reject
     DecisionCode string
     ActorID string
+    AuthorizedRole string
     DecisionRef *ArtifactRef
 }
 ```
@@ -211,9 +219,10 @@ command shape, current waiting state, expected version, deadline, run status,
 and decision artifact schema. Authorization credentials never reach this
 struct or SQLite.
 
-For high-assurance environments, the operator service can create a signed
-decision artifact. Signature verification occurs before the store transaction;
-the store persists only the verified ref and identity facts.
+For high-assurance environments, the operator service can create and verify a
+signed decision artifact before calling the store. Signature-profile selection
+and identity-provider integration remain operator-service concerns; the store
+persists only the already-verified compact ref and bounded identity facts.
 
 ## Expiry
 
@@ -239,11 +248,14 @@ that option and support only `fail-run`; it must not silently interpret it.
 
 ## Budget integration
 
-Slice 9 `require-approval` exhaustion activates a compiled gate. No budgeted
-node lease exists while waiting. Approval must be paired with an authenticated
-account increase or explicit one-time allowance in the same operator workflow;
-otherwise the node becomes ready and immediately budget-blocked again. The
-gate decision itself does not fabricate budget.
+Slice 9 `require-approval` exhaustion activates a compiled gate. Each compiled
+claim owns a dedicated activation gate; sharing one terminal gate across claims
+is rejected because it could not be re-armed for later exhaustion. A gate also
+cannot depend on its blocked node or expose its activation decision as ordinary
+data. No budgeted node lease exists while waiting. Approval must be paired with
+an authenticated account increase or explicit one-time allowance in the same
+operator workflow; otherwise the node remains budget-blocked. The gate decision
+itself does not fabricate budget.
 
 ## Events and projections
 
@@ -262,7 +274,8 @@ privacy policy, timestamps, and decision ref digest. No free-form text.
 
 Projection exposes counts and per-run bounded details: waiting age, expiry
 remaining, required role identifier, status, decision time/code, and whether a
-decision artifact exists. Operator listings are paginated.
+decision artifact exists. Global snapshots cap details and mark truncation;
+`GatePage` provides deterministic per-run keyset pagination.
 
 ## Failure vocabulary
 
@@ -274,7 +287,11 @@ decision artifact exists. Operator listings are paginated.
 - `timeout/GATE_EXPIRED` or the repository's chosen stable timeout class;
 - `identity/GATE_ALREADY_DECIDED`.
 
-Add any new failure class deliberately to the closed vocabulary and tests.
+Gate commands are trusted control-plane calls rather than task failures, so the
+implementation returns stable typed sentinel errors (`ErrGateVersionConflict`,
+`ErrGateAlreadyDecided`, `ErrGateExpired`, `ErrGateUnauthorized`) instead of
+persisting synthetic task failures. Terminal reject/expiry codes are bounded
+engine-owned gate events and run/node failure evidence.
 
 ## Migration
 
@@ -337,6 +354,24 @@ executable task.
 8. Add real wait/reopen/concurrency/privacy fixture.
 9. Update diary, changelog, relations, and generated artifacts.
 10. Run focused/race/full/TypeScript/docmgr/privacy/diff validation.
+
+## Implementation evidence
+
+The implementation is in `pkg/workflowv3/gate.go`, canonical compiler/types,
+`pkg/gojamodules/workflow`, `pkg/workflowv3sqlite/gate.go`, gate-aware store and
+dynamic map/reduction insertion, runtime dispatcher maintenance, and the real
+`pkg/testfixtures/workflowv3gate` bundle. Exact JavaScript IR/plan/DTS goldens
+freeze authoring output.
+
+Focused tests prove pending-to-waiting CAS across independent connections,
+zero attempts while waiting, close/reopen approval, restart-preserved expiry,
+role/schema/version/idempotency checks, approve/reject/expire/cancel races,
+typed downstream artifact publication, budget approval plus account increase,
+unused budget-gate nonblocking behavior, bounded gate pagination, task denial of
+operator modules, SQLite/WAL/event/projection canaries, and a dispatcher restart
+that continues unrelated work while the gate waits. Branch cancellation is
+explicitly compiler-rejected. Cancellation-context normalization prevents
+SQLite transaction shutdown races from masking `context.Canceled`.
 
 ## Acceptance criteria
 
