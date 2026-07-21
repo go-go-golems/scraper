@@ -4153,3 +4153,8 @@ all-slice intern guide, and the append-only diary as:
 `/ai/2026/07/22/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 SLICES 6 THROUGH 10 COMPLETION.pdf`
 
 The upload returned `OK: uploaded`; no post-upload listing was needed.
+
+**Final audit commit:** `ba0d29b` — `docs: audit and publish workflow v3 slices 6 through 10`.
+After that commit, the complete runtime/store race suites passed again in
+11.670s and 1.697s, isolated lint returned `0 issues.`, and HEAD matched the
+pushed upstream with a clean worktree.
