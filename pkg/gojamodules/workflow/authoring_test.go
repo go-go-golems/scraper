@@ -319,6 +319,43 @@ module.exports = workflow.compile(workflow.define("bad", p => {
 	require.ErrorContains(t, err, "unknown input extra")
 }
 
+func TestAuthorCompilesBudgetAccountAndClaim(t *testing.T) {
+	specs := linearCatalog(t).Specs()
+	for index := range specs {
+		specs[index].BudgetMaximum = &workflowv3.BudgetClaim{
+			Account: "provider", OnExhausted: workflowv3.BudgetExhaustBlock,
+			Reserve: []workflowv3.BudgetAmount{{Dimension: "cost_microunits", Units: 100}, {Dimension: "requests", Units: 2}},
+		}
+	}
+	catalog, err := workflowv3.NewCatalog(specs...)
+	require.NoError(t, err)
+	source := `
+const workflow = require("workflow");
+const tasks = require("cookbook-linear-transform-tasks");
+module.exports = workflow.compile(workflow.define("budgeted", p => {
+  p.budget("provider", {
+    limits: {requests: 1, cost_microunits: 80},
+    policyDigest: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  });
+  const source = p.input("source", {schema: "customer-jsonl-ref/v1"});
+  const node = p.task("normalize", tasks.normalizeCustomers({source}), job => {
+    job.budget({
+      account: "provider",
+      reserve: {requests: 1, cost_microunits: 40},
+      onExhausted: "block",
+    });
+  });
+  p.output("dataset", node.output("dataset"));
+}));`
+	result, err := workflowmodule.Author(
+		context.Background(), source, catalog, workflowv3linear.DescriptorModule(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(40), result.Plan.Nodes[0].Budget.Effective[0].Units)
+	assertGolden(t, "budget.ir.json", result.IR)
+	assertGolden(t, "budget.plan.json", result.Plan)
+}
+
 func TestTypeScriptDeclaresMinimalSurface(t *testing.T) {
 	declaration := workflowmodule.TypeScript()
 	expectedDeclaration, err := os.ReadFile("testdata/workflow.d.ts")
@@ -328,6 +365,7 @@ func TestTypeScriptDeclaresMinimalSurface(t *testing.T) {
 		"declare module \"workflow\"", "function define", "function compile",
 		"input<T = unknown>", "inputSet<T = unknown>", "map<I, O>(", "reduce<I, O>(",
 		"outputSet(name: string", "task(", "output(name: string",
+		"BudgetClaim", "budget(claim: BudgetClaim)",
 	} {
 		require.Contains(t, declaration, expected)
 	}

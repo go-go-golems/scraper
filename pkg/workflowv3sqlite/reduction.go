@@ -267,18 +267,26 @@ WHERE run_id = ? AND reduce_key = ? AND level = ? AND status != 'succeeded'`,
 		outputSchemas, _ := workflowv3.CanonicalJSON(reduced.OutputSchemas)
 		modules, _ := workflowv3.CanonicalJSON(reduced.Modules)
 		identity := reduced.Implementation
+		var budgetAccount, budgetOnExhausted any
+		if reduced.Budget != nil {
+			budgetAccount, budgetOnExhausted = reduced.Budget.Account, reduced.Budget.OnExhausted
+		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO v3_nodes(
   run_id, node_key, ordinal, task_kind, task_version, bundle_digest,
   entrypoint, task_abi, bindings_json, input_schemas_json,
   output_schemas_json, modules_json, resource_class, max_attempts,
-  retry_backoff_ms, status
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+  retry_backoff_ms, budget_account, budget_on_exhausted, status
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
 			runID, nodeKey, ordinalBase+ordinal, identity.Kind, identity.Version,
 			identity.BundleDigest, identity.Entrypoint, identity.ABI,
 			bindingsBody, inputSchemas, outputSchemas, modules,
-			reduced.ResourceClass, reduced.Retry.MaxAttempts, reduced.Retry.BackoffMillis); err != nil {
+			reduced.ResourceClass, reduced.Retry.MaxAttempts, reduced.Retry.BackoffMillis,
+			budgetAccount, budgetOnExhausted); err != nil {
 			return fmt.Errorf("insert reduction node %d: %w", ordinal, err)
+		}
+		if err := insertNodeBudget(ctx, tx, runID, nodeKey, reduced.Budget); err != nil {
+			return err
 		}
 		for _, binding := range reduced.Bindings {
 			if binding.Source != "node-output" {

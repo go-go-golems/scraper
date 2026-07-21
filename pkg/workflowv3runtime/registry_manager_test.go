@@ -252,6 +252,11 @@ func TestRegistryManagerQuarantinesConstructionFailureWithoutDomainRetryDebt(t *
 	require.Equal(t, 1, queue.BlockedByReason["implementation-unavailable"])
 	require.Len(t, queue.RegistryGenerations, 1)
 	require.Equal(t, "quarantined", queue.RegistryGenerations[0].State)
+	operational, err := dispatcher.OperationalSnapshot(ctx, nil)
+	require.NoError(t, err)
+	require.Len(t, operational.RegistryGenerations, 1)
+	require.Equal(t, "quarantined", operational.RegistryGenerations[0].State)
+	require.Equal(t, operational.RegistryGenerations, operational.Queue.RegistryGenerations)
 }
 
 func TestRegistryManagerAcquireAndActivateAreRaceSafe(t *testing.T) {

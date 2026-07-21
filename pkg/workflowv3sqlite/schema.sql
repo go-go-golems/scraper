@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS v3_nodes (
   status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'canceled')),
   attempt_count INTEGER NOT NULL DEFAULT 0,
   failure_count INTEGER NOT NULL DEFAULT 0,
+  budget_account TEXT,
+  budget_on_exhausted TEXT,
   lease_token TEXT,
   lease_cancel_epoch INTEGER,
   lease_expires_at TEXT,
@@ -161,6 +163,49 @@ CREATE TABLE IF NOT EXISTS v3_run_resource_dispatch (
   PRIMARY KEY (run_id, resource_class),
   FOREIGN KEY (run_id) REFERENCES v3_runs(run_id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS v3_budget_accounts (
+  run_id TEXT NOT NULL,
+  account TEXT NOT NULL,
+  dimension TEXT NOT NULL,
+  limit_units INTEGER NOT NULL CHECK (limit_units >= 0),
+  used_units INTEGER NOT NULL DEFAULT 0 CHECK (used_units >= 0),
+  reserved_units INTEGER NOT NULL DEFAULT 0 CHECK (reserved_units >= 0),
+  policy_digest TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (run_id, account, dimension),
+  FOREIGN KEY (run_id) REFERENCES v3_runs(run_id) ON DELETE CASCADE,
+  CHECK (used_units + reserved_units <= limit_units)
+);
+
+CREATE TABLE IF NOT EXISTS v3_node_budget_claims (
+  run_id TEXT NOT NULL,
+  node_key TEXT NOT NULL,
+  dimension TEXT NOT NULL,
+  reserve_units INTEGER NOT NULL CHECK (reserve_units > 0),
+  PRIMARY KEY (run_id, node_key, dimension),
+  FOREIGN KEY (run_id, node_key) REFERENCES v3_nodes(run_id, node_key) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS v3_budget_reservations (
+  run_id TEXT NOT NULL,
+  node_key TEXT NOT NULL,
+  attempt_no INTEGER NOT NULL,
+  account TEXT NOT NULL,
+  dimension TEXT NOT NULL,
+  reserved_units INTEGER NOT NULL CHECK (reserved_units > 0),
+  settled_units INTEGER CHECK (settled_units >= 0),
+  status TEXT NOT NULL CHECK (status IN ('reserved','settled','conservative','released')),
+  created_at TEXT NOT NULL,
+  settled_at TEXT,
+  PRIMARY KEY (run_id, node_key, attempt_no, dimension),
+  FOREIGN KEY (run_id, node_key, attempt_no)
+    REFERENCES v3_attempts(run_id, node_key, attempt_no) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_v3_budget_reservations_status
+  ON v3_budget_reservations(run_id, status);
 
 CREATE TABLE IF NOT EXISTS v3_dependencies (
   run_id TEXT NOT NULL,

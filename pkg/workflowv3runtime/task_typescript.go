@@ -39,11 +39,19 @@ func TaskTypeScript() string {
       options: {schema: string; value: unknown},
     ): Promise<OutputRef>;
   }
+  export type BudgetDimension =
+    | "requests" | "input_tokens" | "output_tokens"
+    | "embedding_tokens" | "input_bytes" | "output_bytes"
+    | "cost_microunits";
+  export interface TaskUsage {
+    report(dimension: BudgetDimension, units: number): void;
+  }
   export interface TaskContext {
     input(): Record<string, ArtifactInput>;
     identity(): TaskIdentity;
     checkpoint(): void;
     readonly outputs: TaskOutputs;
+    readonly usage: TaskUsage;
   }
   export interface TaskFailure {
     class: string;

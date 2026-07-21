@@ -17,6 +17,19 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		return fmt.Errorf("task catalog is required")
 	}
 
+	budgetAccounts := make(map[string]BudgetAccount, len(ir.Budgets))
+	previousAccount := ""
+	for _, account := range ir.Budgets {
+		if err := ValidateBudgetAccount(account); err != nil {
+			return err
+		}
+		if account.Account <= previousAccount {
+			return fmt.Errorf("budget accounts must be strictly sorted and unique")
+		}
+		budgetAccounts[account.Account] = account
+		previousAccount = account.Account
+	}
+
 	inputSchemas := make(map[string]string, len(ir.Inputs))
 	for _, input := range ir.Inputs {
 		if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.Schema) == "" {
@@ -63,6 +76,9 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 
 	for _, node := range ir.Nodes {
 		spec := nodeSpecs[node.Key]
+		if _, err := compileBudgetClaim(node.Budget, spec.BudgetMaximum, budgetAccounts); err != nil {
+			return fmt.Errorf("node %q budget: %w", node.Key, err)
+		}
 		if len(node.Bindings) != len(spec.Inputs) {
 			return fmt.Errorf("node %q has %d bindings, task requires %d", node.Key, len(node.Bindings), len(spec.Inputs))
 		}
@@ -123,6 +139,9 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		}
 		if len(spec.Outputs) != 1 {
 			return fmt.Errorf("map %q item task must declare exactly one output", mapped.Key)
+		}
+		if _, err := compileBudgetClaim(mapped.Budget, spec.BudgetMaximum, budgetAccounts); err != nil {
+			return fmt.Errorf("map %q budget: %w", mapped.Key, err)
 		}
 		if len(mapped.Bindings) != len(spec.Inputs) {
 			return fmt.Errorf("map %q has %d bindings, task requires %d", mapped.Key, len(mapped.Bindings), len(spec.Inputs))
@@ -190,6 +209,9 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		}
 		if len(spec.Outputs) != 1 {
 			return fmt.Errorf("reduction %q partition task must declare exactly one output", reduced.Key)
+		}
+		if _, err := compileBudgetClaim(reduced.Budget, spec.BudgetMaximum, budgetAccounts); err != nil {
+			return fmt.Errorf("reduction %q budget: %w", reduced.Key, err)
 		}
 		if len(reduced.Bindings) != len(spec.Inputs) {
 			return fmt.Errorf("reduction %q has %d bindings, task requires %d", reduced.Key, len(reduced.Bindings), len(spec.Inputs))
@@ -299,12 +321,18 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 		CatalogDigest: catalogDigest,
 		Inputs:        append([]IRInput{}, ir.Inputs...),
 		SetInputs:     append([]IRSetInput(nil), ir.SetInputs...),
+		Budgets:       cloneBudgetAccounts(ir.Budgets),
 		Nodes:         make([]PlanNode, 0, len(ir.Nodes)),
 		Outputs:       append([]IROutput{}, ir.Outputs...),
 		SetOutputs:    append([]IRSetOutput(nil), ir.SetOutputs...),
 	}
+	budgetAccounts := make(map[string]BudgetAccount, len(ir.Budgets))
+	for _, account := range ir.Budgets {
+		budgetAccounts[account.Account] = account
+	}
 	for _, node := range ir.Nodes {
 		spec, _ := catalog.Lookup(node.Task)
+		budget, _ := compileBudgetClaim(node.Budget, spec.BudgetMaximum, budgetAccounts)
 		plan.Nodes = append(plan.Nodes, PlanNode{
 			Key:            node.Key,
 			Implementation: spec.Identity,
@@ -315,26 +343,29 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 			Modules:        append([]string(nil), spec.Modules...),
 			ResourceClass:  spec.ResourceClass,
 			Retry:          spec.Retry,
+			Budget:         budget,
 		})
 	}
 	for _, mapped := range ir.Maps {
 		spec, _ := catalog.Lookup(mapped.ItemTask)
+		budget, _ := compileBudgetClaim(mapped.Budget, spec.BudgetMaximum, budgetAccounts)
 		plan.Maps = append(plan.Maps, PlanMap{
 			Key: mapped.Key, Source: mapped.Source, Implementation: spec.Identity,
 			Bindings:     cloneBindings(mapped.Bindings),
 			InputSchemas: cloneStringMap(spec.Inputs), OutputSchemas: cloneStringMap(spec.Outputs),
 			Modules: append([]string(nil), spec.Modules...), ResourceClass: spec.ResourceClass,
-			Retry: spec.Retry, Policy: mapped.Policy,
+			Retry: spec.Retry, Policy: mapped.Policy, Budget: budget,
 		})
 	}
 	for _, reduced := range ir.Reductions {
 		spec, _ := catalog.Lookup(reduced.PartitionTask)
+		budget, _ := compileBudgetClaim(reduced.Budget, spec.BudgetMaximum, budgetAccounts)
 		plan.Reductions = append(plan.Reductions, PlanReduce{
 			Key: reduced.Key, Source: reduced.Source, Implementation: spec.Identity,
 			Bindings:     cloneBindings(reduced.Bindings),
 			InputSchemas: cloneStringMap(spec.Inputs), OutputSchemas: cloneStringMap(spec.Outputs),
 			Modules: append([]string(nil), spec.Modules...), ResourceClass: spec.ResourceClass,
-			Retry: spec.Retry, Policy: reduced.Policy,
+			Retry: spec.Retry, Policy: reduced.Policy, Budget: budget,
 		})
 	}
 	withoutDigest := plan

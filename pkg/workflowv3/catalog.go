@@ -94,6 +94,11 @@ func validateTaskSpec(spec TaskSpec) error {
 	if spec.Retry.BackoffMillis < 0 || spec.Retry.BackoffMillis > 24*60*60*1000 {
 		return fmt.Errorf("task %s@%s retry backoff is invalid", identity.Kind, identity.Version)
 	}
+	if spec.BudgetMaximum != nil {
+		if err := ValidateBudgetClaim(*spec.BudgetMaximum); err != nil {
+			return fmt.Errorf("task %s@%s budget maximum: %w", identity.Kind, identity.Version, err)
+		}
+	}
 	seenModules := map[string]struct{}{}
 	for _, module := range spec.Modules {
 		if strings.TrimSpace(module) == "" {
@@ -122,6 +127,7 @@ func cloneTaskSpec(spec TaskSpec) TaskSpec {
 	ret.Inputs = cloneStringMap(spec.Inputs)
 	ret.Outputs = cloneStringMap(spec.Outputs)
 	ret.Modules = append([]string(nil), spec.Modules...)
+	ret.BudgetMaximum = cloneBudgetClaim(spec.BudgetMaximum)
 	sort.Strings(ret.Modules)
 	return ret
 }

@@ -132,6 +132,28 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	}
 }
 
+func (d *Dispatcher) OperationalSnapshot(
+	ctx context.Context,
+	runID *workflowv3.RunID,
+) (workflowv3.OperationalSnapshot, error) {
+	if err := d.validate(); err != nil {
+		return workflowv3.OperationalSnapshot{}, err
+	}
+	snapshot, err := d.Engine.Store.OperationalSnapshot(
+		ctx, runID, d.Engine.Registry, d.Capacities, d.Engine.now(),
+	)
+	if err != nil {
+		return snapshot, err
+	}
+	if provider, ok := d.Engine.Registry.(interface {
+		Progress() []workflowv3.RegistryGenerationProgress
+	}); ok {
+		snapshot.RegistryGenerations = provider.Progress()
+		snapshot.Queue.RegistryGenerations = snapshot.RegistryGenerations
+	}
+	return snapshot, nil
+}
+
 func (d *Dispatcher) QueueSnapshot(ctx context.Context) (workflowv3.QueueSnapshot, error) {
 	if err := d.validate(); err != nil {
 		return workflowv3.QueueSnapshot{}, err

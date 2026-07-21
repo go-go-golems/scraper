@@ -48,7 +48,11 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	}
 	if err := migrateAdditiveColumns(ctx, db); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("migrate workflow v3 slice 3-5 columns: %w", err)
+		return nil, fmt.Errorf("migrate workflow v3 additive columns: %w", err)
+	}
+	if err := checkBudgetInvariants(ctx, db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("workflow v3 budget reconciliation: %w", err)
 	}
 	return &Store{db: db}, nil
 }
@@ -101,25 +105,44 @@ VALUES (?, ?, ?, ?, ?, ?, ?)`, []any{runID, input.Name}, ref); err != nil {
 			return fmt.Errorf("insert run set input %s: %w", input.Name, err)
 		}
 	}
+	for _, account := range plan.Budgets {
+		for _, limit := range account.Limits {
+			if _, err := tx.ExecContext(ctx, `
+INSERT INTO v3_budget_accounts(
+  run_id, account, dimension, limit_units, policy_digest, updated_at
+) VALUES (?, ?, ?, ?, ?, ?)`, runID, account.Account, limit.Dimension,
+				limit.Units, account.PolicyDigest, stamp); err != nil {
+				return fmt.Errorf("insert budget account %s/%s: %w", account.Account, limit.Dimension, err)
+			}
+		}
+	}
 	for ordinal, node := range plan.Nodes {
 		bindings, _ := workflowv3.CanonicalJSON(node.Bindings)
 		inputSchemas, _ := workflowv3.CanonicalJSON(node.InputSchemas)
 		outputSchemas, _ := workflowv3.CanonicalJSON(node.OutputSchemas)
 		modules, _ := workflowv3.CanonicalJSON(node.Modules)
 		identity := node.Implementation
+		var budgetAccount, budgetOnExhausted any
+		if node.Budget != nil {
+			budgetAccount, budgetOnExhausted = node.Budget.Account, node.Budget.OnExhausted
+		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO v3_nodes(
   run_id, node_key, ordinal, task_kind, task_version, bundle_digest,
   entrypoint, task_abi, bindings_json, input_schemas_json,
   output_schemas_json, modules_json, resource_class, max_attempts,
-  retry_backoff_ms, status
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+  retry_backoff_ms, budget_account, budget_on_exhausted, status
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
 			runID, node.Key, ordinal, identity.Kind, identity.Version,
 			identity.BundleDigest, identity.Entrypoint, identity.ABI,
 			bindings, inputSchemas, outputSchemas, modules,
 			node.ResourceClass, node.Retry.MaxAttempts, node.Retry.BackoffMillis,
+			budgetAccount, budgetOnExhausted,
 		); err != nil {
 			return fmt.Errorf("insert node %s: %w", node.Key, err)
+		}
+		if err := insertNodeBudget(ctx, tx, runID, node.Key, node.Budget); err != nil {
+			return err
 		}
 	}
 	for _, node := range plan.Nodes {
@@ -219,6 +242,9 @@ func (s *Store) LeaseNextWithResources(
 	if err := reclaimExpired(ctx, tx, now); err != nil {
 		return nil, err
 	}
+	if err := failExhaustedBudgetNodes(ctx, tx, now); err != nil {
+		return nil, err
+	}
 	active, err := activeResources(ctx, tx)
 	if err != nil {
 		return nil, err
@@ -229,7 +255,7 @@ SELECT
   n.entrypoint, n.task_abi, n.bindings_json, n.input_schemas_json,
   n.output_schemas_json, n.modules_json, n.resource_class,
   n.max_attempts, n.retry_backoff_ms, n.attempt_count, n.failure_count,
-  r.cancel_epoch
+  n.budget_account, n.budget_on_exhausted, r.cancel_epoch
 FROM v3_nodes n
 JOIN v3_runs r ON r.run_id = n.run_id
 LEFT JOIN v3_run_resource_dispatch fairness
@@ -246,6 +272,17 @@ WHERE n.status = 'pending' AND r.status = 'running'
     WHERE d.run_id = n.run_id
       AND d.node_key = n.node_key
       AND dependency.status != 'succeeded'
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM v3_node_budget_claims claim
+    JOIN v3_budget_accounts account
+      ON account.run_id = claim.run_id
+     AND account.account = n.budget_account
+     AND account.dimension = claim.dimension
+    WHERE claim.run_id = n.run_id AND claim.node_key = n.node_key
+      AND account.used_units + account.reserved_units + claim.reserve_units
+          > account.limit_units
   )
 ORDER BY COALESCE(fairness.dispatch_count, 0), r.created_at, n.ordinal, n.run_id`,
 		formatTime(now))
@@ -299,6 +336,15 @@ ORDER BY COALESCE(fairness.dispatch_count, 0), r.created_at, n.ordinal, n.run_id
 			releaseGeneration()
 		}
 	}()
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	budget, err := loadNodeBudget(ctx, tx, selected.runID, selected.node.Key,
+		selected.budgetAccount, selected.budgetOnExhausted)
+	if err != nil {
+		return nil, err
+	}
+	selected.node.Budget = budget
 	attempt := selected.attemptCount + 1
 	token := uuid.NewString()
 	expires := now.Add(duration)
@@ -325,6 +371,10 @@ INSERT INTO v3_attempts(
 		generation, selected.node.ResourceClass, formatTime(now),
 	); err != nil {
 		return nil, fmt.Errorf("insert attempt: %w", err)
+	}
+	if err := reserveNodeBudget(ctx, tx, selected.runID, selected.node.Key,
+		attempt, selected.node.Budget, now); err != nil {
+		return nil, err
 	}
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO v3_run_resource_dispatch(run_id, resource_class, dispatch_count)
@@ -418,7 +468,22 @@ WHERE run_id = ? AND reduce_key = ? AND node_key = ?`,
 	return ret, nil
 }
 
-func (s *Store) Complete(ctx context.Context, lease workflowv3.Lease, outputs map[string]workflowv3.ArtifactRef, now time.Time) error {
+func (s *Store) Complete(
+	ctx context.Context,
+	lease workflowv3.Lease,
+	outputs map[string]workflowv3.ArtifactRef,
+	now time.Time,
+) error {
+	return s.CompleteWithUsage(ctx, lease, outputs, nil, now)
+}
+
+func (s *Store) CompleteWithUsage(
+	ctx context.Context,
+	lease workflowv3.Lease,
+	outputs map[string]workflowv3.ArtifactRef,
+	usage []workflowv3.BudgetAmount,
+	now time.Time,
+) error {
 	if err := validateOutputs(lease.PlanNode, outputs); err != nil {
 		return err
 	}
@@ -428,6 +493,9 @@ func (s *Store) Complete(ctx context.Context, lease workflowv3.Lease, outputs ma
 	}
 	defer func() { _ = tx.Rollback() }()
 	if err := checkFence(ctx, tx, lease); err != nil {
+		return err
+	}
+	if err := settleAttemptBudget(ctx, tx, lease, usage, "actual", now); err != nil {
 		return err
 	}
 	ports := make([]string, 0, len(outputs))
@@ -502,6 +570,31 @@ WHERE run_id = ? AND status = 'running'
 }
 
 func (s *Store) Fail(ctx context.Context, lease workflowv3.Lease, failure workflowv3.Failure, now time.Time) error {
+	return s.fail(ctx, lease, failure, nil, "conservative", now)
+}
+
+func (s *Store) FailWithUsage(
+	ctx context.Context,
+	lease workflowv3.Lease,
+	failure workflowv3.Failure,
+	usage []workflowv3.BudgetAmount,
+	now time.Time,
+) error {
+	return s.fail(ctx, lease, failure, usage, "actual", now)
+}
+
+func (s *Store) FailWithoutCharge(ctx context.Context, lease workflowv3.Lease, failure workflowv3.Failure, now time.Time) error {
+	return s.fail(ctx, lease, failure, nil, "release", now)
+}
+
+func (s *Store) fail(
+	ctx context.Context,
+	lease workflowv3.Lease,
+	failure workflowv3.Failure,
+	usage []workflowv3.BudgetAmount,
+	settlement string,
+	now time.Time,
+) error {
 	if err := workflowv3.ValidateFailure(failure); err != nil {
 		return err
 	}
@@ -511,6 +604,9 @@ func (s *Store) Fail(ctx context.Context, lease workflowv3.Lease, failure workfl
 	}
 	defer func() { _ = tx.Rollback() }()
 	if err := checkFence(ctx, tx, lease); err != nil {
+		return err
+	}
+	if err := settleAttemptBudget(ctx, tx, lease, usage, settlement, now); err != nil {
 		return err
 	}
 	stamp := formatTime(now)
@@ -608,6 +704,9 @@ func (s *Store) InfrastructureFail(
 	if err := checkFence(ctx, tx, lease); err != nil {
 		return err
 	}
+	if err := settleAttemptBudget(ctx, tx, lease, nil, "release", now); err != nil {
+		return err
+	}
 	stamp := formatTime(now)
 	if _, err := tx.ExecContext(ctx, `
 UPDATE v3_attempts
@@ -648,6 +747,9 @@ UPDATE v3_runs SET status = 'canceled', cancel_epoch = cancel_epoch + 1,
 	}
 	if affected, _ := result.RowsAffected(); affected != 1 {
 		return fmt.Errorf("run %s is not running", runID)
+	}
+	if err := settleConservativeWhere(ctx, tx, "run_id = ?", []any{runID}, now); err != nil {
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
 UPDATE v3_attempts SET status = 'canceled', finished_at = ?
@@ -767,11 +869,13 @@ func (s *Store) Checkpoint(ctx context.Context) error {
 }
 
 type leaseCandidate struct {
-	runID        workflowv3.RunID
-	node         workflowv3.PlanNode
-	attemptCount int
-	failureCount int
-	cancelEpoch  int64
+	runID             workflowv3.RunID
+	node              workflowv3.PlanNode
+	attemptCount      int
+	failureCount      int
+	budgetAccount     sql.NullString
+	budgetOnExhausted sql.NullString
+	cancelEpoch       int64
 }
 
 type rowScanner interface {
@@ -807,7 +911,8 @@ func scanLeaseCandidate(rows rowScanner) (leaseCandidate, error) {
 		&entrypoint, &abi, &bindings, &inputSchemas, &outputSchemas, &modules,
 		&candidate.node.ResourceClass, &candidate.node.Retry.MaxAttempts,
 		&candidate.node.Retry.BackoffMillis, &candidate.attemptCount,
-		&candidate.failureCount, &candidate.cancelEpoch,
+		&candidate.failureCount, &candidate.budgetAccount,
+		&candidate.budgetOnExhausted, &candidate.cancelEpoch,
 	); err != nil {
 		return candidate, err
 	}
@@ -832,6 +937,14 @@ func scanLeaseCandidate(rows rowScanner) (leaseCandidate, error) {
 
 func reclaimExpired(ctx context.Context, tx *sql.Tx, now time.Time) error {
 	stamp := formatTime(now)
+	if err := settleConservativeWhere(ctx, tx, `EXISTS (
+  SELECT 1 FROM v3_nodes n
+  WHERE n.run_id = v3_budget_reservations.run_id
+    AND n.node_key = v3_budget_reservations.node_key
+    AND n.status = 'running' AND julianday(n.lease_expires_at) < julianday(?)
+)`, []any{stamp}, now); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `
 UPDATE v3_attempts SET status = 'lease_lost', finished_at = ?
 WHERE status = 'running' AND EXISTS (
@@ -1009,6 +1122,8 @@ func migrateAdditiveColumns(ctx context.Context, db *sql.DB) error {
 		{"v3_nodes", "retry_backoff_ms", "INTEGER NOT NULL DEFAULT 0"},
 		{"v3_nodes", "ready_at", "TEXT"},
 		{"v3_nodes", "failure_count", "INTEGER NOT NULL DEFAULT 0"},
+		{"v3_nodes", "budget_account", "TEXT"},
+		{"v3_nodes", "budget_on_exhausted", "TEXT"},
 		{"v3_attempts", "resource_class", "TEXT NOT NULL DEFAULT 'cpu.default'"},
 	}
 	for _, migration := range migrations {
