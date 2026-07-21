@@ -2,6 +2,7 @@ package workflowv3sqlite
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -85,6 +86,77 @@ func artifactRef(schema, seed string) workflowv3.ArtifactRef {
 		MediaType: "application/json",
 		Size:      1,
 		Locator:   "objects/" + seed,
+	}
+}
+
+func TestOpenMigratesCompletedMinimalSliceDatabase(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "workflow.db")
+	database, err := sql.Open("sqlite3", path)
+	require.NoError(t, err)
+	_, err = database.Exec(`
+CREATE TABLE v3_runs (
+  run_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  plan_digest TEXT NOT NULL,
+  plan_json BLOB NOT NULL,
+  status TEXT NOT NULL,
+  cancel_epoch INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE v3_nodes (
+  run_id TEXT NOT NULL,
+  node_key TEXT NOT NULL,
+  ordinal INTEGER NOT NULL,
+  task_kind TEXT NOT NULL,
+  task_version TEXT NOT NULL,
+  bundle_digest TEXT NOT NULL,
+  entrypoint TEXT NOT NULL,
+  task_abi TEXT NOT NULL,
+  bindings_json BLOB NOT NULL,
+  input_schemas_json BLOB NOT NULL,
+  output_schemas_json BLOB NOT NULL,
+  modules_json BLOB NOT NULL,
+  status TEXT NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  lease_token TEXT,
+  lease_cancel_epoch INTEGER,
+  lease_expires_at TEXT,
+  PRIMARY KEY (run_id, node_key)
+);
+CREATE TABLE v3_attempts (
+  run_id TEXT NOT NULL,
+  node_key TEXT NOT NULL,
+  attempt_no INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  lease_token TEXT NOT NULL,
+  cancel_epoch INTEGER NOT NULL,
+  registry_generation TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  failure_class TEXT,
+  failure_code TEXT,
+  failure_retryable INTEGER,
+  failure_message TEXT,
+  PRIMARY KEY (run_id, node_key, attempt_no)
+);`)
+	require.NoError(t, err)
+	require.NoError(t, database.Close())
+
+	store, err := Open(ctx, path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	for table, columns := range map[string][]string{
+		"v3_runs":     {"dispatch_count"},
+		"v3_nodes":    {"resource_class", "max_attempts", "retry_backoff_ms", "ready_at"},
+		"v3_attempts": {"resource_class"},
+	} {
+		for _, column := range columns {
+			exists, columnErr := columnExists(ctx, store.db, table, column)
+			require.NoError(t, columnErr)
+			require.True(t, exists, "%s.%s", table, column)
+		}
 	}
 }
 
