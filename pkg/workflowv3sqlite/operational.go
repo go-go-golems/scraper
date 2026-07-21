@@ -25,7 +25,7 @@ func (s *Store) OperationalSnapshot(
 	defer func() { _ = tx.Rollback() }()
 	snapshot := workflowv3.OperationalSnapshot{
 		AsOf: now.UTC(), RunStatuses: map[string]int{}, NodeStatuses: map[string]int{},
-		AttemptStatuses: map[string]int{},
+		AttemptStatuses: map[string]int{}, GateStatuses: map[string]int{},
 	}
 	eventQuery := "SELECT COALESCE(MAX(sequence), 0) FROM v3_events"
 	var eventArgs []any
@@ -43,6 +43,9 @@ func (s *Store) OperationalSnapshot(
 		return snapshot, err
 	}
 	if err := groupedStatus(ctx, tx, "v3_attempts", "run_id", runID, snapshot.AttemptStatuses); err != nil {
+		return snapshot, err
+	}
+	if err := groupedStatus(ctx, tx, "v3_gates", "run_id", runID, snapshot.GateStatuses); err != nil {
 		return snapshot, err
 	}
 	where, args := runWhere(runID, "run_id")
@@ -87,6 +90,36 @@ FROM v3_attempts WHERE finished_at IS NOT NULL
 	snapshot.Queue, err = queueSnapshot(ctx, tx, registry, capacities, runID, now)
 	if err != nil {
 		return snapshot, err
+	}
+	gateQuery := `
+SELECT run_id, gate_key, status, version, required_role, requested_at,
+  expires_at, decided_at, COALESCE(decision_code, ''),
+  decision_ref_digest IS NOT NULL, budget_activation
+FROM v3_gates`
+	gateArgs := []any{}
+	if runID != nil {
+		gateQuery += " WHERE run_id = ?"
+		gateArgs = append(gateArgs, *runID)
+	}
+	gateQuery += " ORDER BY run_id, gate_key LIMIT 1001"
+	gateRows, err := tx.QueryContext(ctx, gateQuery, gateArgs...)
+	if err != nil {
+		return snapshot, err
+	}
+	for gateRows.Next() {
+		gate, err := scanGateProgress(gateRows, now)
+		if err != nil {
+			_ = gateRows.Close()
+			return snapshot, err
+		}
+		snapshot.Gates = append(snapshot.Gates, gate)
+	}
+	if err := gateRows.Close(); err != nil {
+		return snapshot, err
+	}
+	if len(snapshot.Gates) > 1000 {
+		snapshot.Gates = snapshot.Gates[:1000]
+		snapshot.GatesTruncated = true
 	}
 	budgetQuery := `
 SELECT run_id, account, dimension, limit_units, used_units, reserved_units,

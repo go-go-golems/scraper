@@ -30,6 +30,41 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		previousAccount = account.Account
 	}
 
+	budgetGateKeys := map[NodeKey]struct{}{}
+	budgetGateOwners := map[NodeKey]string{}
+	registerBudgetGate := func(gate NodeKey, owner string) error {
+		if gate == "" {
+			return nil
+		}
+		if existing, duplicate := budgetGateOwners[gate]; duplicate {
+			return fmt.Errorf("budget approval gate %q is shared by %s and %s; each compiled claim requires a dedicated gate", gate, existing, owner)
+		}
+		budgetGateOwners[gate] = owner
+		budgetGateKeys[gate] = struct{}{}
+		return nil
+	}
+	for _, node := range ir.Nodes {
+		if node.Budget != nil {
+			if err := registerBudgetGate(node.Budget.ApprovalGate, "node "+string(node.Key)); err != nil {
+				return err
+			}
+		}
+	}
+	for _, mapped := range ir.Maps {
+		if mapped.Budget != nil {
+			if err := registerBudgetGate(mapped.Budget.ApprovalGate, "map "+mapped.Key); err != nil {
+				return err
+			}
+		}
+	}
+	for _, reduced := range ir.Reductions {
+		if reduced.Budget != nil {
+			if err := registerBudgetGate(reduced.Budget.ApprovalGate, "reduction "+reduced.Key); err != nil {
+				return err
+			}
+		}
+	}
+
 	inputSchemas := make(map[string]string, len(ir.Inputs))
 	for _, input := range ir.Inputs {
 		if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.Schema) == "" {
@@ -74,10 +109,42 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		nodeSpecs[node.Key] = spec
 	}
 
+	gateSchemas := make(map[NodeKey]string, len(ir.Gates))
+	for _, gate := range ir.Gates {
+		if strings.TrimSpace(string(gate.Key)) == "" {
+			return fmt.Errorf("gate key is required")
+		}
+		if _, exists := nodeSpecs[gate.Key]; exists {
+			return fmt.Errorf("gate key %q conflicts with a node key", gate.Key)
+		}
+		if _, exists := gateSchemas[gate.Key]; exists {
+			return fmt.Errorf("duplicate gate key %q", gate.Key)
+		}
+		if err := ValidateGatePolicy(gate.Policy); err != nil {
+			return fmt.Errorf("gate %q policy: %w", gate.Key, err)
+		}
+		seenDependencies := map[NodeKey]struct{}{}
+		for _, dependency := range gate.DependsOn {
+			if _, ok := nodeSpecs[dependency]; !ok {
+				return fmt.Errorf("gate %q has unknown dependency %q", gate.Key, dependency)
+			}
+			if _, exists := seenDependencies[dependency]; exists {
+				return fmt.Errorf("gate %q repeats dependency %q", gate.Key, dependency)
+			}
+			seenDependencies[dependency] = struct{}{}
+		}
+		gateSchemas[gate.Key] = gate.Policy.DecisionSchema
+	}
+
 	for _, node := range ir.Nodes {
 		spec := nodeSpecs[node.Key]
 		if _, err := compileBudgetClaim(node.Budget, spec.BudgetMaximum, budgetAccounts); err != nil {
 			return fmt.Errorf("node %q budget: %w", node.Key, err)
+		}
+		if node.Budget != nil && node.Budget.ApprovalGate != "" {
+			if _, ok := gateSchemas[node.Budget.ApprovalGate]; !ok {
+				return fmt.Errorf("node %q budget references unknown gate %q", node.Key, node.Budget.ApprovalGate)
+			}
 		}
 		if len(node.Bindings) != len(spec.Inputs) {
 			return fmt.Errorf("node %q has %d bindings, task requires %d", node.Key, len(node.Bindings), len(spec.Inputs))
@@ -87,7 +154,12 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 			if !ok {
 				return fmt.Errorf("node %q is missing binding %q", node.Key, port)
 			}
-			actualSchema, err := refSchema(binding, inputSchemas, nodeSpecs)
+			if binding.Source == "gate-output" {
+				if _, budgetOnly := budgetGateKeys[binding.GateKey]; budgetOnly {
+					return fmt.Errorf("node %q cannot consume budget-activation gate %q", node.Key, binding.GateKey)
+				}
+			}
+			actualSchema, err := refSchema(binding, inputSchemas, nodeSpecs, gateSchemas)
 			if err != nil {
 				return fmt.Errorf("node %q binding %q: %w", node.Key, port, err)
 			}
@@ -112,6 +184,9 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 	if err := validateAcyclic(ir.Nodes); err != nil {
 		return err
 	}
+	if err := validateGateAcyclic(ir.Nodes, ir.Gates); err != nil {
+		return err
+	}
 
 	mapOutputs := make(map[string]SetRef, len(ir.Maps))
 	for _, mapped := range ir.Maps {
@@ -120,6 +195,9 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		}
 		if _, exists := nodeSpecs[NodeKey(mapped.Key)]; exists {
 			return fmt.Errorf("map key %q conflicts with a node key", mapped.Key)
+		}
+		if _, exists := gateSchemas[NodeKey(mapped.Key)]; exists {
+			return fmt.Errorf("map key %q conflicts with a gate key", mapped.Key)
 		}
 		if _, exists := mapOutputs[mapped.Key]; exists {
 			return fmt.Errorf("duplicate map key %q", mapped.Key)
@@ -143,6 +221,11 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		if _, err := compileBudgetClaim(mapped.Budget, spec.BudgetMaximum, budgetAccounts); err != nil {
 			return fmt.Errorf("map %q budget: %w", mapped.Key, err)
 		}
+		if mapped.Budget != nil && mapped.Budget.ApprovalGate != "" {
+			if _, ok := gateSchemas[mapped.Budget.ApprovalGate]; !ok {
+				return fmt.Errorf("map %q budget references unknown gate %q", mapped.Key, mapped.Budget.ApprovalGate)
+			}
+		}
 		if len(mapped.Bindings) != len(spec.Inputs) {
 			return fmt.Errorf("map %q has %d bindings, task requires %d", mapped.Key, len(mapped.Bindings), len(spec.Inputs))
 		}
@@ -160,7 +243,12 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 				actualSchema = source.ItemSchema
 				itemBindings++
 			} else {
-				actualSchema, err = refSchema(binding, inputSchemas, nodeSpecs)
+				if binding.Source == "gate-output" {
+					if _, budgetOnly := budgetGateKeys[binding.GateKey]; budgetOnly {
+						return fmt.Errorf("map %q cannot consume budget-activation gate %q", mapped.Key, binding.GateKey)
+					}
+				}
+				actualSchema, err = refSchema(binding, inputSchemas, nodeSpecs, gateSchemas)
 				if err != nil {
 					return fmt.Errorf("map %q binding %q: %w", mapped.Key, port, err)
 				}
@@ -190,6 +278,9 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		if _, exists := nodeSpecs[NodeKey(reduced.Key)]; exists {
 			return fmt.Errorf("reduction key %q conflicts with a node key", reduced.Key)
 		}
+		if _, exists := gateSchemas[NodeKey(reduced.Key)]; exists {
+			return fmt.Errorf("reduction key %q conflicts with a gate key", reduced.Key)
+		}
 		if _, exists := mapOutputs[reduced.Key]; exists {
 			return fmt.Errorf("reduction key %q conflicts with a map key", reduced.Key)
 		}
@@ -213,6 +304,11 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		if _, err := compileBudgetClaim(reduced.Budget, spec.BudgetMaximum, budgetAccounts); err != nil {
 			return fmt.Errorf("reduction %q budget: %w", reduced.Key, err)
 		}
+		if reduced.Budget != nil && reduced.Budget.ApprovalGate != "" {
+			if _, ok := gateSchemas[reduced.Budget.ApprovalGate]; !ok {
+				return fmt.Errorf("reduction %q budget references unknown gate %q", reduced.Key, reduced.Budget.ApprovalGate)
+			}
+		}
 		if len(reduced.Bindings) != len(spec.Inputs) {
 			return fmt.Errorf("reduction %q has %d bindings, task requires %d", reduced.Key, len(reduced.Bindings), len(spec.Inputs))
 		}
@@ -230,7 +326,12 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 				actualSchema = ReductionPartitionSchemaV1
 				partitionBindings++
 			} else {
-				actualSchema, err = refSchema(binding, inputSchemas, nodeSpecs)
+				if binding.Source == "gate-output" {
+					if _, budgetOnly := budgetGateKeys[binding.GateKey]; budgetOnly {
+						return fmt.Errorf("reduction %q cannot consume budget-activation gate %q", reduced.Key, binding.GateKey)
+					}
+				}
+				actualSchema, err = refSchema(binding, inputSchemas, nodeSpecs, gateSchemas)
 				if err != nil {
 					return fmt.Errorf("reduction %q binding %q: %w", reduced.Key, port, err)
 				}
@@ -263,6 +364,11 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		outputNames[output.Name] = struct{}{}
 		var actual string
 		var err error
+		if output.Value.Source == "gate-output" {
+			if _, budgetOnly := budgetGateKeys[output.Value.GateKey]; budgetOnly {
+				return fmt.Errorf("workflow output %q cannot expose budget-activation gate %q", output.Name, output.Value.GateKey)
+			}
+		}
 		if output.Value.Source == "reduction-output" {
 			schema, exists := reductionOutputs[output.Value.ReduceKey]
 			if !exists {
@@ -270,7 +376,7 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 			}
 			actual = schema
 		} else {
-			actual, err = refSchema(output.Value, inputSchemas, nodeSpecs)
+			actual, err = refSchema(output.Value, inputSchemas, nodeSpecs, gateSchemas)
 			if err != nil {
 				return fmt.Errorf("workflow output %q: %w", output.Name, err)
 			}
@@ -323,6 +429,7 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 		SetInputs:     append([]IRSetInput(nil), ir.SetInputs...),
 		Budgets:       cloneBudgetAccounts(ir.Budgets),
 		Nodes:         make([]PlanNode, 0, len(ir.Nodes)),
+		Gates:         make([]PlanGate, 0, len(ir.Gates)),
 		Outputs:       append([]IROutput{}, ir.Outputs...),
 		SetOutputs:    append([]IRSetOutput(nil), ir.SetOutputs...),
 	}
@@ -368,6 +475,34 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 			Retry: spec.Retry, Policy: reduced.Policy, Budget: budget,
 		})
 	}
+	budgetGates := map[NodeKey]struct{}{}
+	for _, node := range ir.Nodes {
+		if node.Budget != nil && node.Budget.ApprovalGate != "" {
+			budgetGates[node.Budget.ApprovalGate] = struct{}{}
+		}
+	}
+	for _, mapped := range ir.Maps {
+		if mapped.Budget != nil && mapped.Budget.ApprovalGate != "" {
+			budgetGates[mapped.Budget.ApprovalGate] = struct{}{}
+		}
+	}
+	for _, reduced := range ir.Reductions {
+		if reduced.Budget != nil && reduced.Budget.ApprovalGate != "" {
+			budgetGates[reduced.Budget.ApprovalGate] = struct{}{}
+		}
+	}
+	for _, gate := range ir.Gates {
+		policyDigest, digestErr := Digest(gate.Policy)
+		if digestErr != nil {
+			return WorkflowPlan{}, digestErr
+		}
+		_, budgetActivation := budgetGates[gate.Key]
+		plan.Gates = append(plan.Gates, PlanGate{
+			Key: gate.Key, DependsOn: append([]NodeKey(nil), gate.DependsOn...),
+			Policy: gate.Policy, PolicyDigest: policyDigest,
+			BudgetActivation: budgetActivation,
+		})
+	}
 	withoutDigest := plan
 	withoutDigest.Digest = ""
 	plan.Digest, err = Digest(withoutDigest)
@@ -377,12 +512,18 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 	return plan, nil
 }
 
-func refSchema(ref ValueRef, inputs map[string]string, nodes map[NodeKey]TaskSpec) (string, error) {
+func refSchema(ref ValueRef, inputs map[string]string, nodes map[NodeKey]TaskSpec, gates map[NodeKey]string) (string, error) {
 	switch ref.Source {
 	case "input":
 		schema, ok := inputs[ref.Name]
 		if !ok {
 			return "", fmt.Errorf("unknown input %q", ref.Name)
+		}
+		return schema, nil
+	case "gate-output":
+		schema, ok := gates[ref.GateKey]
+		if !ok {
+			return "", fmt.Errorf("unknown gate %q", ref.GateKey)
 		}
 		return schema, nil
 	case "node-output":
@@ -423,6 +564,59 @@ func setRefSchema(ref SetRef, inputs, maps map[string]SetRef) (SetRef, error) {
 	default:
 		return SetRef{}, fmt.Errorf("unsupported set ref source %q", ref.Source)
 	}
+}
+
+func validateGateAcyclic(nodes []IRNode, gates []IRGate) error {
+	dependencies := map[string][]string{}
+	for _, node := range nodes {
+		key := "node:" + string(node.Key)
+		for _, dependency := range node.DependsOn {
+			dependencies[key] = append(dependencies[key], "node:"+string(dependency))
+		}
+		for _, binding := range node.Bindings {
+			if binding.Source == "gate-output" {
+				dependencies[key] = append(dependencies[key], "gate:"+string(binding.GateKey))
+			}
+		}
+		if node.Budget != nil && node.Budget.ApprovalGate != "" {
+			dependencies[key] = append(dependencies[key], "gate:"+string(node.Budget.ApprovalGate))
+		}
+	}
+	for _, gate := range gates {
+		key := "gate:" + string(gate.Key)
+		for _, dependency := range gate.DependsOn {
+			dependencies[key] = append(dependencies[key], "node:"+string(dependency))
+		}
+	}
+	state := map[string]int{}
+	var visit func(string) error
+	visit = func(key string) error {
+		switch state[key] {
+		case 1:
+			return fmt.Errorf("workflow gate dependency cycle includes %q", key)
+		case 2:
+			return nil
+		}
+		state[key] = 1
+		for _, dependency := range dependencies[key] {
+			if err := visit(dependency); err != nil {
+				return err
+			}
+		}
+		state[key] = 2
+		return nil
+	}
+	keys := make([]string, 0, len(dependencies))
+	for key := range dependencies {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if err := visit(key); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func validateAcyclic(nodes []IRNode) error {

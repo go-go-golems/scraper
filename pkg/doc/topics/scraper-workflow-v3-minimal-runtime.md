@@ -1,7 +1,7 @@
 ---
-Title: Workflow V3 Runtime Slices 1–9
+Title: Workflow V3 Runtime Slices 1–10
 Slug: scraper-workflow-v3-minimal-runtime
-Short: "Explains executable workflow-v3 file, HTTP, dispatcher, database, map, reduction, registry, and transactional-budget slices with durable privacy boundaries."
+Short: "Explains executable workflow-v3 file, HTTP, dispatcher, database, map, reduction, registry, budget, projection, and approval-gate slices with durable privacy boundaries."
 Topics:
 - scraper
 - runtime
@@ -17,13 +17,14 @@ ShowPerDefault: true
 SectionType: GeneralTopic
 ---
 
-Workflow v3 has nine executable vertical slices for trusted first-party
+Workflow v3 has ten executable vertical slices for trusted first-party
 JavaScript tasks: linear file processing, typed authoring, allowlisted HTTP,
 work-conserving resource dispatch, idempotent database synchronization,
 deterministic lazy maps, bounded reduction trees, immutable rolling registry
-generations, and transactional budgets with authoritative operational
-projections. It remains intentionally separate from the existing v2 site and
-submission runtime while later gate/isolation capabilities are added.
+generations, transactional budgets with authoritative operational projections,
+and durable lease-free approval gates. It remains intentionally separate from
+the existing v2 site and submission runtime while stronger isolation
+capabilities are added.
 
 ## What runs today
 
@@ -190,6 +191,33 @@ windows, ages, and an event high-water sequence. Runtime augmentation adds
 active/draining/quarantined registry generations. Consumers read a snapshot,
 then continue through bounded sequence-ordered events.
 
+## Durable approval-gate behavior
+
+`plan.gate(...)` declares a typed decision point with exact dependencies,
+decision schema, bounded timeout, required role identifier, and explicit
+reject/expiry policy. Once dependencies succeed, SQLite transitions the gate
+from pending to waiting exactly once. Waiting creates no task attempt, lease,
+Goja runtime, resource grant, or budget reservation, so the dispatcher remains
+work-conserving for unrelated runs across arbitrarily long waits and restart.
+
+A trusted operator service—not JavaScript authoring or task code—submits a
+bounded versioned approve/reject command. The store revalidates role, current
+version, run state, deadline, decision code, and typed immutable artifact ref in
+one immediate transaction. Identical retries are idempotent; conflicting,
+stale, unauthorized, expired, canceled, or already-decided commands cannot
+revive or overwrite a terminal gate. Rejection and expiry fail the run because
+branch cancellation is deliberately rejected until explicit branch boundaries
+exist.
+
+Approval publishes the compact decision ref and enables ordinary downstream
+nodes exactly once. Maintenance expires durable deadlines without worker-local
+timers. Run cancellation atomically cancels pending/waiting gates. Budget
+`require-approval` claims activate their compiled gate only on exhaustion and
+still require a separately authorized account increase before admission.
+Operational projections expose bounded/paginated status, version, waiting age,
+deadline remaining, role, decision code/time, and artifact presence; raw
+approval bodies remain external.
+
 ## HTTP and database behavior
 
 The HTTP fixture snapshots at most eight explicitly supplied article URLs.
@@ -228,12 +256,16 @@ cd web && pnpm exec tsc --noEmit --skipLibCheck \
 ```
 
 The focused tests cover the 12,000-row file workflow, real local HTTP and
-SQLite target servers, a 1,807-item JavaScript lazy map, and a 257-item
-multi-level JavaScript reduction, exact A/B registry generations, and a real
-budget-reporting JavaScript task. They prove typed retry, atomic activation,
+SQLite target servers, a 1,807-item JavaScript lazy map, a 257-item multi-level
+JavaScript reduction, exact A/B registry generations, a real budget-reporting
+JavaScript task, and a real JavaScript approval workflow that waits across a
+store/dispatcher restart while an unrelated run completes. They prove typed
+retry, atomic activation,
 draining, quarantine without domain retry debt, database-scoped reservation,
-actual/conservative/zero settlement, exhaustion and CAS increase, allowlist and
-redirect denial,
+actual/conservative/zero settlement, exhaustion and CAS increase, lease-free
+gate waiting, typed continuation, version/idempotency enforcement, approval vs
+reject/expiry/cancel races across independent connections, durable deadline
+expiry, operator-module denial, allowlist and redirect denial,
 response limits, in-flight cancellation, independent resource refill,
 per-resource fairness, blocked projections, database reconfiguration denial,
 post-commit crash recovery, deterministic paged expansion, backpressure,
@@ -263,5 +295,8 @@ control persistence and the published output manifest.
   workflow and trusted JavaScript bundle.
 - `pkg/testfixtures/workflowv3budget` — real integer usage reporting, settlement,
   overage, reopen, and privacy workflow.
+- `pkg/testfixtures/workflowv3gate` — real wait, decision-artifact continuation,
+  unrelated-run progress, dispatcher restart, and privacy workflow.
 
-Later slices add durable approval gates and stronger process isolation. V3 does not translate or silently accept v2 raw operations.
+Later slices add stronger process isolation. V3 does not translate or silently
+accept v2 raw operations.

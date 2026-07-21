@@ -79,7 +79,7 @@ func loadNodeBudget(
 	tx *sql.Tx,
 	runID workflowv3.RunID,
 	nodeKey workflowv3.NodeKey,
-	account, onExhausted sql.NullString,
+	account, onExhausted, approvalGate sql.NullString,
 ) (*workflowv3.PlanBudgetClaim, error) {
 	if !account.Valid {
 		return nil, nil
@@ -92,6 +92,9 @@ WHERE run_id = ? AND node_key = ? ORDER BY dimension`, runID, nodeKey)
 	}
 	defer func() { _ = rows.Close() }()
 	claim := &workflowv3.PlanBudgetClaim{Account: account.String, OnExhausted: onExhausted.String}
+	if approvalGate.Valid {
+		claim.ApprovalGate = workflowv3.NodeKey(approvalGate.String)
+	}
 	for rows.Next() {
 		var amount workflowv3.BudgetAmount
 		if err := rows.Scan(&amount.Dimension, &amount.Units); err != nil {

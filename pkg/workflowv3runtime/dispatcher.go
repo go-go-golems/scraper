@@ -69,23 +69,30 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	for {
 		started := false
 		for {
+			gates, err := d.Engine.MaintainGates(ctx)
+			if err != nil {
+				return dispatchOperationError(ctx, "maintain workflow gates", err)
+			}
+			if gates {
+				started = true
+			}
 			expanded, err := d.Engine.ExpandOne(ctx)
 			if err != nil {
-				return fmt.Errorf("expand workflow map: %w", err)
+				return dispatchOperationError(ctx, "expand workflow map", err)
 			}
 			if expanded {
 				started = true
 			}
 			finalized, err := d.Engine.FinalizeOneMap(ctx)
 			if err != nil {
-				return fmt.Errorf("finalize workflow map: %w", err)
+				return dispatchOperationError(ctx, "finalize workflow map", err)
 			}
 			if finalized {
 				started = true
 			}
 			reduced, err := d.Engine.ReduceOne(ctx)
 			if err != nil {
-				return fmt.Errorf("advance workflow reduction: %w", err)
+				return dispatchOperationError(ctx, "advance workflow reduction", err)
 			}
 			if reduced {
 				started = true
@@ -130,6 +137,13 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 			// completions are coalesced by this wakeup.
 		}
 	}
+}
+
+func dispatchOperationError(ctx context.Context, operation string, err error) error {
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
+	return fmt.Errorf("%s: %w", operation, err)
 }
 
 func (d *Dispatcher) OperationalSnapshot(

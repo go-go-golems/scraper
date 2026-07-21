@@ -162,6 +162,13 @@ SELECT n.run_id, n.task_kind, n.task_version, n.bundle_digest, n.entrypoint,
     ORDER BY claim.dimension LIMIT 1
   ), ''),
   EXISTS (
+    SELECT 1 FROM v3_gate_consumers consumer
+    JOIN v3_gates gate
+      ON gate.run_id = consumer.run_id AND gate.gate_key = consumer.gate_key
+    WHERE consumer.run_id = n.run_id AND consumer.node_key = n.node_key
+      AND gate.status != 'approved'
+  ),
+  EXISTS (
     SELECT 1 FROM v3_dependencies d
     JOIN v3_nodes dependency
       ON dependency.run_id = d.run_id
@@ -181,7 +188,7 @@ WHERE n.status = 'pending' AND r.status = 'running'`)
 		var modules []byte
 		var readyAt, budgetAccount, budgetPolicy sql.NullString
 		var exhaustedDimension string
-		var blockedByDependency bool
+		var blockedByGate, blockedByDependency bool
 		if err := rows.Scan(
 			&runID,
 			&node.Implementation.Kind,
@@ -197,6 +204,7 @@ WHERE n.status = 'pending' AND r.status = 'running'`)
 			&budgetAccount,
 			&budgetPolicy,
 			&exhaustedDimension,
+			&blockedByGate,
 			&blockedByDependency,
 		); err != nil {
 			return snapshot, err
@@ -217,6 +225,8 @@ WHERE n.status = 'pending' AND r.status = 'running'`)
 		}
 		reason := ""
 		switch {
+		case blockedByGate:
+			reason = "gate-dependency"
 		case blockedByDependency:
 			reason = "dependency"
 		case backoffBlocked:

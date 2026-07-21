@@ -19,7 +19,7 @@ func budgetStoreFixture(t *testing.T, nodes, limit int) (*workflowv3.SealedRegis
 func budgetStoreFixtureWithPolicy(t *testing.T, nodes, limit int, policy string) (*workflowv3.SealedRegistry, workflowv3.WorkflowPlan) {
 	t.Helper()
 	maximum := &workflowv3.BudgetClaim{
-		Account: "provider", OnExhausted: policy,
+		Account: "provider", OnExhausted: workflowv3.BudgetExhaustBlock,
 		Reserve: []workflowv3.BudgetAmount{{Dimension: "requests", Units: 1}},
 	}
 	bundle, err := workflowv3.NewBundle(workflowv3.BundleManifest{
@@ -42,6 +42,9 @@ func budgetStoreFixtureWithPolicy(t *testing.T, nodes, limit int, policy string)
 		Account: "provider", OnExhausted: policy,
 		Reserve: []workflowv3.BudgetAmount{{Dimension: "requests", Units: 1}},
 	}
+	if policy == workflowv3.BudgetExhaustRequireApproval {
+		claim.ApprovalGate = "budget-approval"
+	}
 	ir := workflowv3.WorkflowIR{
 		Schema: workflowv3.IRSchema, Name: "budget",
 		Inputs: []workflowv3.IRInput{{Name: "source", Schema: "source/v1"}},
@@ -49,6 +52,12 @@ func budgetStoreFixtureWithPolicy(t *testing.T, nodes, limit int, policy string)
 			Account: "provider", PolicyDigest: "sha256:" + strings.Repeat("a", 64),
 			Limits: []workflowv3.BudgetAmount{{Dimension: "requests", Units: int64(limit)}},
 		}},
+	}
+	if policy == workflowv3.BudgetExhaustRequireApproval {
+		ir.Gates = []workflowv3.IRGate{{
+			Key:    "budget-approval",
+			Policy: workflowv3.GatePolicy{DecisionSchema: "budget-approval/v1", RequiredRole: "budget.operator", OnReject: workflowv3.GateFailRun, OnExpire: workflowv3.GateFailRun},
+		}}
 	}
 	for index := range nodes {
 		key := workflowv3.NodeKey("call-" + string(rune('a'+index)))
@@ -330,6 +339,15 @@ func TestBudgetExhaustionFailRunAndRequireApprovalAreLeaseFree(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, test.status, snapshot.Status)
 			require.Empty(t, snapshot.Attempts)
+			if test.policy == workflowv3.BudgetExhaustRequireApproval {
+				advanced, err := store.AdvanceOneGate(ctx, now)
+				require.NoError(t, err)
+				require.True(t, advanced)
+				operational, err := store.OperationalSnapshot(ctx, nil, registry, nil, now)
+				require.NoError(t, err)
+				require.Equal(t, 1, operational.GateStatuses["waiting"])
+				require.Empty(t, operational.AttemptStatuses)
+			}
 			if test.reason != "" {
 				queue, err := store.QueueSnapshot(ctx, registry, nil, now)
 				require.NoError(t, err)
@@ -337,6 +355,61 @@ func TestBudgetExhaustionFailRunAndRequireApprovalAreLeaseFree(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUnusedBudgetApprovalGateDoesNotBlockSuccessfulRun(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := budgetStoreFixtureWithPolicy(t, 1, 1, workflowv3.BudgetExhaustRequireApproval)
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, store.Close()) }()
+	now := time.Now().UTC()
+	createBudgetRun(t, store, plan, "budget-gate-unused", now)
+	advanced, err := store.AdvanceOneGate(ctx, now)
+	require.NoError(t, err)
+	require.False(t, advanced)
+	lease, err := store.LeaseNext(ctx, registry, now, time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, lease)
+	require.NoError(t, store.CompleteWithUsage(ctx, *lease, map[string]workflowv3.ArtifactRef{
+		"output": {Schema: "output/v1", Digest: "sha256:" + strings.Repeat("5", 64), MediaType: "application/json", Size: 2, Locator: "cas://output"},
+	}, []workflowv3.BudgetAmount{{Dimension: "requests", Units: 1}}, now.Add(time.Second)))
+	snapshot, err := store.Snapshot(ctx, "budget-gate-unused")
+	require.NoError(t, err)
+	require.Equal(t, "succeeded", snapshot.Status)
+	operational, err := store.OperationalSnapshot(ctx, nil, registry, nil, now.Add(time.Second))
+	require.NoError(t, err)
+	require.Equal(t, "pending", operational.Gates[0].Status)
+	require.True(t, operational.Gates[0].BudgetActivation)
+}
+
+func TestBudgetApprovalGateAndAccountIncreaseContinueExactlyOnce(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := budgetStoreFixtureWithPolicy(t, 1, 0, workflowv3.BudgetExhaustRequireApproval)
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, store.Close()) }()
+	now := time.Now().UTC()
+	createBudgetRun(t, store, plan, "budget-gate", now)
+	lease, err := store.LeaseNext(ctx, registry, now, time.Minute)
+	require.NoError(t, err)
+	require.Nil(t, lease)
+	advanced, err := store.AdvanceOneGate(ctx, now)
+	require.NoError(t, err)
+	require.True(t, advanced)
+	require.NoError(t, store.IncreaseBudget(ctx, "budget-gate", "provider", "requests", 1, 1, "budget-operator", now.Add(time.Second)))
+	decision := workflowv3.ArtifactRef{Schema: "budget-approval/v1", Digest: "sha256:" + strings.Repeat("6", 64), MediaType: "application/json", Size: 2, Locator: "cas://budget-approval"}
+	command := workflowv3.GateDecisionCommand{RunID: "budget-gate", GateKey: "budget-approval", ExpectedVersion: 1, Decision: "approve", DecisionCode: "BUDGET_INCREASE_APPROVED", ActorID: "budget-operator", AuthorizedRole: "budget.operator", DecisionRef: &decision}
+	require.NoError(t, store.DecideGate(ctx, command, now.Add(2*time.Second)))
+	lease, err = store.LeaseNext(ctx, registry, now.Add(3*time.Second), time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, lease)
+	second, err := store.LeaseNext(ctx, registry, now.Add(3*time.Second), time.Minute)
+	require.NoError(t, err)
+	require.Nil(t, second)
+	var attempts int
+	require.NoError(t, store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM v3_attempts WHERE run_id = 'budget-gate'`).Scan(&attempts))
+	require.Equal(t, 1, attempts)
 }
 
 func TestBudgetUsageAboveReservationRollsBackThenChargesConservatively(t *testing.T) {

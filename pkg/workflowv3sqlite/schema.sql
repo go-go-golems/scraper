@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS v3_nodes (
   failure_count INTEGER NOT NULL DEFAULT 0,
   budget_account TEXT,
   budget_on_exhausted TEXT,
+  budget_approval_gate TEXT,
   lease_token TEXT,
   lease_cancel_epoch INTEGER,
   lease_expires_at TEXT,
@@ -163,6 +164,56 @@ CREATE TABLE IF NOT EXISTS v3_run_resource_dispatch (
   PRIMARY KEY (run_id, resource_class),
   FOREIGN KEY (run_id) REFERENCES v3_runs(run_id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS v3_gates (
+  run_id TEXT NOT NULL,
+  gate_key TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN
+    ('pending','waiting','approved','rejected','expired','canceled')),
+  version INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),
+  policy_digest TEXT NOT NULL,
+  decision_schema TEXT NOT NULL,
+  required_role TEXT NOT NULL,
+  on_reject TEXT NOT NULL,
+  on_expire TEXT NOT NULL,
+  timeout_ms INTEGER NOT NULL DEFAULT 0 CHECK (timeout_ms >= 0),
+  budget_activation INTEGER NOT NULL DEFAULT 0 CHECK (budget_activation IN (0, 1)),
+  requested_at TEXT,
+  expires_at TEXT,
+  decided_at TEXT,
+  decision_code TEXT,
+  actor_id TEXT,
+  decision_ref_schema TEXT,
+  decision_ref_digest TEXT,
+  decision_ref_media_type TEXT,
+  decision_ref_size_bytes INTEGER CHECK (
+    decision_ref_size_bytes IS NULL OR decision_ref_size_bytes >= 0
+  ),
+  decision_ref_locator TEXT,
+  PRIMARY KEY (run_id, gate_key),
+  FOREIGN KEY (run_id) REFERENCES v3_runs(run_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS v3_gate_dependencies (
+  run_id TEXT NOT NULL,
+  gate_key TEXT NOT NULL,
+  dependency_key TEXT NOT NULL,
+  PRIMARY KEY (run_id, gate_key, dependency_key),
+  FOREIGN KEY (run_id, gate_key) REFERENCES v3_gates(run_id, gate_key) ON DELETE CASCADE,
+  FOREIGN KEY (run_id, dependency_key) REFERENCES v3_nodes(run_id, node_key) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS v3_gate_consumers (
+  run_id TEXT NOT NULL,
+  node_key TEXT NOT NULL,
+  gate_key TEXT NOT NULL,
+  PRIMARY KEY (run_id, node_key, gate_key),
+  FOREIGN KEY (run_id, node_key) REFERENCES v3_nodes(run_id, node_key) ON DELETE CASCADE,
+  FOREIGN KEY (run_id, gate_key) REFERENCES v3_gates(run_id, gate_key) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_v3_gates_status
+  ON v3_gates(status, expires_at, run_id, gate_key);
 
 CREATE TABLE IF NOT EXISTS v3_budget_accounts (
   run_id TEXT NOT NULL,

@@ -267,28 +267,39 @@ WHERE run_id = ? AND reduce_key = ? AND level = ? AND status != 'succeeded'`,
 		outputSchemas, _ := workflowv3.CanonicalJSON(reduced.OutputSchemas)
 		modules, _ := workflowv3.CanonicalJSON(reduced.Modules)
 		identity := reduced.Implementation
-		var budgetAccount, budgetOnExhausted any
+		var budgetAccount, budgetOnExhausted, budgetApprovalGate any
 		if reduced.Budget != nil {
 			budgetAccount, budgetOnExhausted = reduced.Budget.Account, reduced.Budget.OnExhausted
+			if reduced.Budget.ApprovalGate != "" {
+				budgetApprovalGate = reduced.Budget.ApprovalGate
+			}
 		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO v3_nodes(
   run_id, node_key, ordinal, task_kind, task_version, bundle_digest,
   entrypoint, task_abi, bindings_json, input_schemas_json,
   output_schemas_json, modules_json, resource_class, max_attempts,
-  retry_backoff_ms, budget_account, budget_on_exhausted, status
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+  retry_backoff_ms, budget_account, budget_on_exhausted,
+  budget_approval_gate, status
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
 			runID, nodeKey, ordinalBase+ordinal, identity.Kind, identity.Version,
 			identity.BundleDigest, identity.Entrypoint, identity.ABI,
 			bindingsBody, inputSchemas, outputSchemas, modules,
 			reduced.ResourceClass, reduced.Retry.MaxAttempts, reduced.Retry.BackoffMillis,
-			budgetAccount, budgetOnExhausted); err != nil {
+			budgetAccount, budgetOnExhausted, budgetApprovalGate); err != nil {
 			return fmt.Errorf("insert reduction node %d: %w", ordinal, err)
 		}
 		if err := insertNodeBudget(ctx, tx, runID, nodeKey, reduced.Budget); err != nil {
 			return err
 		}
 		for _, binding := range reduced.Bindings {
+			if binding.Source == "gate-output" {
+				if _, err := tx.ExecContext(ctx, `
+INSERT OR IGNORE INTO v3_gate_consumers(run_id, node_key, gate_key)
+VALUES (?, ?, ?)`, runID, nodeKey, binding.GateKey); err != nil {
+					return err
+				}
+			}
 			if binding.Source != "node-output" {
 				continue
 			}
@@ -470,8 +481,14 @@ UPDATE v3_runs SET status = 'succeeded', updated_at = ?
 WHERE run_id = ? AND status = 'running'
   AND NOT EXISTS (SELECT 1 FROM v3_nodes WHERE run_id = ? AND status != 'succeeded')
   AND NOT EXISTS (SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'published')
-  AND NOT EXISTS (SELECT 1 FROM v3_reductions WHERE run_id = ? AND status != 'published')`,
-		formatTime(now), runID, runID, runID, runID); err != nil {
+  AND NOT EXISTS (SELECT 1 FROM v3_reductions WHERE run_id = ? AND status != 'published')
+  AND NOT EXISTS (
+    SELECT 1 FROM v3_gates WHERE run_id = ? AND (
+      (budget_activation = 0 AND status != 'approved') OR
+      (budget_activation = 1 AND status IN ('waiting','rejected','expired','canceled'))
+    )
+  )`,
+		formatTime(now), runID, runID, runID, runID, runID); err != nil {
 		return err
 	}
 	if err := insertEvent(ctx, tx, runID, "", "reduction.published", map[string]any{

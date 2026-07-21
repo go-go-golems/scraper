@@ -56,7 +56,14 @@ func ValidateBudgetClaim(claim BudgetClaim) error {
 		return fmt.Errorf("budget claim %q: %w", claim.Account, err)
 	}
 	switch claim.OnExhausted {
-	case BudgetExhaustFailRun, BudgetExhaustBlock, BudgetExhaustRequireApproval:
+	case BudgetExhaustFailRun, BudgetExhaustBlock:
+		if claim.ApprovalGate != "" {
+			return fmt.Errorf("budget claim %q has an approval gate without require-approval", claim.Account)
+		}
+	case BudgetExhaustRequireApproval:
+		if strings.TrimSpace(string(claim.ApprovalGate)) == "" {
+			return fmt.Errorf("budget claim %q requires an approval gate", claim.Account)
+		}
 	default:
 		return fmt.Errorf("budget claim %q has invalid exhaustion policy %q", claim.Account, claim.OnExhausted)
 	}
@@ -112,6 +119,7 @@ func compileBudgetClaim(requested, maximum *BudgetClaim, accounts map[string]Bud
 	return &PlanBudgetClaim{
 		Account: requested.Account, Requested: cloneBudgetAmounts(requested.Reserve),
 		Effective: cloneBudgetAmounts(requested.Reserve), OnExhausted: requested.OnExhausted,
+		ApprovalGate: requested.ApprovalGate,
 	}, nil
 }
 

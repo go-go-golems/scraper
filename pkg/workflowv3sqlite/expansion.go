@@ -226,22 +226,26 @@ WHERE run_id = ? AND map_key = ? AND next_index = ?`,
 		outputSchemas, _ := workflowv3.CanonicalJSON(mapped.OutputSchemas)
 		modules, _ := workflowv3.CanonicalJSON(mapped.Modules)
 		identity := mapped.Implementation
-		var budgetAccount, budgetOnExhausted any
+		var budgetAccount, budgetOnExhausted, budgetApprovalGate any
 		if mapped.Budget != nil {
 			budgetAccount, budgetOnExhausted = mapped.Budget.Account, mapped.Budget.OnExhausted
+			if mapped.Budget.ApprovalGate != "" {
+				budgetApprovalGate = mapped.Budget.ApprovalGate
+			}
 		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO v3_nodes(
   run_id, node_key, ordinal, task_kind, task_version, bundle_digest,
   entrypoint, task_abi, bindings_json, input_schemas_json,
   output_schemas_json, modules_json, resource_class, max_attempts,
-  retry_backoff_ms, budget_account, budget_on_exhausted, status
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+  retry_backoff_ms, budget_account, budget_on_exhausted,
+  budget_approval_gate, status
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
 			runID, nodeKey, ordinalBase+itemIndex, identity.Kind, identity.Version,
 			identity.BundleDigest, identity.Entrypoint, identity.ABI,
 			bindingsBody, inputSchemas, outputSchemas, modules, mapped.ResourceClass,
 			mapped.Retry.MaxAttempts, mapped.Retry.BackoffMillis,
-			budgetAccount, budgetOnExhausted); err != nil {
+			budgetAccount, budgetOnExhausted, budgetApprovalGate); err != nil {
 			return nil, fmt.Errorf("insert map child %s: %w", item.Key, err)
 		}
 		if err := insertNodeBudget(ctx, tx, runID, nodeKey, mapped.Budget); err != nil {
@@ -266,6 +270,15 @@ INSERT INTO v3_map_items(
 			dependencyKeys = append(dependencyKeys, string(dependency))
 		}
 		sort.Strings(dependencyKeys)
+		for _, binding := range bindings {
+			if binding.Source == "gate-output" {
+				if _, err := tx.ExecContext(ctx, `
+INSERT OR IGNORE INTO v3_gate_consumers(run_id, node_key, gate_key)
+VALUES (?, ?, ?)`, runID, nodeKey, binding.GateKey); err != nil {
+					return nil, err
+				}
+			}
+		}
 		for _, dependency := range dependencyKeys {
 			if _, err := tx.ExecContext(ctx, `
 INSERT INTO v3_dependencies(run_id, node_key, dependency_key)
@@ -434,8 +447,14 @@ UPDATE v3_runs SET status = 'succeeded', updated_at = ?
 WHERE run_id = ? AND status = 'running'
   AND NOT EXISTS (SELECT 1 FROM v3_nodes WHERE run_id = ? AND status != 'succeeded')
   AND NOT EXISTS (SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'published')
-  AND NOT EXISTS (SELECT 1 FROM v3_reductions WHERE run_id = ? AND status != 'published')`,
-		formatTime(now), runID, runID, runID, runID); err != nil {
+  AND NOT EXISTS (SELECT 1 FROM v3_reductions WHERE run_id = ? AND status != 'published')
+  AND NOT EXISTS (
+    SELECT 1 FROM v3_gates WHERE run_id = ? AND (
+      (budget_activation = 0 AND status != 'approved') OR
+      (budget_activation = 1 AND status IN ('waiting','rejected','expired','canceled'))
+    )
+  )`,
+		formatTime(now), runID, runID, runID, runID, runID); err != nil {
 		return err
 	}
 	if err := insertEvent(ctx, tx, runID, "", "map.published", map[string]any{

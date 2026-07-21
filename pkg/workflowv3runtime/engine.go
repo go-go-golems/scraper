@@ -210,8 +210,24 @@ func (e *Engine) materializeReductionPartitions(
 	)
 }
 
+func (e *Engine) MaintainGates(ctx context.Context) (bool, error) {
+	if err := e.validate(); err != nil {
+		return false, err
+	}
+	expired, err := e.Store.ExpireDueGates(ctx, e.now())
+	if err != nil {
+		return false, err
+	}
+	advanced, err := e.Store.AdvanceOneGate(ctx, e.now())
+	return expired > 0 || advanced, err
+}
+
 func (e *Engine) RunOne(ctx context.Context) (bool, error) {
 	if err := e.validate(); err != nil {
+		return false, err
+	}
+	gates, err := e.MaintainGates(ctx)
+	if err != nil {
 		return false, err
 	}
 	expanded, err := e.ExpandOne(ctx)
@@ -228,7 +244,7 @@ func (e *Engine) RunOne(ctx context.Context) (bool, error) {
 	}
 	lease, err := e.Store.LeaseNext(ctx, e.Registry, e.now(), e.leaseDuration())
 	if err != nil || lease == nil {
-		return expanded || finalized || reduced, err
+		return gates || expanded || finalized || reduced, err
 	}
 	return true, e.ExecuteLease(ctx, *lease)
 }

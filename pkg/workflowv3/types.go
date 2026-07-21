@@ -51,16 +51,18 @@ type BudgetAccount struct {
 }
 
 type BudgetClaim struct {
-	Account     string         `json:"account"`
-	Reserve     []BudgetAmount `json:"reserve"`
-	OnExhausted string         `json:"onExhausted"`
+	Account      string         `json:"account"`
+	Reserve      []BudgetAmount `json:"reserve"`
+	OnExhausted  string         `json:"onExhausted"`
+	ApprovalGate NodeKey        `json:"approvalGate,omitempty"`
 }
 
 type PlanBudgetClaim struct {
-	Account     string         `json:"account"`
-	Requested   []BudgetAmount `json:"requested"`
-	Effective   []BudgetAmount `json:"effective"`
-	OnExhausted string         `json:"onExhausted"`
+	Account      string         `json:"account"`
+	Requested    []BudgetAmount `json:"requested"`
+	Effective    []BudgetAmount `json:"effective"`
+	OnExhausted  string         `json:"onExhausted"`
+	ApprovalGate NodeKey        `json:"approvalGate,omitempty"`
 }
 
 type TaskSpec struct {
@@ -79,6 +81,7 @@ type ValueRef struct {
 	NodeKey   NodeKey `json:"nodeKey,omitempty"`
 	MapKey    string  `json:"mapKey,omitempty"`
 	ReduceKey string  `json:"reduceKey,omitempty"`
+	GateKey   NodeKey `json:"gateKey,omitempty"`
 	Port      string  `json:"port,omitempty"`
 	Schema    string  `json:"schema"`
 }
@@ -144,6 +147,28 @@ type IRReduce struct {
 	Budget        *BudgetClaim        `json:"budget,omitempty"`
 }
 
+type GatePolicy struct {
+	DecisionSchema string `json:"decisionSchema"`
+	OnReject       string `json:"onReject"`
+	OnExpire       string `json:"onExpire"`
+	TimeoutMillis  int64  `json:"timeoutMillis,omitempty"`
+	RequiredRole   string `json:"requiredRole"`
+}
+
+type IRGate struct {
+	Key       NodeKey    `json:"key"`
+	DependsOn []NodeKey  `json:"dependsOn,omitempty"`
+	Policy    GatePolicy `json:"policy"`
+}
+
+type PlanGate struct {
+	Key              NodeKey    `json:"key"`
+	DependsOn        []NodeKey  `json:"dependsOn,omitempty"`
+	Policy           GatePolicy `json:"policy"`
+	PolicyDigest     string     `json:"policyDigest"`
+	BudgetActivation bool       `json:"budgetActivation,omitempty"`
+}
+
 type IROutput struct {
 	Name  string   `json:"name"`
 	Value ValueRef `json:"value"`
@@ -158,6 +183,7 @@ type WorkflowIR struct {
 	Nodes      []IRNode        `json:"nodes"`
 	Maps       []IRMap         `json:"maps,omitempty"`
 	Reductions []IRReduce      `json:"reductions,omitempty"`
+	Gates      []IRGate        `json:"gates,omitempty"`
 	Outputs    []IROutput      `json:"outputs"`
 	SetOutputs []IRSetOutput   `json:"setOutputs,omitempty"`
 }
@@ -214,6 +240,7 @@ type WorkflowPlan struct {
 	Nodes         []PlanNode      `json:"nodes"`
 	Maps          []PlanMap       `json:"maps,omitempty"`
 	Reductions    []PlanReduce    `json:"reductions,omitempty"`
+	Gates         []PlanGate      `json:"gates,omitempty"`
 	Outputs       []IROutput      `json:"outputs"`
 	SetOutputs    []IRSetOutput   `json:"setOutputs,omitempty"`
 	Digest        string          `json:"digest"`
@@ -327,12 +354,15 @@ type OperationalSnapshot struct {
 	RunStatuses         map[string]int               `json:"runStatuses"`
 	NodeStatuses        map[string]int               `json:"nodeStatuses"`
 	AttemptStatuses     map[string]int               `json:"attemptStatuses"`
+	GateStatuses        map[string]int               `json:"gateStatuses"`
 	RetryAttempts       int                          `json:"retryAttempts"`
 	LeaseLosses         int                          `json:"leaseLosses"`
 	OldestRunningAgeMS  int64                        `json:"oldestRunningAgeMs"`
 	Rates               []TerminalRate               `json:"rates"`
 	Queue               QueueSnapshot                `json:"queue"`
 	Budgets             []BudgetProgress             `json:"budgets,omitempty"`
+	Gates               []GateProgress               `json:"gates,omitempty"`
+	GatesTruncated      bool                         `json:"gatesTruncated,omitempty"`
 	RegistryGenerations []RegistryGenerationProgress `json:"registryGenerations,omitempty"`
 }
 
