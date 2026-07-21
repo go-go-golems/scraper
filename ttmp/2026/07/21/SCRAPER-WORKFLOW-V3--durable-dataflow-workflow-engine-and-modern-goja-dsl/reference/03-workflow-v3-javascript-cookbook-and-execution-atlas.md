@@ -28,9 +28,9 @@ RelatedFiles:
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/04-check-cookbook-js.py
       Note: Extracts and syntax-checks every JavaScript fence
 ExternalSources: []
-Summary: A self-contained non-RAG cookbook with fifteen workflows, one companion JavaScript task-bundle catalog per example, and complete authoring-to-worker execution mappings.
-LastUpdated: 2026-07-21T20:00:00Z
-WhatFor: Teach and pressure-test workflow v3 with paired workflow scripts and task bundles that map through descriptors, compiled plans, sealed worker registries, durable nodes, attempts, and outputs.
+Summary: A self-contained non-RAG cookbook with fifteen workflows, matching task-bundle catalogs, and visible 80-column JavaScript implementations using guarded HTTP, database, filesystem, process, crypto, YAML, path, and time modules.
+LastUpdated: 2026-07-21T21:00:00Z
+WhatFor: Teach and pressure-test workflow v3 with paired workflow scripts and executable task source that maps through descriptors, compiled plans, sealed worker registries, guarded host modules, durable attempts, and validated outputs.
 WhenToUse: Read when implementing the workflow module/compiler, writing workflow definitions, adding task providers, or reviewing how authored scripts become durable execution.
 ---
 
@@ -155,9 +155,12 @@ Every example follows the same pipeline regardless of domain.
 Consider:
 
 ```js
-const pages = p.map("fetch", urls, url =>
-  web.tasks.fetch({ url }),
-  j => j.resource("internet").timeout("30s"));
+const pages = p.map(
+  "fetch",
+  urls,
+  (url) => web.tasks.fetch({ url }),
+  (j) => j.resource("internet").timeout("30s"),
+);
 ```
 
 The `workflow` native module invokes both callbacks during authoring:
@@ -314,11 +317,11 @@ module.exports = taskBundle.define({
   version: "1.0.0",
   namespace: "cookbook.linear",
   abiVersion: "scraper-js-task/v1",
-}, bundle => {
+}, (bundle) => {
   bundle.task({
     kind: "cookbook.linear.normalize-customers",
     version: "v1",
-    entrypoint: "./tasks/normalize-customers.js#run",
+    entrypoint: "./execution/tasks.cjs#normalizeCustomers",
     inputSchema: "normalize-customer-input/v1",
     outputs: {
       dataset: "normalized-customer-dataset-ref/v1",
@@ -330,13 +333,13 @@ module.exports = taskBundle.define({
       idempotency: "pure",
       sideEffects: ["artifact-read", "artifact-write"],
     },
-    modules: ["workflow/task", "data/records"],
+    modules: ["workflow/task", "fs:input"],
   });
 
   bundle.task({
     kind: "cookbook.linear.validate-dataset",
     version: "v1",
-    entrypoint: "./tasks/validate-dataset.js#run",
+    entrypoint: "./execution/tasks.cjs#validateDataset",
     inputSchema: "validate-dataset-input/v1",
     outputs: {
       validatedDataset: "validated-customer-dataset-ref/v1",
@@ -348,7 +351,7 @@ module.exports = taskBundle.define({
       idempotency: "pure",
       sideEffects: ["artifact-read", "artifact-write"],
     },
-    modules: ["workflow/task", "data/records"],
+    modules: ["workflow/task", "fs:input"],
   });
 });
 ```
@@ -359,32 +362,46 @@ This catalog executes only while building or registering the bundle. It populate
 
 ```js
 const task = require("workflow/task");
-const records = require("data/records");
+const fs = require("fs:input");
 
-exports.run = task.implementation(async ctx => {
-  const input = ctx.input();
-  const reader = await ctx.artifacts.openJSONLines(input.source, {
-    schema: "customer-export-ref/v1",
-  });
-  const writer = await ctx.outputs.createJSONLines("dataset", {
+function parseLines(text) {
+  return text.trim().split("\n").map((line) => JSON.parse(line));
+}
+
+exports.normalizeCustomers = task.implementation(async (ctx) => {
+  const text = await fs.readFile(ctx.input().source.path, "utf8");
+  const rows = parseLines(text).map((row) => ({
+    id: String(row.id).trim(),
+    email: String(row.email).trim().toLowerCase(),
+  }));
+  const dataset = await ctx.outputs.putJSON("dataset", {
     schema: "normalized-customer-dataset-ref/v1",
+    value: rows,
   });
+  return task.success({ dataset });
+});
 
-  let completed = 0;
-  for await (const raw of reader) {
-    ctx.checkpoint();
-    await writer.write(records.normalize(raw, {unknown: "reject"}));
-    completed += 1;
-    if (completed % 1000 === 0) {
-      ctx.progress({completed, unit: "records"});
-    }
+exports.validateDataset = task.implementation(async (ctx) => {
+  const text = await fs.readFile(ctx.input().dataset.path, "utf8");
+  const rows = JSON.parse(text);
+  if (new Set(rows.map((row) => row.id)).size !== rows.length) {
+    throw new Error("duplicate customer id");
   }
-
-  return task.success({dataset: await writer.commit()});
+  const validatedDataset = await ctx.outputs.putJSON(
+    "validatedDataset",
+    {
+      schema: "validated-customer-dataset-ref/v1",
+      value: { rows, count: rows.length },
+    },
+  );
+  return task.success({ validatedDataset });
 });
 ```
 
-The companion `tasks/validate-dataset.js` uses the same `workflow/task` wrapper, opens the normalized dataset by schema, checks cardinality and uniqueness, and commits `validatedDataset` only after every rule passes. Both entrypoints execute only under a node lease. They receive fresh runtimes and lease-scoped task contexts; they cannot register tasks, submit workflows, open arbitrary stores, or access undeclared native modules.
+Both entrypoints execute only under a node lease. `fs:input` is a read-only,
+attempt-scoped alias populated from verified input refs. Fresh runtimes cannot
+register tasks, submit workflows, replace the filesystem backend, or access
+undeclared native modules.
 
 ### Descriptor-only authoring module
 
@@ -398,7 +415,7 @@ exports.tasks = {
     return descriptors.task({
       kind: "cookbook.linear.normalize-customers",
       version: "v1",
-      config: {source: options.source},
+      config: { source: options.source },
     });
   },
 
@@ -406,7 +423,7 @@ exports.tasks = {
     return descriptors.task({
       kind: "cookbook.linear.validate-dataset",
       version: "v1",
-      config: {dataset: options.dataset},
+      config: { dataset: options.dataset },
     });
   },
 };
@@ -443,7 +460,7 @@ Workflow compiler
   ├─ validates descriptor against approved catalog snapshot
   ├─ binds cookbook.linear.normalize-customers@v1
   ├─ pins bundle sha256:4c7f0d...
-  ├─ pins ./tasks/normalize-customers.js#run
+  ├─ pins ./execution/tasks.cjs#normalizeCustomers
   └─ pins scraper-js-task/v1 ABI
                                                │
 Dispatcher matches node requirement to worker advertisement
@@ -488,26 +505,32 @@ Normalize one input dataset, validate it, and publish a compact output manifest.
 const workflow = require("workflow");
 const data = require("cookbook-linear-transform-tasks");
 
-const definition = workflow.define("normalize-customer-export", p => {
+const definition = workflow.define("normalize-customer-export", (p) => {
   const source = p.input("source", {
     schema: "customer-export-ref/v1",
     role: "source-export",
   });
 
-  p.resource("cpu", r => r
-    .class("cpu.transform")
-    .maxInFlight(2));
+  p.resource("cpu", (r) =>
+    r
+      .class("cpu.transform")
+      .maxInFlight(2));
 
-  const normalized = p.task("normalize",
-    data.tasks.normalizeCustomers({source}),
-    j => j
-      .resource("cpu")
-      .timeout("2m")
-      .retry({maxAttempts: 2, classes: ["internal"]}));
+  const normalized = p.task(
+    "normalize",
+    data.tasks.normalizeCustomers({ source }),
+    (j) =>
+      j
+        .resource("cpu")
+        .timeout("2m")
+        .retry({ maxAttempts: 2, classes: ["internal"] }),
+  );
 
-  const validated = p.task("validate",
-    data.tasks.validateDataset({dataset: normalized.output("dataset")}),
-    j => j.after(normalized).resource("cpu").timeout("1m"));
+  const validated = p.task(
+    "validate",
+    data.tasks.validateDataset({ dataset: normalized.output("dataset") }),
+    (j) => j.after(normalized).resource("cpu").timeout("1m"),
+  );
 
   p.output("dataset", validated.output("validatedDataset"));
 });
@@ -561,44 +584,67 @@ Fetch a seed page, extract same-origin article links, fetch each article with ra
 
 ```js
 const workflow = require("workflow");
-const {web, data} = require("cookbook-news-snapshot-tasks");
+const { web, data } = require("cookbook-news-snapshot-tasks");
 
-const definition = workflow.define("news-site-snapshot", p => {
-  const seed = p.input("seed", {schema: "web-url-ref/v1", role: "seed-url"});
+const definition = workflow.define("news-site-snapshot", (p) => {
+  const seed = p.input("seed", { schema: "web-url-ref/v1", role: "seed-url" });
 
-  p.resource("http", r => r
-    .class("http.public.egress")
-    .maxInFlight(4)
-    .rate({requestsPerMinute: 60, burst: 4})
-    .fairness("workflow-round-robin"));
-  p.resource("cpu", r => r.class("cpu.transform").maxInFlight(4));
+  p.resource("http", (r) =>
+    r
+      .class("http.public.egress")
+      .maxInFlight(4)
+      .rate({ requestsPerMinute: 60, burst: 4 })
+      .fairness("workflow-round-robin"));
+  p.resource("cpu", (r) => r.class("cpu.transform").maxInFlight(4));
 
-  const frontPage = p.task("fetch-front-page",
-    web.tasks.fetch({url: seed, response: "html-ref"}),
-    j => j.resource("http").timeout("30s")
-      .retry({maxAttempts: 3, classes: ["transport", "rate-limit", "provider-5xx"]}));
+  const frontPage = p.task(
+    "fetch-front-page",
+    web.tasks.fetch({ url: seed, response: "html-ref" }),
+    (j) =>
+      j.resource("http").timeout("30s")
+        .retry({
+          maxAttempts: 3,
+          classes: ["transport", "rate-limit", "provider-5xx"],
+        }),
+  );
 
-  const links = p.task("extract-links",
+  const links = p.task(
+    "extract-links",
     web.tasks.extractLinks({
       html: frontPage.output("html"),
       sameOrigin: true,
       selector: "article a",
       limit: 500,
     }),
-    j => j.after(frontPage).resource("cpu"));
+    (j) => j.after(frontPage).resource("cpu"),
+  );
 
-  const pages = p.map("fetch-articles", links.output("urls"), url =>
-    web.tasks.fetch({url, response: "html-ref"}),
-    j => j.resource("http").timeout("30s")
-      .retry({maxAttempts: 3, classes: ["transport", "rate-limit", "provider-5xx"]}));
+  const pages = p.map(
+    "fetch-articles",
+    links.output("urls"),
+    (url) => web.tasks.fetch({ url, response: "html-ref" }),
+    (j) =>
+      j.resource("http").timeout("30s")
+        .retry({
+          maxAttempts: 3,
+          classes: ["transport", "rate-limit", "provider-5xx"],
+        }),
+  );
 
-  const records = p.map("parse-articles", pages, page =>
-    web.tasks.parseArticle({html: page.output("html")}),
-    j => j.resource("cpu").timeout("30s"));
+  const records = p.map(
+    "parse-articles",
+    pages,
+    (page) => web.tasks.parseArticle({ html: page.output("html") }),
+    (j) => j.resource("cpu").timeout("30s"),
+  );
 
-  const snapshot = p.reduce("build-snapshot", records, partition =>
-    data.tasks.reduceManifest({partition, orderedBy: "canonicalUrl"}),
-    j => j.resource("cpu").fanIn(128).orderedBy("itemKey"));
+  const snapshot = p.reduce(
+    "build-snapshot",
+    records,
+    (partition) =>
+      data.tasks.reduceManifest({ partition, orderedBy: "canonicalUrl" }),
+    (j) => j.resource("cpu").fanIn(128).orderedBy("itemKey"),
+  );
 
   p.output("snapshot", snapshot.output("manifest"));
 });
@@ -662,41 +708,65 @@ Discover immutable page cursors, fetch pages with a partner-specific rate limit,
 
 ```js
 const workflow = require("workflow");
-const {api, data} = require("cookbook-partner-sync-tasks");
+const { api, data } = require("cookbook-partner-sync-tasks");
 
-const definition = workflow.define("partner-catalog-sync", p => {
-  const account = p.input("account", {schema: "partner-account-ref/v1"});
-  const since = p.input("checkpoint", {schema: "sync-checkpoint-ref/v1"});
+const definition = workflow.define("partner-catalog-sync", (p) => {
+  const account = p.input("account", { schema: "partner-account-ref/v1" });
+  const since = p.input("checkpoint", { schema: "sync-checkpoint-ref/v1" });
 
-  p.resource("partner-api", r => r
-    .class("http.partner-api")
-    .maxInFlight(3)
-    .rate({requestsPerMinute: 60, burst: 3}));
-  p.resource("cpu", r => r.class("cpu.transform").maxInFlight(4));
-  p.resource("destination", r => r.class("db.destination.write").maxInFlight(1));
+  p.resource("partner-api", (r) =>
+    r
+      .class("http.partner-api")
+      .maxInFlight(3)
+      .rate({ requestsPerMinute: 60, burst: 3 }));
+  p.resource("cpu", (r) => r.class("cpu.transform").maxInFlight(4));
+  p.resource(
+    "destination",
+    (r) => r.class("db.destination.write").maxInFlight(1),
+  );
 
-  const pageRefs = p.task("enumerate-pages",
-    api.tasks.enumeratePages({account, since, maxPages: 10000}),
-    j => j.resource("partner-api").timeout("2m"));
+  const pageRefs = p.task(
+    "enumerate-pages",
+    api.tasks.enumeratePages({ account, since, maxPages: 10000 }),
+    (j) => j.resource("partner-api").timeout("2m"),
+  );
 
-  const pages = p.map("fetch-pages", pageRefs.output("pages"), page =>
-    api.tasks.fetchPage({account, page}),
-    j => j.resource("partner-api").timeout("1m")
-      .budget({requests: 1})
-      .retry({maxAttempts: 5, classes: ["transport", "rate-limit", "provider-5xx"]}));
+  const pages = p.map(
+    "fetch-pages",
+    pageRefs.output("pages"),
+    (page) => api.tasks.fetchPage({ account, page }),
+    (j) =>
+      j.resource("partner-api").timeout("1m")
+        .budget({ requests: 1 })
+        .retry({
+          maxAttempts: 5,
+          classes: ["transport", "rate-limit", "provider-5xx"],
+        }),
+  );
 
-  const normalized = p.map("normalize-pages", pages, page =>
-    data.tasks.normalizeCatalogPage({page}),
-    j => j.resource("cpu"));
+  const normalized = p.map(
+    "normalize-pages",
+    pages,
+    (page) => data.tasks.normalizeCatalogPage({ page }),
+    (j) => j.resource("cpu"),
+  );
 
-  const applied = p.map("apply-pages", normalized, page =>
-    api.tasks.applyCatalogPage({account, page, idempotency: "item-key"}),
-    j => j.resource("destination").timeout("2m")
-      .retry({maxAttempts: 3, classes: ["transport"]}));
+  const applied = p.map(
+    "apply-pages",
+    normalized,
+    (page) =>
+      api.tasks.applyCatalogPage({ account, page, idempotency: "item-key" }),
+    (j) =>
+      j.resource("destination").timeout("2m")
+        .retry({ maxAttempts: 3, classes: ["transport"] }),
+  );
 
-  const checkpoint = p.reduce("commit-checkpoint", applied, partition =>
-    api.tasks.reduceSyncCheckpoint({partition}),
-    j => j.resource("destination").fanIn(256).orderedBy("pageCursor"));
+  const checkpoint = p.reduce(
+    "commit-checkpoint",
+    applied,
+    (partition) => api.tasks.reduceSyncCheckpoint({ partition }),
+    (j) => j.resource("destination").fanIn(256).orderedBy("pageCursor"),
+  );
 
   p.output("checkpoint", checkpoint.output("checkpoint"));
 });
@@ -734,31 +804,42 @@ Normalize customer and order exports independently, join them, evaluate quality,
 const workflow = require("workflow");
 const data = require("cookbook-etl-quality-tasks");
 
-const definition = workflow.define("customer-order-mart", p => {
-  const customers = p.inputSet("customers", {schema: "customer-shard-ref-set/v1"});
-  const orders = p.inputSet("orders", {schema: "order-shard-ref-set/v1"});
+const definition = workflow.define("customer-order-mart", (p) => {
+  const customers = p.inputSet("customers", {
+    schema: "customer-shard-ref-set/v1",
+  });
+  const orders = p.inputSet("orders", { schema: "order-shard-ref-set/v1" });
 
-  p.resource("cpu", r => r.class("cpu.transform").maxInFlight(6));
-  p.resource("publish", r => r.class("storage.object").maxInFlight(1));
+  p.resource("cpu", (r) => r.class("cpu.transform").maxInFlight(6));
+  p.resource("publish", (r) => r.class("storage.object").maxInFlight(1));
 
-  const cleanCustomers = p.map("normalize-customers", customers, shard =>
-    data.tasks.normalizeCustomerShard({shard}),
-    j => j.resource("cpu"));
+  const cleanCustomers = p.map(
+    "normalize-customers",
+    customers,
+    (shard) => data.tasks.normalizeCustomerShard({ shard }),
+    (j) => j.resource("cpu"),
+  );
 
-  const cleanOrders = p.map("normalize-orders", orders, shard =>
-    data.tasks.normalizeOrderShard({shard}),
-    j => j.resource("cpu"));
+  const cleanOrders = p.map(
+    "normalize-orders",
+    orders,
+    (shard) => data.tasks.normalizeOrderShard({ shard }),
+    (j) => j.resource("cpu"),
+  );
 
-  const joined = p.task("join",
+  const joined = p.task(
+    "join",
     data.tasks.joinDatasets({
       left: cleanCustomers,
       right: cleanOrders,
       on: ["customerId"],
       strategy: "partitioned-hash",
     }),
-    j => j.after(cleanCustomers, cleanOrders).resource("cpu").timeout("15m"));
+    (j) => j.after(cleanCustomers, cleanOrders).resource("cpu").timeout("15m"),
+  );
 
-  const quality = p.task("quality",
+  const quality = p.task(
+    "quality",
     data.tasks.evaluateQuality({
       dataset: joined.output("dataset"),
       rules: {
@@ -767,14 +848,17 @@ const definition = workflow.define("customer-order-mart", p => {
         requiredColumns: ["customerId", "orderId", "total"],
       },
     }),
-    j => j.after(joined).resource("cpu"));
+    (j) => j.after(joined).resource("cpu"),
+  );
 
-  const published = p.task("publish",
+  const published = p.task(
+    "publish",
     data.tasks.publishDataset({
       dataset: joined.output("dataset"),
       quality: quality.output("acceptedReport"),
     }),
-    j => j.after(quality).resource("publish").retry({maxAttempts: 1}));
+    (j) => j.after(quality).resource("publish").retry({ maxAttempts: 1 }),
+  );
 
   p.output("mart", published.output("manifest"));
 });
@@ -814,39 +898,57 @@ Probe uploaded videos, transcode each video into three renditions, generate thum
 
 ```js
 const workflow = require("workflow");
-const {media, files} = require("cookbook-media-package-tasks");
+const { media, files } = require("cookbook-media-package-tasks");
 
-const definition = workflow.define("video-rendition-package", p => {
-  const videos = p.inputSet("videos", {schema: "video-ref-set/v1"});
+const definition = workflow.define("video-rendition-package", (p) => {
+  const videos = p.inputSet("videos", { schema: "video-ref-set/v1" });
 
-  p.resource("probe", r => r.class("cpu.transform").maxInFlight(4));
-  p.resource("ffmpeg", r => r.class("media.ffmpeg").maxInFlight(2));
-  p.resource("storage", r => r.class("storage.object").maxInFlight(4));
+  p.resource("probe", (r) => r.class("cpu.transform").maxInFlight(4));
+  p.resource("ffmpeg", (r) => r.class("media.ffmpeg").maxInFlight(2));
+  p.resource("storage", (r) => r.class("storage.object").maxInFlight(4));
 
-  const metadata = p.map("probe", videos, video =>
-    media.tasks.probe({video}),
-    j => j.resource("probe").timeout("2m"));
+  const metadata = p.map(
+    "probe",
+    videos,
+    (video) => media.tasks.probe({ video }),
+    (j) => j.resource("probe").timeout("2m"),
+  );
 
-  const renditions = p.map("transcode", metadata, item =>
-    media.tasks.transcodeMatrix({
-      video: item.output("video"),
-      metadata: item.output("metadata"),
-      renditions: [
-        {name: "360p", height: 360, videoBitrate: "800k"},
-        {name: "720p", height: 720, videoBitrate: "2500k"},
-        {name: "1080p", height: 1080, videoBitrate: "5000k"},
-      ],
-    }),
-    j => j.resource("ffmpeg").timeout("45m")
-      .budget({artifactBytes: 20_000_000_000}));
+  const renditions = p.map(
+    "transcode",
+    metadata,
+    (item) =>
+      media.tasks.transcodeMatrix({
+        video: item.output("video"),
+        metadata: item.output("metadata"),
+        renditions: [
+          { name: "360p", height: 360, videoBitrate: "800k" },
+          { name: "720p", height: 720, videoBitrate: "2500k" },
+          { name: "1080p", height: 1080, videoBitrate: "5000k" },
+        ],
+      }),
+    (j) =>
+      j.resource("ffmpeg").timeout("45m")
+        .budget({ artifactBytes: 20_000_000_000 }),
+  );
 
-  const thumbnails = p.map("thumbnails", metadata, item =>
-    media.tasks.thumbnailSheet({video: item.output("video"), columns: 5, rows: 4}),
-    j => j.resource("ffmpeg").timeout("10m"));
+  const thumbnails = p.map(
+    "thumbnails",
+    metadata,
+    (item) =>
+      media.tasks.thumbnailSheet({
+        video: item.output("video"),
+        columns: 5,
+        rows: 4,
+      }),
+    (j) => j.resource("ffmpeg").timeout("10m"),
+  );
 
-  const bundle = p.task("bundle",
-    files.tasks.bundleMediaPackage({renditions, thumbnails}),
-    j => j.after(renditions, thumbnails).resource("storage"));
+  const bundle = p.task(
+    "bundle",
+    files.tasks.bundleMediaPackage({ renditions, thumbnails }),
+    (j) => j.after(renditions, thumbnails).resource("storage"),
+  );
 
   p.output("package", bundle.output("manifest"));
 });
@@ -892,21 +994,30 @@ Count normalized tokens across a large document collection using bounded map tas
 const workflow = require("workflow");
 const analytics = require("cookbook-word-count-tasks");
 
-const definition = workflow.define("document-word-count", p => {
-  const documents = p.inputSet("documents", {schema: "text-document-ref-set/v1"});
+const definition = workflow.define("document-word-count", (p) => {
+  const documents = p.inputSet("documents", {
+    schema: "text-document-ref-set/v1",
+  });
 
-  p.resource("cpu", r => r.class("cpu.transform").maxInFlight(6));
+  p.resource("cpu", (r) => r.class("cpu.transform").maxInFlight(6));
 
-  const partials = p.map("count-document", documents, document =>
-    analytics.tasks.tokenCount({
-      document,
-      normalization: {caseFold: true, unicode: "NFKC", punctuation: "drop"},
-    }),
-    j => j.resource("cpu").timeout("5m"));
+  const partials = p.map(
+    "count-document",
+    documents,
+    (document) =>
+      analytics.tasks.tokenCount({
+        document,
+        normalization: { caseFold: true, unicode: "NFKC", punctuation: "drop" },
+      }),
+    (j) => j.resource("cpu").timeout("5m"),
+  );
 
-  const totals = p.reduce("sum-counts", partials, partition =>
-    analytics.tasks.reduceTokenCounts({partition}),
-    j => j.resource("cpu").fanIn(64).orderedBy("token"));
+  const totals = p.reduce(
+    "sum-counts",
+    partials,
+    (partition) => analytics.tasks.reduceTokenCounts({ partition }),
+    (j) => j.resource("cpu").fanIn(64).orderedBy("token"),
+  );
 
   p.output("counts", totals.output("countManifest"));
 });
@@ -947,36 +1058,54 @@ Scan a source snapshot with several independent tools, normalize findings, evalu
 const workflow = require("workflow");
 const security = require("cookbook-security-gate-tasks");
 
-const definition = workflow.define("release-security-gate", p => {
-  const source = p.input("source", {schema: "source-snapshot-ref/v1"});
-  const policy = p.input("policy", {schema: "security-policy-ref/v1"});
+const definition = workflow.define("release-security-gate", (p) => {
+  const source = p.input("source", { schema: "source-snapshot-ref/v1" });
+  const policy = p.input("policy", { schema: "security-policy-ref/v1" });
 
-  p.resource("scan", r => r.class("cpu.security-scan").maxInFlight(2));
-  p.resource("control", r => r.class("control.local").maxInFlight(1));
+  p.resource("scan", (r) => r.class("cpu.security-scan").maxInFlight(2));
+  p.resource("control", (r) => r.class("control.local").maxInFlight(1));
 
-  const requests = p.task("scan-matrix",
+  const requests = p.task(
+    "scan-matrix",
     security.tasks.expandScanMatrix({
       source,
-      scanners: ["secrets/v2", "dependencies/v1", "static-analysis/v3", "licenses/v1"],
+      scanners: [
+        "secrets/v2",
+        "dependencies/v1",
+        "static-analysis/v3",
+        "licenses/v1",
+      ],
     }),
-    j => j.resource("control"));
+    (j) => j.resource("control"),
+  );
 
-  const findings = p.map("scan", requests.output("requests"), request =>
-    security.tasks.scan({source, request}),
-    j => j.resource("scan").timeout("20m")
-      .retry({maxAttempts: 2, classes: ["internal"]}));
+  const findings = p.map(
+    "scan",
+    requests.output("requests"),
+    (request) => security.tasks.scan({ source, request }),
+    (j) =>
+      j.resource("scan").timeout("20m")
+        .retry({ maxAttempts: 2, classes: ["internal"] }),
+  );
 
-  const report = p.reduce("merge-findings", findings, partition =>
-    security.tasks.mergeFindings({partition}),
-    j => j.resource("control").fanIn(32).orderedBy("findingKey"));
+  const report = p.reduce(
+    "merge-findings",
+    findings,
+    (partition) => security.tasks.mergeFindings({ partition }),
+    (j) => j.resource("control").fanIn(32).orderedBy("findingKey"),
+  );
 
-  const decision = p.task("evaluate-policy",
-    security.tasks.evaluatePolicy({report: report.output("report"), policy}),
-    j => j.after(report).resource("control"));
+  const decision = p.task(
+    "evaluate-policy",
+    security.tasks.evaluatePolicy({ report: report.output("report"), policy }),
+    (j) => j.after(report).resource("control"),
+  );
 
-  const signed = p.task("sign-report",
-    security.tasks.signReport({accepted: decision.output("acceptedReport")}),
-    j => j.after(decision).resource("control").retry({maxAttempts: 1}));
+  const signed = p.task(
+    "sign-report",
+    security.tasks.signReport({ accepted: decision.output("acceptedReport") }),
+    (j) => j.after(decision).resource("control").retry({ maxAttempts: 1 }),
+  );
 
   p.output("attestation", signed.output("attestation"));
 });
@@ -1008,25 +1137,41 @@ Preprocess images on CPU, run one model inference per item on a serial GPU, aggr
 const workflow = require("workflow");
 const ml = require("cookbook-image-classification-tasks");
 
-const definition = workflow.define("image-classification-batch", p => {
-  const images = p.inputSet("images", {schema: "image-ref-set/v1"});
-  const model = p.input("model", {schema: "model-profile-ref/v1"});
+const definition = workflow.define("image-classification-batch", (p) => {
+  const images = p.inputSet("images", { schema: "image-ref-set/v1" });
+  const model = p.input("model", { schema: "model-profile-ref/v1" });
 
-  p.resource("preprocess", r => r.class("cpu.transform").maxInFlight(6));
-  p.resource("inference", r => r.class("gpu.inference").maxInFlight(1));
+  p.resource("preprocess", (r) => r.class("cpu.transform").maxInFlight(6));
+  p.resource("inference", (r) => r.class("gpu.inference").maxInFlight(1));
 
-  const tensors = p.map("preprocess", images, image =>
-    ml.tasks.preprocessImage({image, width: 224, height: 224, normalize: "imagenet"}),
-    j => j.resource("preprocess").timeout("2m"));
+  const tensors = p.map(
+    "preprocess",
+    images,
+    (image) =>
+      ml.tasks.preprocessImage({
+        image,
+        width: 224,
+        height: 224,
+        normalize: "imagenet",
+      }),
+    (j) => j.resource("preprocess").timeout("2m"),
+  );
 
-  const predictions = p.map("infer", tensors, tensor =>
-    ml.tasks.classifyImage({tensor, model, topK: 5}),
-    j => j.resource("inference").timeout("1m")
-      .retry({maxAttempts: 2, classes: ["transport", "internal"]}));
+  const predictions = p.map(
+    "infer",
+    tensors,
+    (tensor) => ml.tasks.classifyImage({ tensor, model, topK: 5 }),
+    (j) =>
+      j.resource("inference").timeout("1m")
+        .retry({ maxAttempts: 2, classes: ["transport", "internal"] }),
+  );
 
-  const summary = p.reduce("summarize", predictions, partition =>
-    ml.tasks.aggregatePredictions({partition}),
-    j => j.resource("preprocess").fanIn(256).orderedBy("imageKey"));
+  const summary = p.reduce(
+    "summarize",
+    predictions,
+    (partition) => ml.tasks.aggregatePredictions({ partition }),
+    (j) => j.resource("preprocess").fanIn(256).orderedBy("imageKey"),
+  );
 
   p.output("predictions", predictions);
   p.output("summary", summary.output("summary"));
@@ -1065,31 +1210,46 @@ Render one notification, deliver it to a set of recipients/channels under separa
 const workflow = require("workflow");
 const notify = require("cookbook-notification-tasks");
 
-const definition = workflow.define("incident-notification", p => {
-  const incident = p.input("incident", {schema: "incident-ref/v1"});
-  const destinations = p.inputSet("destinations", {schema: "notification-destination-ref-set/v1"});
+const definition = workflow.define("incident-notification", (p) => {
+  const incident = p.input("incident", { schema: "incident-ref/v1" });
+  const destinations = p.inputSet("destinations", {
+    schema: "notification-destination-ref-set/v1",
+  });
 
-  p.resource("render", r => r.class("cpu.transform").maxInFlight(2));
-  p.resource("email", r => r.class("notification.email").maxInFlight(2));
-  p.resource("chat", r => r.class("notification.chat").maxInFlight(4));
+  p.resource("render", (r) => r.class("cpu.transform").maxInFlight(2));
+  p.resource("email", (r) => r.class("notification.email").maxInFlight(2));
+  p.resource("chat", (r) => r.class("notification.chat").maxInFlight(4));
 
-  const message = p.task("render",
-    notify.tasks.renderIncident({incident, template: "incident-standard/v2"}),
-    j => j.resource("render"));
+  const message = p.task(
+    "render",
+    notify.tasks.renderIncident({ incident, template: "incident-standard/v2" }),
+    (j) => j.resource("render"),
+  );
 
-  const deliveries = p.map("deliver", destinations, destination =>
-    notify.tasks.deliver({destination, message: message.output("message")}),
-    j => j.after(message)
-      .resourceBy("destination.channel", {
-        email: "email",
-        chat: "chat",
-      })
-      .timeout("30s")
-      .retry({maxAttempts: 5, classes: ["transport", "rate-limit", "provider-5xx"]}));
+  const deliveries = p.map(
+    "deliver",
+    destinations,
+    (destination) =>
+      notify.tasks.deliver({ destination, message: message.output("message") }),
+    (j) =>
+      j.after(message)
+        .resourceBy("destination.channel", {
+          email: "email",
+          chat: "chat",
+        })
+        .timeout("30s")
+        .retry({
+          maxAttempts: 5,
+          classes: ["transport", "rate-limit", "provider-5xx"],
+        }),
+  );
 
-  const receipt = p.reduce("receipt", deliveries, partition =>
-    notify.tasks.reduceReceipts({partition, requireAll: true}),
-    j => j.resource("render").fanIn(128).orderedBy("destinationKey"));
+  const receipt = p.reduce(
+    "receipt",
+    deliveries,
+    (partition) => notify.tasks.reduceReceipts({ partition, requireAll: true }),
+    (j) => j.resource("render").fanIn(128).orderedBy("destinationKey"),
+  );
 
   p.output("receipt", receipt.output("receipt"));
 });
@@ -1129,34 +1289,60 @@ Snapshot a consistent database identity, dump table/range shards, build a root b
 const workflow = require("workflow");
 const database = require("cookbook-database-backup-tasks");
 
-const definition = workflow.define("verified-database-backup", p => {
-  const databaseRef = p.input("database", {schema: "database-handle-ref/v1"});
-  const destination = p.input("destination", {schema: "artifact-store-ref/v1"});
+const definition = workflow.define("verified-database-backup", (p) => {
+  const databaseRef = p.input("database", { schema: "database-handle-ref/v1" });
+  const destination = p.input("destination", {
+    schema: "artifact-store-ref/v1",
+  });
 
-  p.resource("read", r => r.class("db.source.read").maxInFlight(2));
-  p.resource("storage", r => r.class("storage.object").maxInFlight(4));
-  p.resource("verify", r => r.class("db.destination.write").maxInFlight(1));
+  p.resource("read", (r) => r.class("db.source.read").maxInFlight(2));
+  p.resource("storage", (r) => r.class("storage.object").maxInFlight(4));
+  p.resource("verify", (r) => r.class("db.destination.write").maxInFlight(1));
 
-  const snapshot = p.task("open-snapshot",
-    database.tasks.openConsistentSnapshot({database: databaseRef}),
-    j => j.resource("read").timeout("2m").retry({maxAttempts: 1}));
+  const snapshot = p.task(
+    "open-snapshot",
+    database.tasks.openConsistentSnapshot({ database: databaseRef }),
+    (j) => j.resource("read").timeout("2m").retry({ maxAttempts: 1 }),
+  );
 
-  const shards = p.task("plan-shards",
-    database.tasks.planSnapshotShards({snapshot: snapshot.output("snapshot"), targetBytes: 256_000_000}),
-    j => j.after(snapshot).resource("read"));
+  const shards = p.task(
+    "plan-shards",
+    database.tasks.planSnapshotShards({
+      snapshot: snapshot.output("snapshot"),
+      targetBytes: 256_000_000,
+    }),
+    (j) => j.after(snapshot).resource("read"),
+  );
 
-  const dumps = p.map("dump-shards", shards.output("shards"), shard =>
-    database.tasks.dumpSnapshotShard({snapshot: snapshot.output("snapshot"), shard, destination}),
-    j => j.resource("read").timeout("30m")
-      .budget({artifactBytes: 1_000_000_000}));
+  const dumps = p.map(
+    "dump-shards",
+    shards.output("shards"),
+    (shard) =>
+      database.tasks.dumpSnapshotShard({
+        snapshot: snapshot.output("snapshot"),
+        shard,
+        destination,
+      }),
+    (j) =>
+      j.resource("read").timeout("30m")
+        .budget({ artifactBytes: 1_000_000_000 }),
+  );
 
-  const manifest = p.reduce("backup-manifest", dumps, partition =>
-    database.tasks.reduceBackupManifest({partition}),
-    j => j.resource("storage").fanIn(64).orderedBy("shardKey"));
+  const manifest = p.reduce(
+    "backup-manifest",
+    dumps,
+    (partition) => database.tasks.reduceBackupManifest({ partition }),
+    (j) => j.resource("storage").fanIn(64).orderedBy("shardKey"),
+  );
 
-  const verified = p.task("restore-verify",
-    database.tasks.restoreVerify({backup: manifest.output("manifest")}),
-    j => j.after(manifest).resource("verify").timeout("2h").retry({maxAttempts: 1}));
+  const verified = p.task(
+    "restore-verify",
+    database.tasks.restoreVerify({ backup: manifest.output("manifest") }),
+    (j) =>
+      j.after(manifest).resource("verify").timeout("2h").retry({
+        maxAttempts: 1,
+      }),
+  );
 
   p.output("backup", verified.output("verifiedBackup"));
 });
@@ -1185,29 +1371,52 @@ Compare warehouse and storefront inventory snapshots, calculate discrepancies, a
 
 ```js
 const workflow = require("workflow");
-const {data, api} = require("cookbook-inventory-reconciliation-tasks");
+const { data, api } = require("cookbook-inventory-reconciliation-tasks");
 
-const definition = workflow.define("inventory-reconciliation", p => {
-  const warehouse = p.input("warehouse", {schema: "inventory-snapshot-ref/v1"});
-  const storefront = p.input("storefront", {schema: "inventory-snapshot-ref/v1"});
-  const repairPolicy = p.input("repairPolicy", {schema: "inventory-repair-policy-ref/v1"});
+const definition = workflow.define("inventory-reconciliation", (p) => {
+  const warehouse = p.input("warehouse", {
+    schema: "inventory-snapshot-ref/v1",
+  });
+  const storefront = p.input("storefront", {
+    schema: "inventory-snapshot-ref/v1",
+  });
+  const repairPolicy = p.input("repairPolicy", {
+    schema: "inventory-repair-policy-ref/v1",
+  });
 
-  p.resource("cpu", r => r.class("cpu.transform").maxInFlight(4));
-  p.resource("store-api", r => r.class("http.partner-api").maxInFlight(2));
+  p.resource("cpu", (r) => r.class("cpu.transform").maxInFlight(4));
+  p.resource("store-api", (r) => r.class("http.partner-api").maxInFlight(2));
 
-  const diff = p.task("diff",
-    data.tasks.diffInventory({warehouse, storefront, policy: repairPolicy}),
-    j => j.resource("cpu"));
+  const diff = p.task(
+    "diff",
+    data.tasks.diffInventory({ warehouse, storefront, policy: repairPolicy }),
+    (j) => j.resource("cpu"),
+  );
 
-  const repairs = p.map("repair", diff.output("repairs"), repair =>
-    api.tasks.applyInventoryRepair({repair, idempotency: "repair-key"}),
-    j => j.resource("store-api").timeout("30s")
-      .budget({requests: 1})
-      .retry({maxAttempts: 4, classes: ["transport", "rate-limit", "provider-5xx"]}));
+  const repairs = p.map(
+    "repair",
+    diff.output("repairs"),
+    (repair) =>
+      api.tasks.applyInventoryRepair({ repair, idempotency: "repair-key" }),
+    (j) =>
+      j.resource("store-api").timeout("30s")
+        .budget({ requests: 1 })
+        .retry({
+          maxAttempts: 4,
+          classes: ["transport", "rate-limit", "provider-5xx"],
+        }),
+  );
 
-  const audit = p.reduce("audit", repairs, partition =>
-    data.tasks.reduceRepairAudit({partition, expected: diff.output("summary")}),
-    j => j.resource("cpu").fanIn(128).orderedBy("sku"));
+  const audit = p.reduce(
+    "audit",
+    repairs,
+    (partition) =>
+      data.tasks.reduceRepairAudit({
+        partition,
+        expected: diff.output("summary"),
+      }),
+    (j) => j.resource("cpu").fanIn(128).orderedBy("sku"),
+  );
 
   p.output("audit", audit.output("report"));
 });
@@ -1239,35 +1448,53 @@ Build a source snapshot for a platform matrix, run tests, package successful bui
 const workflow = require("workflow");
 const build = require("cookbook-release-build-tasks");
 
-const definition = workflow.define("cross-platform-release", p => {
-  const source = p.input("source", {schema: "source-snapshot-ref/v1"});
-  const targets = p.inputSet("targets", {schema: "build-target-ref-set/v1"});
+const definition = workflow.define("cross-platform-release", (p) => {
+  const source = p.input("source", { schema: "source-snapshot-ref/v1" });
+  const targets = p.inputSet("targets", { schema: "build-target-ref-set/v1" });
 
-  p.resource("build", r => r.class("cpu.transform").maxInFlight(4));
-  p.resource("sign", r => r.class("control.local").maxInFlight(1));
+  p.resource("build", (r) => r.class("cpu.transform").maxInFlight(4));
+  p.resource("sign", (r) => r.class("control.local").maxInFlight(1));
 
-  const binaries = p.map("build", targets, target =>
-    build.tasks.compile({source, target, hermetic: true}),
-    j => j.resource("build").timeout("30m"));
+  const binaries = p.map(
+    "build",
+    targets,
+    (target) => build.tasks.compile({ source, target, hermetic: true }),
+    (j) => j.resource("build").timeout("30m"),
+  );
 
-  const tests = p.map("test", binaries, binary =>
-    build.tasks.testBinary({binary, suite: "release"}),
-    j => j.resource("build").timeout("20m"));
+  const tests = p.map(
+    "test",
+    binaries,
+    (binary) => build.tasks.testBinary({ binary, suite: "release" }),
+    (j) => j.resource("build").timeout("20m"),
+  );
 
-  const packages = p.map("package", tests, tested =>
-    build.tasks.packageBinary({
-      binary: tested.output("binary"),
-      testReport: tested.output("report"),
+  const packages = p.map(
+    "package",
+    tests,
+    (tested) =>
+      build.tasks.packageBinary({
+        binary: tested.output("binary"),
+        testReport: tested.output("report"),
+      }),
+    (j) => j.resource("build"),
+  );
+
+  const manifest = p.reduce(
+    "manifest",
+    packages,
+    (partition) => build.tasks.reduceReleaseManifest({ partition }),
+    (j) => j.resource("build").fanIn(32).orderedBy("targetTriple"),
+  );
+
+  const signed = p.task(
+    "sign",
+    build.tasks.signRelease({
+      manifest: manifest.output("manifest"),
+      key: "release-primary",
     }),
-    j => j.resource("build"));
-
-  const manifest = p.reduce("manifest", packages, partition =>
-    build.tasks.reduceReleaseManifest({partition}),
-    j => j.resource("build").fanIn(32).orderedBy("targetTriple"));
-
-  const signed = p.task("sign",
-    build.tasks.signRelease({manifest: manifest.output("manifest"), key: "release-primary"}),
-    j => j.after(manifest).resource("sign").retry({maxAttempts: 1}));
+    (j) => j.after(manifest).resource("sign").retry({ maxAttempts: 1 }),
+  );
 
   p.output("release", signed.output("signedManifest"));
 });
@@ -1297,32 +1524,45 @@ Prepare a deployment, wait durably for operator approval, then deploy and verify
 const workflow = require("workflow");
 const ops = require("cookbook-approved-deployment-tasks");
 
-const definition = workflow.define("approved-deployment", p => {
-  const release = p.input("release", {schema: "signed-release-ref/v1"});
-  const environment = p.input("environment", {schema: "deployment-environment-ref/v1"});
+const definition = workflow.define("approved-deployment", (p) => {
+  const release = p.input("release", { schema: "signed-release-ref/v1" });
+  const environment = p.input("environment", {
+    schema: "deployment-environment-ref/v1",
+  });
 
-  p.resource("control", r => r.class("control.local").maxInFlight(2));
-  p.resource("approval", r => r.class("operator.approval").maxInFlight(100));
+  p.resource("control", (r) => r.class("control.local").maxInFlight(2));
+  p.resource("approval", (r) => r.class("operator.approval").maxInFlight(100));
 
-  const prepared = p.task("prepare",
-    ops.tasks.prepareDeployment({release, environment}),
-    j => j.resource("control"));
+  const prepared = p.task(
+    "prepare",
+    ops.tasks.prepareDeployment({ release, environment }),
+    (j) => j.resource("control"),
+  );
 
-  const approval = p.gate("approval",
+  const approval = p.gate(
+    "approval",
     ops.tasks.awaitApproval({
       subject: prepared.output("deploymentPlan"),
       policy: "production-two-person/v1",
       expiresAfter: "24h",
     }),
-    g => g.after(prepared).resource("approval"));
+    (g) => g.after(prepared).resource("approval"),
+  );
 
-  const deployed = p.task("deploy",
-    ops.tasks.deploy({approvedPlan: approval.output("approvedPlan")}),
-    j => j.after(approval).resource("control").timeout("30m").retry({maxAttempts: 1}));
+  const deployed = p.task(
+    "deploy",
+    ops.tasks.deploy({ approvedPlan: approval.output("approvedPlan") }),
+    (j) =>
+      j.after(approval).resource("control").timeout("30m").retry({
+        maxAttempts: 1,
+      }),
+  );
 
-  const verified = p.task("verify",
-    ops.tasks.verifyDeployment({deployment: deployed.output("deployment")}),
-    j => j.after(deployed).resource("control"));
+  const verified = p.task(
+    "verify",
+    ops.tasks.verifyDeployment({ deployment: deployed.output("deployment") }),
+    (j) => j.after(deployed).resource("control"),
+  );
 
   p.output("deployment", verified.output("verifiedDeployment"));
 });
@@ -1360,30 +1600,40 @@ Probe a finite matrix of endpoints and regions, evaluate SLO rules, and emit one
 
 ```js
 const workflow = require("workflow");
-const {ops, notify} = require("cookbook-probe-slo-tasks");
+const { ops, notify } = require("cookbook-probe-slo-tasks");
 
-const definition = workflow.define("service-probe-matrix", p => {
-  const probes = p.inputSet("probes", {schema: "service-probe-ref-set/v1"});
-  const slo = p.input("slo", {schema: "slo-policy-ref/v1"});
+const definition = workflow.define("service-probe-matrix", (p) => {
+  const probes = p.inputSet("probes", { schema: "service-probe-ref-set/v1" });
+  const slo = p.input("slo", { schema: "slo-policy-ref/v1" });
 
-  p.resource("network", r => r
-    .class("http.public.egress")
-    .maxInFlight(8)
-    .rate({requestsPerMinute: 240, burst: 8}));
-  p.resource("cpu", r => r.class("cpu.transform").maxInFlight(2));
+  p.resource("network", (r) =>
+    r
+      .class("http.public.egress")
+      .maxInFlight(8)
+      .rate({ requestsPerMinute: 240, burst: 8 }));
+  p.resource("cpu", (r) => r.class("cpu.transform").maxInFlight(2));
 
-  const observations = p.map("probe", probes, probe =>
-    ops.tasks.probe({probe, samples: 3}),
-    j => j.resource("network").timeout("20s")
-      .retry({maxAttempts: 2, classes: ["transport"]}));
+  const observations = p.map(
+    "probe",
+    probes,
+    (probe) => ops.tasks.probe({ probe, samples: 3 }),
+    (j) =>
+      j.resource("network").timeout("20s")
+        .retry({ maxAttempts: 2, classes: ["transport"] }),
+  );
 
-  const report = p.reduce("evaluate", observations, partition =>
-    ops.tasks.evaluateSLO({partition, slo}),
-    j => j.resource("cpu").fanIn(128).orderedBy("probeKey"));
+  const report = p.reduce(
+    "evaluate",
+    observations,
+    (partition) => ops.tasks.evaluateSLO({ partition, slo }),
+    (j) => j.resource("cpu").fanIn(128).orderedBy("probeKey"),
+  );
 
-  const notification = p.task("notification-plan",
-    notify.tasks.planFromSLOReport({report: report.output("report")}),
-    j => j.after(report).resource("cpu"));
+  const notification = p.task(
+    "notification-plan",
+    notify.tasks.planFromSLOReport({ report: report.output("report") }),
+    (j) => j.after(report).resource("cpu"),
+  );
 
   p.output("report", report.output("report"));
   p.output("notificationPlan", notification.output("plan"));
@@ -1412,18 +1662,22 @@ Detect file types, route office documents, images, and plain text through approp
 const workflow = require("workflow");
 const files = require("cookbook-document-conversion-tasks");
 
-const definition = workflow.define("document-conversion-bundle", p => {
-  const documents = p.inputSet("documents", {schema: "document-ref-set/v1"});
+const definition = workflow.define("document-conversion-bundle", (p) => {
+  const documents = p.inputSet("documents", { schema: "document-ref-set/v1" });
 
-  p.resource("inspect", r => r.class("cpu.transform").maxInFlight(6));
-  p.resource("convert", r => r.class("media.ffmpeg").maxInFlight(2));
-  p.resource("storage", r => r.class("storage.object").maxInFlight(4));
+  p.resource("inspect", (r) => r.class("cpu.transform").maxInFlight(6));
+  p.resource("convert", (r) => r.class("media.ffmpeg").maxInFlight(2));
+  p.resource("storage", (r) => r.class("storage.object").maxInFlight(4));
 
-  const inspected = p.map("inspect", documents, document =>
-    files.tasks.inspect({document}),
-    j => j.resource("inspect"));
+  const inspected = p.map(
+    "inspect",
+    documents,
+    (document) => files.tasks.inspect({ document }),
+    (j) => j.resource("inspect"),
+  );
 
-  const requests = p.task("route",
+  const requests = p.task(
+    "route",
     files.tasks.routeConversions({
       inspected,
       formats: {
@@ -1432,15 +1686,22 @@ const definition = workflow.define("document-conversion-bundle", p => {
         text: "pdf",
       },
     }),
-    j => j.after(inspected).resource("inspect"));
+    (j) => j.after(inspected).resource("inspect"),
+  );
 
-  const converted = p.map("convert", requests.output("requests"), request =>
-    files.tasks.convert({request}),
-    j => j.resource("convert").timeout("10m"));
+  const converted = p.map(
+    "convert",
+    requests.output("requests"),
+    (request) => files.tasks.convert({ request }),
+    (j) => j.resource("convert").timeout("10m"),
+  );
 
-  const bundle = p.reduce("bundle", converted, partition =>
-    files.tasks.reduceBundleManifest({partition}),
-    j => j.resource("storage").fanIn(128).orderedBy("documentKey"));
+  const bundle = p.reduce(
+    "bundle",
+    converted,
+    (partition) => files.tasks.reduceBundleManifest({ partition }),
+    (j) => j.resource("storage").fanIn(128).orderedBy("documentKey"),
+  );
 
   p.output("bundle", bundle.output("manifest"));
 });
@@ -1467,9 +1728,48 @@ pnpm-lock.yaml
 tests/*.test.js
 ```
 
-The catalogs below are self-contained at the workflow contract level. `execution/tasks.cjs` must export every named entrypoint using `task.implementation(...)`; its domain algorithm uses only the modules/capabilities declared by that bundle. The cookbook remains proposed API documentation, so capability modules and schemas are named contracts rather than current production implementations.
+The catalogs below are paired with complete illustrative
+`execution/tasks.cjs` modules. Every named entrypoint is visible as JavaScript,
+not merely described in prose. The examples use current go-go-goja modules
+where that makes the operation concrete:
 
-A compact helper keeps the catalogs readable:
+- `fetch:*` for HTTP clients with profile-owned base URLs and authentication;
+- `db:*` for preconfigured source and destination databases;
+- `fs:*` for attempt-scoped input, output, or workspace filesystems;
+- `path` for portable path construction;
+- `crypto` for hashes and digests;
+- `yaml` for structured release and policy documents;
+- `exec:*` only for profiles with explicit command allowlists.
+
+These are trusted-code modules, not a hostile-code sandbox. A worker profile
+selects and aliases them before starting an attempt. `db:*` aliases reject
+JavaScript `configure()`. HTTP authentication remains in host configuration.
+Writable `fs:*` and `exec:*` aliases run in a per-attempt process/container with
+bounded mounts and command allowlists. Workflow rows still carry compact refs,
+not credentials, source bytes, DSNs, or arbitrary command lines.
+
+## Module API provenance
+
+The snippets follow the current go-go-goja contracts rather than browser or
+Node assumptions:
+
+| Module family | Current contract used here |
+|---|---|
+| `fetch:*` | `fetch(url, options)` and fluent `client()` request builders |
+| `db:*` | synchronous `query`, `exec`, and explicit transactions |
+| `fs:*` | async `readFile`, `writeFile`, `exists`, and `stat` |
+| `exec:*` | `run(command, args)` under an xgoja command allowlist |
+| `crypto` | incremental `createHash(...).update(...).digest("hex")` |
+| `path` | `join`, `dirname`, `basename`, and `extname` |
+| `yaml` | `parse` and `stringify` |
+| `time` | `now` and `since` |
+
+Aliases after the colon are worker-profile instances of the same module
+factory. For example, `db:warehouse` and `db:restore-sandbox` have different
+preconfigured handles, while `fetch:partner` and `fetch:probe` have different
+base URLs, authentication, and transport policy.
+
+A compact build helper keeps the catalogs readable:
 
 ```js
 const taskBundle = require("workflow/task-bundle");
@@ -1480,341 +1780,1832 @@ exports.defineCookbookBundle = function defineCookbookBundle(options, build) {
     version: "1.0.0",
     namespace: options.namespace,
     abiVersion: "scraper-js-task/v1",
-  }, bundle => {
-    const task = (name, spec) => bundle.task({
-      kind: `${options.namespace}.${spec.kind || name}`,
-      version: "v1",
-      entrypoint: `./execution/tasks.cjs#${name}`,
-      inputSchema: `${options.namespace}.${spec.kind || name}.input/v1`,
-      outputs: spec.outputs,
-      defaultResource: spec.resource,
-      semantics: spec.semantics || {
-        determinism: "externally-dependent",
-        idempotency: "pure",
-        sideEffects: ["artifact-read", "artifact-write"],
-      },
-      modules: ["workflow/task", ...(spec.modules || [])],
-      authoring: {group: spec.group, factory: name},
-    });
+  }, (bundle) => {
+    const task = (name, spec) =>
+      bundle.task({
+        kind: `${options.namespace}.${spec.kind || name}`,
+        version: "v1",
+        entrypoint: `./execution/tasks.cjs#${name}`,
+        inputSchema: `${options.namespace}.${spec.kind || name}.input/v1`,
+        outputs: spec.outputs,
+        defaultResource: spec.resource,
+        semantics: spec.semantics || {
+          determinism: "externally-dependent",
+          idempotency: "pure",
+          sideEffects: ["artifact-read", "artifact-write"],
+        },
+        modules: ["workflow/task", ...options.modules],
+        authoring: { group: spec.group, factory: name },
+      });
     build(task);
   });
 };
 ```
 
-In actual fixture files this helper is imported from a build-only cookbook support module. It is unavailable during task attempts.
+In actual fixture files this helper is imported from a build-only cookbook
+support module. It is unavailable during task attempts.
+
+The execution snippets use this tiny runtime helper. It wraps every exported
+function in `task.implementation`, validates output through `ctx.outputs`, and
+keeps the domain logic in each bundle visible:
+
+```js
+const task = require("workflow/task");
+
+exports.implement = function implement(handlers) {
+  const wrapped = {};
+  for (const [name, handler] of Object.entries(handlers)) {
+    wrapped[name] = task.implementation(async (ctx) => {
+      return task.success(await handler(ctx));
+    });
+  }
+  return wrapped;
+};
+
+exports.putJSON = function putJSON(ctx, port, schema, value) {
+  return ctx.outputs.putJSON(port, { schema, value });
+};
+```
+
+This helper is ordinary immutable bundle source. It grants no capability and
+cannot be imported by workflow-authoring scripts.
 
 ## Bundle 1 — `cookbook-linear-transform-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-linear-transform-tasks",
   namespace: "cookbook.linear",
-}, task => {
+  modules: ["fs:input"],
+}, (task) => {
   task("normalizeCustomers", {
     group: "data",
     resource: "cpu.transform",
-    outputs: {dataset: "normalized-customer-dataset-ref/v1"},
-    modules: ["data/records"],
+    outputs: { dataset: "normalized-customer-dataset-ref/v1" },
   });
   task("validateDataset", {
     group: "data",
     resource: "cpu.transform",
-    outputs: {validatedDataset: "validated-customer-dataset-ref/v1"},
-    modules: ["data/records"],
+    outputs: { validatedDataset: "validated-customer-dataset-ref/v1" },
   });
 });
 ```
 
-Entrypoints normalize a JSON-lines artifact and then verify schema, uniqueness, and cardinality. Both are deterministic and artifact-only.
+### `execution/tasks.cjs`
+
+```js
+const fs = require("fs:input");
+const { implement, putJSON } = require("cookbook-task-support");
+
+function parseLines(text) {
+  return text.trim().split("\n").map((line) => JSON.parse(line));
+}
+
+module.exports = implement({
+  async normalizeCustomers(ctx) {
+    const rows = parseLines(
+      await fs.readFile(ctx.input().source.path, "utf8"),
+    );
+    const normalized = rows.map((row) => ({
+      id: String(row.id).trim(),
+      email: String(row.email).trim().toLowerCase(),
+    }));
+    return {
+      dataset: await putJSON(
+        ctx,
+        "dataset",
+        "normalized-customer-dataset-ref/v1",
+        normalized,
+      ),
+    };
+  },
+
+  async validateDataset(ctx) {
+    const rows = JSON.parse(
+      await fs.readFile(ctx.input().dataset.path, "utf8"),
+    );
+    const ids = new Set(rows.map((row) => row.id));
+    if (ids.size !== rows.length) {
+      throw new Error("duplicate customer id");
+    }
+    return {
+      validatedDataset: await putJSON(
+        ctx,
+        "validatedDataset",
+        "validated-customer-dataset-ref/v1",
+        { rows, count: rows.length },
+      ),
+    };
+  },
+});
+```
+
+Both entrypoints use a read-only attempt filesystem alias. The host resolves
+input refs to lease-local paths before JavaScript runs.
 
 ## Bundle 2 — `cookbook-news-snapshot-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-news-snapshot-tasks",
   namespace: "cookbook.news",
-}, task => {
+  modules: ["fetch:public", "crypto"],
+}, (task) => {
   task("fetch", {
     group: "web",
     resource: "http.public.egress",
-    outputs: {html: "web-html-ref/v1", finalUrl: "web-url-ref/v1"},
-    modules: ["capability/web-client"],
-    semantics: {determinism: "externally-dependent", idempotency: "pure", sideEffects: ["network-read", "artifact-write"]},
+    outputs: { html: "web-html-ref/v1", finalUrl: "web-url-ref/v1" },
+    semantics: {
+      determinism: "externally-dependent",
+      idempotency: "pure",
+      sideEffects: ["network-read", "artifact-write"],
+    },
   });
-  task("extractLinks", {group: "web", resource: "cpu.transform", outputs: {urls: "web-url-ref-set/v1"}, modules: ["web/html"]});
-  task("parseArticle", {group: "web", resource: "cpu.transform", outputs: {article: "article-record-ref/v1"}, modules: ["web/html"]});
-  task("reduceManifest", {group: "data", resource: "cpu.transform", outputs: {manifest: "article-snapshot-manifest-ref/v1"}});
+  task("extractLinks", {
+    group: "web",
+    resource: "cpu.transform",
+    outputs: { urls: "web-url-ref-set/v1" },
+  });
+  task("parseArticle", {
+    group: "web",
+    resource: "cpu.transform",
+    outputs: { article: "article-record-ref/v1" },
+  });
+  task("reduceManifest", {
+    group: "data",
+    resource: "cpu.transform",
+    outputs: { manifest: "article-snapshot-manifest-ref/v1" },
+  });
 });
 ```
 
-`fetch` uses a policy-constrained host HTTP client; the other entrypoints process immutable HTML/article refs and produce ordered manifests.
+### `execution/tasks.cjs`
+
+```js
+const web = require("fetch:public");
+const crypto = require("crypto");
+const { implement, putJSON } = require("cookbook-task-support");
+
+function digest(text) {
+  return crypto.createHash("sha256").update(text).digest("hex");
+}
+
+module.exports = implement({
+  async fetch(ctx) {
+    const response = await web.fetch(ctx.input().url, {
+      headers: { accept: "text/html" },
+      timeout: "20s",
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const html = await response.text();
+    return {
+      html: await putJSON(ctx, "html", "web-html-ref/v1", {
+        body: html,
+        sha256: digest(html),
+      }),
+      finalUrl: await putJSON(
+        ctx,
+        "finalUrl",
+        "web-url-ref/v1",
+        response.url,
+      ),
+    };
+  },
+
+  async extractLinks(ctx) {
+    const html = ctx.input().html.body;
+    const urls = [...html.matchAll(/href="([^"]+)"/g)]
+      .map((match) => match[1])
+      .filter((url) => url.startsWith("https://"));
+    return {
+      urls: await putJSON(ctx, "urls", "web-url-ref-set/v1", urls),
+    };
+  },
+
+  async parseArticle(ctx) {
+    const html = ctx.input().html.body;
+    const title = /<title>([^<]*)<\/title>/i.exec(html)?.[1] || "";
+    return {
+      article: await putJSON(ctx, "article", "article-record-ref/v1", {
+        title: title.trim(),
+        sourceSha256: digest(html),
+      }),
+    };
+  },
+
+  async reduceManifest(ctx) {
+    const articles = [...ctx.input().articles]
+      .sort((a, b) => a.sourceSha256.localeCompare(b.sourceSha256));
+    return {
+      manifest: await putJSON(
+        ctx,
+        "manifest",
+        "article-snapshot-manifest-ref/v1",
+        { articles },
+      ),
+    };
+  },
+});
+```
+
+`fetch:public` is configured with host allowlists, redirect policy, response
+limits, and no script-visible credentials.
 
 ## Bundle 3 — `cookbook-partner-sync-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-partner-sync-tasks",
   namespace: "cookbook.partner-sync",
-}, task => {
-  task("enumeratePages", {group: "api", resource: "http.partner-api", outputs: {pages: "partner-page-ref-set/v1"}, modules: ["capability/partner-api"]});
-  task("fetchPage", {group: "api", resource: "http.partner-api", outputs: {page: "partner-page-data-ref/v1"}, modules: ["capability/partner-api"]});
-  task("normalizeCatalogPage", {group: "data", resource: "cpu.transform", outputs: {page: "normalized-catalog-page-ref/v1"}, modules: ["data/records"]});
+  modules: ["fetch:partner", "db:destination"],
+}, (task) => {
+  task("enumeratePages", {
+    group: "api",
+    resource: "http.partner-api",
+    outputs: { pages: "partner-page-ref-set/v1" },
+  });
+  task("fetchPage", {
+    group: "api",
+    resource: "http.partner-api",
+    outputs: { page: "partner-page-data-ref/v1" },
+  });
+  task("normalizeCatalogPage", {
+    group: "data",
+    resource: "cpu.transform",
+    outputs: { page: "normalized-catalog-page-ref/v1" },
+  });
   task("applyCatalogPage", {
     group: "api",
     resource: "db.destination.write",
-    outputs: {receipt: "catalog-apply-receipt-ref/v1"},
-    modules: ["capability/catalog-destination"],
-    semantics: {determinism: "externally-dependent", idempotency: "keyed-side-effect", sideEffects: ["database-write"]},
+    outputs: { receipt: "catalog-apply-receipt-ref/v1" },
+    semantics: {
+      determinism: "externally-dependent",
+      idempotency: "keyed-side-effect",
+      sideEffects: ["database-write"],
+    },
   });
-  task("reduceSyncCheckpoint", {group: "api", resource: "db.destination.write", outputs: {checkpoint: "sync-checkpoint-ref/v1"}});
+  task("reduceSyncCheckpoint", {
+    group: "api",
+    resource: "db.destination.write",
+    outputs: { checkpoint: "sync-checkpoint-ref/v1" },
+  });
 });
 ```
 
-The worker capability supplies account credentials. Catalog page application uses the stable node idempotency key, never the attempt number.
+### `execution/tasks.cjs`
+
+```js
+const partner = require("fetch:partner");
+const destination = require("db:destination");
+const { implement, putJSON } = require("cookbook-task-support");
+
+module.exports = implement({
+  async enumeratePages(ctx) {
+    const body = await partner.client()
+      .get("/catalog")
+      .query("limit", ctx.input().pageSize)
+      .expectJson()
+      .run();
+    return {
+      pages: await putJSON(
+        ctx,
+        "pages",
+        "partner-page-ref-set/v1",
+        body.pages,
+      ),
+    };
+  },
+
+  async fetchPage(ctx) {
+    const page = await partner.client()
+      .get("/catalog")
+      .query("cursor", ctx.input().cursor)
+      .expectJson()
+      .run();
+    return {
+      page: await putJSON(
+        ctx,
+        "page",
+        "partner-page-data-ref/v1",
+        page,
+      ),
+    };
+  },
+
+  async normalizeCatalogPage(ctx) {
+    const items = ctx.input().page.items.map((item) => ({
+      sku: String(item.sku),
+      priceCents: Math.round(Number(item.price) * 100),
+    }));
+    return {
+      page: await putJSON(
+        ctx,
+        "page",
+        "normalized-catalog-page-ref/v1",
+        { items },
+      ),
+    };
+  },
+
+  async applyCatalogPage(ctx) {
+    const tx = destination.begin();
+    try {
+      for (const item of ctx.input().page.items) {
+        tx.exec(
+          "INSERT INTO catalog(sku, price_cents) VALUES (?, ?) " +
+            "ON CONFLICT(sku) DO UPDATE SET price_cents = excluded.price_cents",
+          item.sku,
+          item.priceCents,
+        );
+      }
+      const result = tx.commit();
+      if (!result.success) throw new Error(result.error);
+    } catch (error) {
+      tx.rollback();
+      throw error;
+    }
+    return {
+      receipt: await putJSON(
+        ctx,
+        "receipt",
+        "catalog-apply-receipt-ref/v1",
+        { count: ctx.input().page.items.length },
+      ),
+    };
+  },
+
+  async reduceSyncCheckpoint(ctx) {
+    return {
+      checkpoint: await putJSON(
+        ctx,
+        "checkpoint",
+        "sync-checkpoint-ref/v1",
+        { receipts: ctx.input().receipts.length },
+      ),
+    };
+  },
+});
+```
+
+The HTTP alias owns authentication and base URL. The database alias is
+preconfigured by Go, so JavaScript cannot replace its DSN.
 
 ## Bundle 4 — `cookbook-etl-quality-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-etl-quality-tasks",
   namespace: "cookbook.etl",
-}, task => {
-  task("normalizeCustomerShard", {group: "data", resource: "cpu.transform", outputs: {shard: "normalized-customer-shard-ref/v1"}, modules: ["data/records"]});
-  task("normalizeOrderShard", {group: "data", resource: "cpu.transform", outputs: {shard: "normalized-order-shard-ref/v1"}, modules: ["data/records"]});
-  task("joinDatasets", {group: "data", resource: "cpu.transform", outputs: {dataset: "customer-order-dataset-ref/v1"}, modules: ["data/join"]});
-  task("evaluateQuality", {group: "data", resource: "cpu.transform", outputs: {acceptedReport: "accepted-quality-report-ref/v1"}, modules: ["data/quality"]});
-  task("publishDataset", {group: "data", resource: "storage.object", outputs: {manifest: "published-dataset-manifest-ref/v1"}, modules: ["capability/artifacts"]});
+  modules: ["db:warehouse", "fs:output", "path"],
+}, (task) => {
+  task("normalizeCustomerShard", {
+    group: "data",
+    resource: "cpu.transform",
+    outputs: { shard: "normalized-customer-shard-ref/v1" },
+  });
+  task("normalizeOrderShard", {
+    group: "data",
+    resource: "cpu.transform",
+    outputs: { shard: "normalized-order-shard-ref/v1" },
+  });
+  task("joinDatasets", {
+    group: "data",
+    resource: "cpu.transform",
+    outputs: { dataset: "customer-order-dataset-ref/v1" },
+  });
+  task("evaluateQuality", {
+    group: "data",
+    resource: "cpu.transform",
+    outputs: { acceptedReport: "accepted-quality-report-ref/v1" },
+  });
+  task("publishDataset", {
+    group: "data",
+    resource: "storage.object",
+    outputs: { manifest: "published-dataset-manifest-ref/v1" },
+  });
 });
 ```
 
-Quality rejection is a typed non-retryable validation failure; no `acceptedReport` means publication never becomes ready.
+### `execution/tasks.cjs`
+
+```js
+const source = require("db:warehouse");
+const fs = require("fs:output");
+const path = require("path");
+const { implement, putJSON } = require("cookbook-task-support");
+
+function normalize(rows) {
+  return rows.map((row) => ({ ...row, id: String(row.id).trim() }));
+}
+
+module.exports = implement({
+  async normalizeCustomerShard(ctx) {
+    const rows = source.query(
+      "SELECT id, email FROM customers WHERE shard = ? ORDER BY id",
+      ctx.input().shard,
+    );
+    return {
+      shard: await putJSON(
+        ctx,
+        "shard",
+        "normalized-customer-shard-ref/v1",
+        normalize(rows),
+      ),
+    };
+  },
+
+  async normalizeOrderShard(ctx) {
+    const rows = source.query(
+      "SELECT id, customer_id, total FROM orders " +
+        "WHERE shard = ? ORDER BY id",
+      ctx.input().shard,
+    );
+    return {
+      shard: await putJSON(
+        ctx,
+        "shard",
+        "normalized-order-shard-ref/v1",
+        normalize(rows),
+      ),
+    };
+  },
+
+  async joinDatasets(ctx) {
+    const customers = new Map(
+      ctx.input().customers.map((row) => [row.id, row]),
+    );
+    const rows = ctx.input().orders.map((order) => ({
+      ...order,
+      customer: customers.get(String(order.customer_id)),
+    }));
+    return {
+      dataset: await putJSON(
+        ctx,
+        "dataset",
+        "customer-order-dataset-ref/v1",
+        rows,
+      ),
+    };
+  },
+
+  async evaluateQuality(ctx) {
+    const rows = ctx.input().dataset;
+    const missing = rows.filter((row) => !row.customer).length;
+    if (missing > ctx.input().maxMissingCustomers) {
+      throw new Error("quality threshold rejected dataset");
+    }
+    return {
+      acceptedReport: await putJSON(
+        ctx,
+        "acceptedReport",
+        "accepted-quality-report-ref/v1",
+        { rows: rows.length, missing },
+      ),
+    };
+  },
+
+  async publishDataset(ctx) {
+    const target = path.join("/output", "customer-orders.json");
+    await fs.writeFile(target, JSON.stringify(ctx.input().dataset), "utf8");
+    return {
+      manifest: await putJSON(
+        ctx,
+        "manifest",
+        "published-dataset-manifest-ref/v1",
+        { path: target, rows: ctx.input().dataset.length },
+      ),
+    };
+  },
+});
+```
+
+This example combines a read-only preconfigured database with a writable,
+attempt-scoped output filesystem.
 
 ## Bundle 5 — `cookbook-media-package-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-media-package-tasks",
   namespace: "cookbook.media",
-}, task => {
-  task("probe", {group: "media", resource: "cpu.transform", outputs: {video: "video-ref/v1", metadata: "video-metadata-ref/v1"}, modules: ["capability/media-probe"]});
-  task("transcodeMatrix", {group: "media", resource: "media.ffmpeg", outputs: {renditions: "video-rendition-ref-set/v1"}, modules: ["capability/media-transcode"]});
-  task("thumbnailSheet", {group: "media", resource: "media.ffmpeg", outputs: {thumbnails: "thumbnail-sheet-ref/v1"}, modules: ["capability/media-transcode"]});
-  task("bundleMediaPackage", {group: "files", resource: "storage.object", outputs: {manifest: "media-package-manifest-ref/v1"}, modules: ["capability/artifacts"]});
+  modules: ["exec:media", "fs:workspace", "path"],
+}, (task) => {
+  task("probe", {
+    group: "media",
+    resource: "cpu.transform",
+    outputs: { video: "video-ref/v1", metadata: "video-metadata-ref/v1" },
+  });
+  task("transcodeMatrix", {
+    group: "media",
+    resource: "media.ffmpeg",
+    outputs: { renditions: "video-rendition-ref-set/v1" },
+  });
+  task("thumbnailSheet", {
+    group: "media",
+    resource: "media.ffmpeg",
+    outputs: { thumbnails: "thumbnail-sheet-ref/v1" },
+  });
+  task("bundleMediaPackage", {
+    group: "files",
+    resource: "storage.object",
+    outputs: { manifest: "media-package-manifest-ref/v1" },
+  });
 });
 ```
 
-The media capability runs sandboxed tools. Output bytes go directly to content-addressed storage, while task outputs remain compact refs.
+### `execution/tasks.cjs`
+
+```js
+const media = require("exec:media");
+const fs = require("fs:workspace");
+const path = require("path");
+const { implement, putJSON } = require("cookbook-task-support");
+
+function outputPath(ctx, suffix) {
+  return path.join("/work", `${ctx.identity().nodeKey}-${suffix}`);
+}
+
+module.exports = implement({
+  async probe(ctx) {
+    const raw = media.run("ffprobe", [
+      "-v",
+      "error",
+      "-of",
+      "json",
+      "-show_streams",
+      ctx.input().video.path,
+    ]);
+    return {
+      video: ctx.input().video,
+      metadata: await putJSON(
+        ctx,
+        "metadata",
+        "video-metadata-ref/v1",
+        JSON.parse(raw),
+      ),
+    };
+  },
+
+  async transcodeMatrix(ctx) {
+    const outputs = [];
+    for (const rendition of ctx.input().renditions) {
+      const target = outputPath(ctx, `${rendition.name}.mp4`);
+      media.run("ffmpeg", [
+        "-i",
+        ctx.input().video.path,
+        "-vf",
+        `scale=-2:${rendition.height}`,
+        "-y",
+        target,
+      ]);
+      outputs.push({ name: rendition.name, path: target });
+    }
+    return {
+      renditions: await putJSON(
+        ctx,
+        "renditions",
+        "video-rendition-ref-set/v1",
+        outputs,
+      ),
+    };
+  },
+
+  async thumbnailSheet(ctx) {
+    const target = outputPath(ctx, "thumbnails.jpg");
+    media.run("ffmpeg", [
+      "-i",
+      ctx.input().video.path,
+      "-vf",
+      "fps=1/10,tile=5x4",
+      "-frames:v",
+      "1",
+      "-y",
+      target,
+    ]);
+    return {
+      thumbnails: await putJSON(
+        ctx,
+        "thumbnails",
+        "thumbnail-sheet-ref/v1",
+        { path: target },
+      ),
+    };
+  },
+
+  async bundleMediaPackage(ctx) {
+    const entries = [
+      ...ctx.input().renditions,
+      ctx.input().thumbnails,
+    ];
+    for (const entry of entries) {
+      if (!(await fs.exists(entry.path))) {
+        throw new Error(`missing media output: ${entry.path}`);
+      }
+    }
+    return {
+      manifest: await putJSON(
+        ctx,
+        "manifest",
+        "media-package-manifest-ref/v1",
+        { entries },
+      ),
+    };
+  },
+});
+```
+
+`exec:media` permits only `ffprobe` and `ffmpeg`; process/container isolation
+constrains paths, CPU, memory, and wall time.
 
 ## Bundle 6 — `cookbook-word-count-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-word-count-tasks",
   namespace: "cookbook.word-count",
-}, task => {
-  task("tokenCount", {group: "analytics", resource: "cpu.transform", outputs: {counts: "token-count-shard-ref/v1"}, modules: ["text/tokenize"]});
-  task("reduceTokenCounts", {group: "analytics", resource: "cpu.transform", outputs: {countManifest: "token-count-manifest-ref/v1"}, modules: ["data/reduce"]});
+  modules: ["fs:input"],
+}, (task) => {
+  task("tokenCount", {
+    group: "analytics",
+    resource: "cpu.transform",
+    outputs: { counts: "token-count-shard-ref/v1" },
+  });
+  task("reduceTokenCounts", {
+    group: "analytics",
+    resource: "cpu.transform",
+    outputs: { countManifest: "token-count-manifest-ref/v1" },
+  });
 });
 ```
 
-The entrypoints are deterministic: normalization is fixed, token keys are sorted, and reducers merge canonical shard manifests.
+### `execution/tasks.cjs`
+
+```js
+const fs = require("fs:input");
+const { implement, putJSON } = require("cookbook-task-support");
+
+function tokens(text) {
+  return text.toLowerCase().match(/[a-z0-9]+/g) || [];
+}
+
+module.exports = implement({
+  async tokenCount(ctx) {
+    const text = await fs.readFile(ctx.input().document.path, "utf8");
+    const counts = {};
+    for (const token of tokens(text)) {
+      counts[token] = (counts[token] || 0) + 1;
+    }
+    return {
+      counts: await putJSON(
+        ctx,
+        "counts",
+        "token-count-shard-ref/v1",
+        counts,
+      ),
+    };
+  },
+
+  async reduceTokenCounts(ctx) {
+    const merged = {};
+    for (const shard of ctx.input().shards) {
+      for (const [token, count] of Object.entries(shard)) {
+        merged[token] = (merged[token] || 0) + count;
+      }
+    }
+    const ordered = Object.fromEntries(
+      Object.entries(merged).sort(([a], [b]) => a.localeCompare(b)),
+    );
+    return {
+      countManifest: await putJSON(
+        ctx,
+        "countManifest",
+        "token-count-manifest-ref/v1",
+        ordered,
+      ),
+    };
+  },
+});
+```
+
+The input alias is read-only and backed by the attempt's resolved document
+artifacts.
 
 ## Bundle 7 — `cookbook-security-gate-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-security-gate-tasks",
   namespace: "cookbook.security",
-}, task => {
-  task("expandScanMatrix", {group: "security", resource: "control.local", outputs: {requests: "security-scan-request-ref-set/v1"}});
-  task("scan", {group: "security", resource: "cpu.security-scan", outputs: {findings: "security-finding-ref-set/v1"}, modules: ["capability/security-scanners"]});
-  task("mergeFindings", {group: "security", resource: "control.local", outputs: {report: "security-report-ref/v1"}, modules: ["data/reduce"]});
-  task("evaluatePolicy", {group: "security", resource: "control.local", outputs: {acceptedReport: "accepted-security-report-ref/v1"}, modules: ["security/policy"]});
+  modules: [
+    "exec:scanner",
+    "fs:input",
+    "yaml",
+    "crypto",
+    "signer:release",
+  ],
+}, (task) => {
+  task("expandScanMatrix", {
+    group: "security",
+    resource: "control.local",
+    outputs: { requests: "security-scan-request-ref-set/v1" },
+  });
+  task("scan", {
+    group: "security",
+    resource: "cpu.security-scan",
+    outputs: { findings: "security-finding-ref-set/v1" },
+  });
+  task("mergeFindings", {
+    group: "security",
+    resource: "control.local",
+    outputs: { report: "security-report-ref/v1" },
+  });
+  task("evaluatePolicy", {
+    group: "security",
+    resource: "control.local",
+    outputs: { acceptedReport: "accepted-security-report-ref/v1" },
+  });
   task("signReport", {
     group: "security",
     resource: "control.local",
-    outputs: {attestation: "security-attestation-ref/v1"},
-    modules: ["capability/signer"],
-    semantics: {determinism: "externally-dependent", idempotency: "keyed-side-effect", sideEffects: ["sign"]},
+    outputs: { attestation: "security-attestation-ref/v1" },
+    semantics: {
+      determinism: "externally-dependent",
+      idempotency: "keyed-side-effect",
+      sideEffects: ["sign"],
+    },
   });
 });
 ```
 
-The signing alias is public configuration; private key material stays inside the host signer capability.
+### `execution/tasks.cjs`
+
+```js
+const scanner = require("exec:scanner");
+const fs = require("fs:input");
+const yaml = require("yaml");
+const crypto = require("crypto");
+const signer = require("signer:release");
+const { implement, putJSON } = require("cookbook-task-support");
+
+module.exports = implement({
+  async expandScanMatrix(ctx) {
+    const requests = ctx.input().scanners.map((name) => ({
+      name,
+      source: ctx.input().source,
+    }));
+    return {
+      requests: await putJSON(
+        ctx,
+        "requests",
+        "security-scan-request-ref-set/v1",
+        requests,
+      ),
+    };
+  },
+
+  async scan(ctx) {
+    const output = scanner.run(ctx.input().name, [
+      "--format",
+      "json",
+      ctx.input().source.path,
+    ]);
+    return {
+      findings: await putJSON(
+        ctx,
+        "findings",
+        "security-finding-ref-set/v1",
+        JSON.parse(output),
+      ),
+    };
+  },
+
+  async mergeFindings(ctx) {
+    const findings = ctx.input().shards.flat();
+    return {
+      report: await putJSON(
+        ctx,
+        "report",
+        "security-report-ref/v1",
+        { findings },
+      ),
+    };
+  },
+
+  async evaluatePolicy(ctx) {
+    const policyText = await fs.readFile(ctx.input().policy.path, "utf8");
+    const policy = yaml.parse(policyText);
+    const rejected = ctx.input().report.findings.filter((finding) => {
+      return policy.rejectSeverities.includes(finding.severity);
+    });
+    if (rejected.length > 0) {
+      throw new Error(`policy rejected ${rejected.length} findings`);
+    }
+    return {
+      acceptedReport: await putJSON(
+        ctx,
+        "acceptedReport",
+        "accepted-security-report-ref/v1",
+        ctx.input().report,
+      ),
+    };
+  },
+
+  async signReport(ctx) {
+    const payload = JSON.stringify(ctx.input().acceptedReport);
+    const digest = crypto.createHash("sha256")
+      .update(payload)
+      .digest("hex");
+    const signature = await signer.sign({ digest });
+    return {
+      attestation: await putJSON(
+        ctx,
+        "attestation",
+        "security-attestation-ref/v1",
+        { digest, signature },
+      ),
+    };
+  },
+});
+```
+
+The profile allowlists scanner commands. YAML policy comes from a read-only
+mount, and the signer never exposes private key material.
 
 ## Bundle 8 — `cookbook-image-classification-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-image-classification-tasks",
   namespace: "cookbook.image-classification",
-}, task => {
-  task("preprocessImage", {group: "ml", resource: "cpu.transform", outputs: {tensor: "image-tensor-ref/v1"}, modules: ["image/transform"]});
-  task("classifyImage", {group: "ml", resource: "gpu.inference", outputs: {prediction: "image-prediction-ref/v1"}, modules: ["capability/model-runtime"]});
-  task("aggregatePredictions", {group: "ml", resource: "cpu.transform", outputs: {summary: "prediction-summary-ref/v1"}, modules: ["data/reduce"]});
+  modules: ["fs:input", "crypto", "model:image-classifier"],
+}, (task) => {
+  task("preprocessImage", {
+    group: "ml",
+    resource: "cpu.transform",
+    outputs: { tensor: "image-tensor-ref/v1" },
+  });
+  task("classifyImage", {
+    group: "ml",
+    resource: "gpu.inference",
+    outputs: { prediction: "image-prediction-ref/v1" },
+  });
+  task("aggregatePredictions", {
+    group: "ml",
+    resource: "cpu.transform",
+    outputs: { summary: "prediction-summary-ref/v1" },
+  });
 });
 ```
 
-The model capability verifies the immutable model-profile digest before inference; tensor artifacts can use short retention.
+### `execution/tasks.cjs`
+
+```js
+const fs = require("fs:input");
+const crypto = require("crypto");
+const model = require("model:image-classifier");
+const { implement, putJSON } = require("cookbook-task-support");
+
+module.exports = implement({
+  async preprocessImage(ctx) {
+    const bytes = await fs.readFile(ctx.input().image.path);
+    const digest = crypto.createHash("sha256")
+      .update(bytes)
+      .digest("hex");
+    const tensor = await model.preprocess(bytes, {
+      width: 224,
+      height: 224,
+    });
+    return {
+      tensor: await putJSON(
+        ctx,
+        "tensor",
+        "image-tensor-ref/v1",
+        { digest, values: tensor },
+      ),
+    };
+  },
+
+  async classifyImage(ctx) {
+    const prediction = await model.classify(ctx.input().tensor.values, {
+      profileDigest: ctx.input().modelProfileDigest,
+    });
+    return {
+      prediction: await putJSON(
+        ctx,
+        "prediction",
+        "image-prediction-ref/v1",
+        prediction,
+      ),
+    };
+  },
+
+  async aggregatePredictions(ctx) {
+    const counts = {};
+    for (const prediction of ctx.input().predictions) {
+      counts[prediction.label] = (counts[prediction.label] || 0) + 1;
+    }
+    return {
+      summary: await putJSON(
+        ctx,
+        "summary",
+        "prediction-summary-ref/v1",
+        counts,
+      ),
+    };
+  },
+});
+```
+
+The model module is a profile-selected provider. JavaScript controls domain
+preprocessing and aggregation while Go pins the model identity and GPU lease.
 
 ## Bundle 9 — `cookbook-notification-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-notification-tasks",
   namespace: "cookbook.notification",
-}, task => {
-  task("renderIncident", {group: "notify", resource: "cpu.transform", outputs: {message: "notification-message-ref/v1"}, modules: ["notification/template"]});
+  modules: ["fs:templates", "fetch:notifications"],
+}, (task) => {
+  task("renderIncident", {
+    group: "notify",
+    resource: "cpu.transform",
+    outputs: { message: "notification-message-ref/v1" },
+  });
   task("deliver", {
     group: "notify",
     resource: "notification.dynamic",
-    outputs: {receipt: "notification-delivery-receipt-ref/v1"},
-    modules: ["capability/notification-channels"],
-    semantics: {determinism: "externally-dependent", idempotency: "keyed-side-effect", sideEffects: ["notification-send"]},
+    outputs: { receipt: "notification-delivery-receipt-ref/v1" },
+    semantics: {
+      determinism: "externally-dependent",
+      idempotency: "keyed-side-effect",
+      sideEffects: ["notification-send"],
+    },
   });
-  task("reduceReceipts", {group: "notify", resource: "cpu.transform", outputs: {receipt: "notification-batch-receipt-ref/v1"}, modules: ["data/reduce"]});
+  task("reduceReceipts", {
+    group: "notify",
+    resource: "cpu.transform",
+    outputs: { receipt: "notification-batch-receipt-ref/v1" },
+  });
 });
 ```
 
-The compiler expands `notification.dynamic` into a finite approved channel-resource mapping; task JavaScript cannot select arbitrary resources.
+### `execution/tasks.cjs`
+
+```js
+const fs = require("fs:templates");
+const notify = require("fetch:notifications");
+const { implement, putJSON } = require("cookbook-task-support");
+
+module.exports = implement({
+  async renderIncident(ctx) {
+    const template = await fs.readFile("/templates/incident.txt", "utf8");
+    const message = template
+      .replace("{{title}}", ctx.input().incident.title)
+      .replace("{{severity}}", ctx.input().incident.severity);
+    return {
+      message: await putJSON(
+        ctx,
+        "message",
+        "notification-message-ref/v1",
+        { text: message },
+      ),
+    };
+  },
+
+  async deliver(ctx) {
+    const receipt = await notify.client()
+      .post(`/channels/${ctx.input().channel}`)
+      .header("Idempotency-Key", ctx.identity().nodeKey)
+      .json({
+        recipient: ctx.input().recipient,
+        message: ctx.input().message.text,
+      })
+      .expectJson()
+      .run();
+    return {
+      receipt: await putJSON(
+        ctx,
+        "receipt",
+        "notification-delivery-receipt-ref/v1",
+        receipt,
+      ),
+    };
+  },
+
+  async reduceReceipts(ctx) {
+    const delivered = ctx.input().receipts.filter((item) => item.delivered);
+    return {
+      receipt: await putJSON(
+        ctx,
+        "receipt",
+        "notification-batch-receipt-ref/v1",
+        {
+          requested: ctx.input().receipts.length,
+          delivered: delivered.length,
+        },
+      ),
+    };
+  },
+});
+```
+
+The template filesystem is embedded and read-only. The notification client owns
+base URLs and credentials, and only the compiler-approved channel set reaches
+this entrypoint.
 
 ## Bundle 10 — `cookbook-database-backup-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-database-backup-tasks",
   namespace: "cookbook.database-backup",
-}, task => {
-  task("openConsistentSnapshot", {group: "database", resource: "db.source.read", outputs: {snapshot: "database-snapshot-ref/v1"}, modules: ["capability/source-database"]});
-  task("planSnapshotShards", {group: "database", resource: "db.source.read", outputs: {shards: "database-shard-plan-ref-set/v1"}, modules: ["capability/source-database"]});
-  task("dumpSnapshotShard", {group: "database", resource: "db.source.read", outputs: {dump: "database-shard-dump-ref/v1"}, modules: ["capability/source-database", "capability/artifacts"]});
-  task("reduceBackupManifest", {group: "database", resource: "storage.object", outputs: {manifest: "database-backup-manifest-ref/v1"}, modules: ["data/reduce"]});
-  task("restoreVerify", {group: "database", resource: "db.destination.write", outputs: {verifiedBackup: "verified-database-backup-ref/v1"}, modules: ["capability/restore-sandbox"]});
+  modules: [
+    "db:backup-source",
+    "db:restore-sandbox",
+    "fs:workspace",
+    "path",
+    "crypto",
+  ],
+}, (task) => {
+  task("openConsistentSnapshot", {
+    group: "database",
+    resource: "db.source.read",
+    outputs: { snapshot: "database-snapshot-ref/v1" },
+  });
+  task("planSnapshotShards", {
+    group: "database",
+    resource: "db.source.read",
+    outputs: { shards: "database-shard-plan-ref-set/v1" },
+  });
+  task("dumpSnapshotShard", {
+    group: "database",
+    resource: "db.source.read",
+    outputs: { dump: "database-shard-dump-ref/v1" },
+  });
+  task("reduceBackupManifest", {
+    group: "database",
+    resource: "storage.object",
+    outputs: { manifest: "database-backup-manifest-ref/v1" },
+  });
+  task("restoreVerify", {
+    group: "database",
+    resource: "db.destination.write",
+    outputs: { verifiedBackup: "verified-database-backup-ref/v1" },
+  });
 });
 ```
 
-Database handles are opaque host references, never DSNs. Restore verification runs in an isolated destination capability.
+### `execution/tasks.cjs`
+
+```js
+const source = require("db:backup-source");
+const restore = require("db:restore-sandbox");
+const fs = require("fs:workspace");
+const path = require("path");
+const crypto = require("crypto");
+const { implement, putJSON } = require("cookbook-task-support");
+
+function identifier(name) {
+  if (!/^[a-z_][a-z0-9_]*$/i.test(name)) {
+    throw new Error("invalid SQL identifier");
+  }
+  return `"${name}"`;
+}
+
+module.exports = implement({
+  async openConsistentSnapshot(ctx) {
+    const rows = source.query("SELECT snapshot_id() AS id");
+    return {
+      snapshot: await putJSON(
+        ctx,
+        "snapshot",
+        "database-snapshot-ref/v1",
+        { id: rows[0].id },
+      ),
+    };
+  },
+
+  async planSnapshotShards(ctx) {
+    const rows = source.query(
+      "SELECT table_name, shard_key FROM backup_shards " +
+        "WHERE snapshot_id = ? ORDER BY table_name, shard_key",
+      ctx.input().snapshot.id,
+    );
+    return {
+      shards: await putJSON(
+        ctx,
+        "shards",
+        "database-shard-plan-ref-set/v1",
+        rows,
+      ),
+    };
+  },
+
+  async dumpSnapshotShard(ctx) {
+    const table = identifier(ctx.input().shard.table_name);
+    const rows = source.query(
+      `SELECT * FROM ${table} WHERE shard_key = ? ORDER BY id`,
+      ctx.input().shard.shard_key,
+    );
+    const target = path.join(
+      "/work",
+      `${ctx.identity().nodeKey}.json`,
+    );
+    const body = JSON.stringify(rows);
+    await fs.writeFile(target, body, "utf8");
+    const sha256 = crypto.createHash("sha256")
+      .update(body)
+      .digest("hex");
+    return {
+      dump: await putJSON(
+        ctx,
+        "dump",
+        "database-shard-dump-ref/v1",
+        { path: target, sha256, rows: rows.length },
+      ),
+    };
+  },
+
+  async reduceBackupManifest(ctx) {
+    const dumps = [...ctx.input().dumps]
+      .sort((a, b) => a.path.localeCompare(b.path));
+    return {
+      manifest: await putJSON(
+        ctx,
+        "manifest",
+        "database-backup-manifest-ref/v1",
+        { dumps },
+      ),
+    };
+  },
+
+  async restoreVerify(ctx) {
+    for (const dump of ctx.input().manifest.dumps) {
+      const rows = JSON.parse(await fs.readFile(dump.path, "utf8"));
+      for (const row of rows) {
+        restore.exec(
+          "INSERT INTO restored_rows(source_id, payload) VALUES (?, ?)",
+          row.id,
+          JSON.stringify(row),
+        );
+      }
+    }
+    const count = restore.query(
+      "SELECT COUNT(*) AS count FROM restored_rows",
+    )[0].count;
+    return {
+      verifiedBackup: await putJSON(
+        ctx,
+        "verifiedBackup",
+        "verified-database-backup-ref/v1",
+        { count },
+      ),
+    };
+  },
+});
+```
+
+Both database modules are Go-preconfigured. The identifier allowlist closes the
+one SQL position that cannot use a parameter placeholder.
 
 ## Bundle 11 — `cookbook-inventory-reconciliation-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-inventory-reconciliation-tasks",
   namespace: "cookbook.inventory",
-}, task => {
-  task("diffInventory", {group: "data", resource: "cpu.transform", outputs: {repairs: "inventory-repair-ref-set/v1", summary: "inventory-diff-summary-ref/v1"}, modules: ["data/join"]});
+  modules: ["db:warehouse", "fetch:storefront"],
+}, (task) => {
+  task("diffInventory", {
+    group: "data",
+    resource: "cpu.transform",
+    outputs: {
+      repairs: "inventory-repair-ref-set/v1",
+      summary: "inventory-diff-summary-ref/v1",
+    },
+  });
   task("applyInventoryRepair", {
     group: "api",
     resource: "http.partner-api",
-    outputs: {receipt: "inventory-repair-receipt-ref/v1"},
-    modules: ["capability/storefront-api"],
-    semantics: {determinism: "externally-dependent", idempotency: "keyed-side-effect", sideEffects: ["inventory-write"]},
+    outputs: { receipt: "inventory-repair-receipt-ref/v1" },
+    semantics: {
+      determinism: "externally-dependent",
+      idempotency: "keyed-side-effect",
+      sideEffects: ["inventory-write"],
+    },
   });
-  task("reduceRepairAudit", {group: "data", resource: "cpu.transform", outputs: {report: "inventory-repair-audit-ref/v1"}, modules: ["data/reduce"]});
+  task("reduceRepairAudit", {
+    group: "data",
+    resource: "cpu.transform",
+    outputs: { report: "inventory-repair-audit-ref/v1" },
+  });
 });
 ```
 
-Each repair's canonical key is the side-effect idempotency key and remains stable across attempts.
+### `execution/tasks.cjs`
+
+```js
+const warehouse = require("db:warehouse");
+const storefront = require("fetch:storefront");
+const { implement, putJSON } = require("cookbook-task-support");
+
+module.exports = implement({
+  async diffInventory(ctx) {
+    const expected = warehouse.query(
+      "SELECT sku, quantity FROM inventory ORDER BY sku",
+    );
+    const actual = await storefront.client()
+      .get("/inventory")
+      .expectJson()
+      .run();
+    const actualBySku = new Map(
+      actual.items.map((item) => [item.sku, item.quantity]),
+    );
+    const repairs = expected
+      .filter((item) => actualBySku.get(item.sku) !== item.quantity)
+      .map((item) => ({ sku: item.sku, quantity: item.quantity }));
+    return {
+      repairs: await putJSON(
+        ctx,
+        "repairs",
+        "inventory-repair-ref-set/v1",
+        repairs,
+      ),
+      summary: await putJSON(
+        ctx,
+        "summary",
+        "inventory-diff-summary-ref/v1",
+        { compared: expected.length, repairs: repairs.length },
+      ),
+    };
+  },
+
+  async applyInventoryRepair(ctx) {
+    const repair = ctx.input().repair;
+    const receipt = await storefront.client()
+      .put(`/inventory/${encodeURIComponent(repair.sku)}`)
+      .header("Idempotency-Key", ctx.identity().nodeKey)
+      .json({ quantity: repair.quantity })
+      .expectJson()
+      .run();
+    return {
+      receipt: await putJSON(
+        ctx,
+        "receipt",
+        "inventory-repair-receipt-ref/v1",
+        receipt,
+      ),
+    };
+  },
+
+  async reduceRepairAudit(ctx) {
+    return {
+      report: await putJSON(
+        ctx,
+        "report",
+        "inventory-repair-audit-ref/v1",
+        {
+          summary: ctx.input().summary,
+          receipts: ctx.input().receipts,
+        },
+      ),
+    };
+  },
+});
+```
+
+This bundle demonstrates a query-only database alias and an authenticated HTTP
+alias in one trusted attempt runtime.
 
 ## Bundle 12 — `cookbook-release-build-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-release-build-tasks",
   namespace: "cookbook.release",
-}, task => {
-  task("compile", {group: "build", resource: "cpu.transform", outputs: {binary: "build-binary-ref/v1"}, modules: ["capability/hermetic-build"]});
-  task("testBinary", {group: "build", resource: "cpu.transform", outputs: {binary: "tested-binary-ref/v1", report: "test-report-ref/v1"}, modules: ["capability/hermetic-build"]});
-  task("packageBinary", {group: "build", resource: "cpu.transform", outputs: {package: "release-package-ref/v1"}, modules: ["capability/hermetic-build"]});
-  task("reduceReleaseManifest", {group: "build", resource: "cpu.transform", outputs: {manifest: "release-manifest-ref/v1"}, modules: ["data/reduce"]});
-  task("signRelease", {group: "build", resource: "control.local", outputs: {signedManifest: "signed-release-ref/v1"}, modules: ["capability/signer"]});
+  modules: [
+    "exec:build",
+    "fs:workspace",
+    "path",
+    "yaml",
+    "crypto",
+    "signer:release",
+  ],
+}, (task) => {
+  task("compile", {
+    group: "build",
+    resource: "cpu.transform",
+    outputs: { binary: "build-binary-ref/v1" },
+  });
+  task("testBinary", {
+    group: "build",
+    resource: "cpu.transform",
+    outputs: { binary: "tested-binary-ref/v1", report: "test-report-ref/v1" },
+  });
+  task("packageBinary", {
+    group: "build",
+    resource: "cpu.transform",
+    outputs: { package: "release-package-ref/v1" },
+  });
+  task("reduceReleaseManifest", {
+    group: "build",
+    resource: "cpu.transform",
+    outputs: { manifest: "release-manifest-ref/v1" },
+  });
+  task("signRelease", {
+    group: "build",
+    resource: "control.local",
+    outputs: { signedManifest: "signed-release-ref/v1" },
+  });
 });
 ```
 
-The hermetic-build capability exposes structured target/toolchain operations, not arbitrary shell strings.
+### `execution/tasks.cjs`
+
+```js
+const build = require("exec:build");
+const fs = require("fs:workspace");
+const path = require("path");
+const yaml = require("yaml");
+const crypto = require("crypto");
+const signer = require("signer:release");
+const { implement, putJSON } = require("cookbook-task-support");
+
+module.exports = implement({
+  async compile(ctx) {
+    const target = ctx.input().target;
+    const output = path.join("/work", `${target.os}-${target.arch}`);
+    build.run("go", [
+      "build",
+      "-trimpath",
+      "-o",
+      output,
+      "./cmd/app",
+    ]);
+    return {
+      binary: await putJSON(
+        ctx,
+        "binary",
+        "build-binary-ref/v1",
+        { path: output, target },
+      ),
+    };
+  },
+
+  async testBinary(ctx) {
+    build.run(ctx.input().binary.path, ["--self-test"]);
+    return {
+      binary: ctx.input().binary,
+      report: await putJSON(
+        ctx,
+        "report",
+        "test-report-ref/v1",
+        { passed: true },
+      ),
+    };
+  },
+
+  async packageBinary(ctx) {
+    const target = `${ctx.input().binary.path}.tar.gz`;
+    build.run("tar", [
+      "-czf",
+      target,
+      "-C",
+      path.dirname(ctx.input().binary.path),
+      path.basename(ctx.input().binary.path),
+    ]);
+    return {
+      package: await putJSON(
+        ctx,
+        "package",
+        "release-package-ref/v1",
+        { path: target },
+      ),
+    };
+  },
+
+  async reduceReleaseManifest(ctx) {
+    const manifest = {
+      version: ctx.input().version,
+      packages: ctx.input().packages,
+    };
+    const target = path.join("/work", "release.yaml");
+    await fs.writeFile(target, yaml.stringify(manifest), "utf8");
+    return {
+      manifest: await putJSON(
+        ctx,
+        "manifest",
+        "release-manifest-ref/v1",
+        { path: target, ...manifest },
+      ),
+    };
+  },
+
+  async signRelease(ctx) {
+    const body = await fs.readFile(ctx.input().manifest.path, "utf8");
+    const digest = crypto.createHash("sha256")
+      .update(body)
+      .digest("hex");
+    return {
+      signedManifest: await putJSON(
+        ctx,
+        "signedManifest",
+        "signed-release-ref/v1",
+        { digest, signature: await signer.sign({ digest }) },
+      ),
+    };
+  },
+});
+```
+
+`exec:build` permits only the pinned `go`, produced test binary, and `tar`
+operations inside an isolated build image.
 
 ## Bundle 13 — `cookbook-approved-deployment-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-approved-deployment-tasks",
   namespace: "cookbook.deployment",
-}, task => {
-  task("prepareDeployment", {group: "ops", resource: "control.local", outputs: {deploymentPlan: "deployment-plan-ref/v1"}, modules: ["deployment/plan"]});
-  task("awaitApproval", {group: "ops", kind: "approval-gate", resource: "operator.approval", outputs: {approvedPlan: "approved-deployment-plan-ref/v1"}, modules: ["capability/operator-approval"]});
+  modules: ["fetch:deployment", "db:deployment-audit"],
+}, (task) => {
+  task("prepareDeployment", {
+    group: "ops",
+    resource: "control.local",
+    outputs: { deploymentPlan: "deployment-plan-ref/v1" },
+  });
+  task("awaitApproval", {
+    group: "ops",
+    kind: "approval-gate",
+    resource: "operator.approval",
+    outputs: { approvedPlan: "approved-deployment-plan-ref/v1" },
+  });
   task("deploy", {
     group: "ops",
     resource: "control.local",
-    outputs: {deployment: "deployment-ref/v1"},
-    modules: ["capability/deployment-target"],
-    semantics: {determinism: "externally-dependent", idempotency: "keyed-side-effect", sideEffects: ["deployment-write"]},
+    outputs: { deployment: "deployment-ref/v1" },
+    semantics: {
+      determinism: "externally-dependent",
+      idempotency: "keyed-side-effect",
+      sideEffects: ["deployment-write"],
+    },
   });
-  task("verifyDeployment", {group: "ops", resource: "control.local", outputs: {verifiedDeployment: "verified-deployment-ref/v1"}, modules: ["capability/deployment-target"]});
+  task("verifyDeployment", {
+    group: "ops",
+    resource: "control.local",
+    outputs: { verifiedDeployment: "verified-deployment-ref/v1" },
+  });
 });
 ```
 
-`approval-gate` is initialized by this bundle but waiting/signals are managed by the engine's lease-free gate state machine.
+### `execution/tasks.cjs`
+
+```js
+const deploy = require("fetch:deployment");
+const audit = require("db:deployment-audit");
+const { implement, putJSON } = require("cookbook-task-support");
+
+module.exports = implement({
+  async prepareDeployment(ctx) {
+    const current = await deploy.client()
+      .get(`/environments/${ctx.input().environment}`)
+      .expectJson()
+      .run();
+    const plan = {
+      environment: ctx.input().environment,
+      fromVersion: current.version,
+      toVersion: ctx.input().version,
+    };
+    return {
+      deploymentPlan: await putJSON(
+        ctx,
+        "deploymentPlan",
+        "deployment-plan-ref/v1",
+        plan,
+      ),
+    };
+  },
+
+  async awaitApproval(ctx) {
+    return {
+      approvedPlan: await ctx.outputs.createGate(
+        "approvedPlan",
+        {
+          schema: "approved-deployment-plan-ref/v1",
+          subject: ctx.input().deploymentPlan,
+          expiresAt: ctx.input().expiresAt,
+        },
+      ),
+    };
+  },
+
+  async deploy(ctx) {
+    const plan = ctx.input().approvedPlan;
+    const result = await deploy.client()
+      .post(`/environments/${plan.environment}/deployments`)
+      .header("Idempotency-Key", ctx.identity().nodeKey)
+      .json({ version: plan.toVersion })
+      .expectJson()
+      .run();
+    audit.exec(
+      "INSERT INTO deployments(node_key, deployment_id) VALUES (?, ?)",
+      ctx.identity().nodeKey,
+      result.id,
+    );
+    return {
+      deployment: await putJSON(
+        ctx,
+        "deployment",
+        "deployment-ref/v1",
+        result,
+      ),
+    };
+  },
+
+  async verifyDeployment(ctx) {
+    const status = await deploy.client()
+      .get(`/deployments/${ctx.input().deployment.id}`)
+      .expectJson()
+      .run();
+    if (status.state !== "healthy") {
+      throw new Error(`deployment state is ${status.state}`);
+    }
+    return {
+      verifiedDeployment: await putJSON(
+        ctx,
+        "verifiedDeployment",
+        "verified-deployment-ref/v1",
+        status,
+      ),
+    };
+  },
+});
+```
+
+The gate initializer returns immediately. Engine state owns the long wait, then
+binds the approved value before a later deployment attempt starts.
 
 ## Bundle 14 — `cookbook-probe-slo-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-probe-slo-tasks",
   namespace: "cookbook.probe",
-}, task => {
-  task("probe", {group: "ops", resource: "http.public.egress", outputs: {observation: "probe-observation-ref/v1"}, modules: ["capability/probe-client"]});
-  task("evaluateSLO", {group: "ops", resource: "cpu.transform", outputs: {report: "slo-report-ref/v1"}, modules: ["data/reduce"]});
-  task("planFromSLOReport", {group: "notify", resource: "cpu.transform", outputs: {plan: "notification-plan-ref/v1"}, modules: ["notification/template"]});
+  modules: ["fetch:probe", "fs:policy", "yaml", "time"],
+}, (task) => {
+  task("probe", {
+    group: "ops",
+    resource: "http.public.egress",
+    outputs: { observation: "probe-observation-ref/v1" },
+  });
+  task("evaluateSLO", {
+    group: "ops",
+    resource: "cpu.transform",
+    outputs: { report: "slo-report-ref/v1" },
+  });
+  task("planFromSLOReport", {
+    group: "notify",
+    resource: "cpu.transform",
+    outputs: { plan: "notification-plan-ref/v1" },
+  });
 });
 ```
 
-Probe samples remain task-domain observations; workflow attempts remain engine execution evidence.
+### `execution/tasks.cjs`
+
+```js
+const probeClient = require("fetch:probe");
+const fs = require("fs:policy");
+const yaml = require("yaml");
+const time = require("time");
+const { implement, putJSON } = require("cookbook-task-support");
+
+module.exports = implement({
+  async probe(ctx) {
+    const started = time.now();
+    const response = await probeClient.fetch(ctx.input().url, {
+      timeout: ctx.input().timeout,
+    });
+    return {
+      observation: await putJSON(
+        ctx,
+        "observation",
+        "probe-observation-ref/v1",
+        {
+          region: ctx.input().region,
+          status: response.status,
+          latencyMs: time.since(started),
+        },
+      ),
+    };
+  },
+
+  async evaluateSLO(ctx) {
+    const text = await fs.readFile(ctx.input().policy.path, "utf8");
+    const policy = yaml.parse(text);
+    const failed = ctx.input().observations.filter((observation) => {
+      return observation.status >= 500 ||
+        observation.latencyMs > policy.maxLatencyMs;
+    });
+    return {
+      report: await putJSON(
+        ctx,
+        "report",
+        "slo-report-ref/v1",
+        {
+          total: ctx.input().observations.length,
+          failed: failed.length,
+          accepted: failed.length <= policy.maxFailures,
+        },
+      ),
+    };
+  },
+
+  async planFromSLOReport(ctx) {
+    const plan = ctx.input().report.accepted
+      ? { deliveries: [] }
+      : { deliveries: ctx.input().failureNotifications };
+    return {
+      plan: await putJSON(
+        ctx,
+        "plan",
+        "notification-plan-ref/v1",
+        plan,
+      ),
+    };
+  },
+});
+```
+
+This task uses the current `fetch`, `fs`, `yaml`, and `time` module contracts;
+retry attempts remain separate from emitted probe observations.
 
 ## Bundle 15 — `cookbook-document-conversion-tasks`
 
 ```js
-const {defineCookbookBundle} = require("cookbook-bundle-support");
+const { defineCookbookBundle } = require("cookbook-bundle-support");
 
 module.exports = defineCookbookBundle({
   name: "cookbook-document-conversion-tasks",
   namespace: "cookbook.document",
-}, task => {
-  task("inspect", {group: "files", resource: "cpu.transform", outputs: {document: "document-ref/v1", metadata: "document-metadata-ref/v1"}, modules: ["files/inspect"]});
-  task("routeConversions", {group: "files", resource: "cpu.transform", outputs: {requests: "conversion-request-ref-set/v1"}, modules: ["files/routing"]});
-  task("convert", {group: "files", resource: "media.ffmpeg", outputs: {document: "converted-document-ref/v1"}, modules: ["capability/document-converters"]});
-  task("reduceBundleManifest", {group: "files", resource: "storage.object", outputs: {manifest: "document-bundle-manifest-ref/v1"}, modules: ["data/reduce"]});
+  modules: [
+    "fs:workspace",
+    "path",
+    "exec:document-convert",
+    "crypto",
+  ],
+}, (task) => {
+  task("inspect", {
+    group: "files",
+    resource: "cpu.transform",
+    outputs: {
+      document: "document-ref/v1",
+      metadata: "document-metadata-ref/v1",
+    },
+  });
+  task("routeConversions", {
+    group: "files",
+    resource: "cpu.transform",
+    outputs: { requests: "conversion-request-ref-set/v1" },
+  });
+  task("convert", {
+    group: "files",
+    resource: "media.ffmpeg",
+    outputs: { document: "converted-document-ref/v1" },
+  });
+  task("reduceBundleManifest", {
+    group: "files",
+    resource: "storage.object",
+    outputs: { manifest: "document-bundle-manifest-ref/v1" },
+  });
 });
 ```
 
-The converter capability maps finite request kinds to sandboxed implementations; task input cannot name an executable.
+### `execution/tasks.cjs`
+
+```js
+const fs = require("fs:workspace");
+const path = require("path");
+const convert = require("exec:document-convert");
+const crypto = require("crypto");
+const { implement, putJSON } = require("cookbook-task-support");
+
+function digest(bytes) {
+  return crypto.createHash("sha256").update(bytes).digest("hex");
+}
+
+module.exports = implement({
+  async inspect(ctx) {
+    const stat = await fs.stat(ctx.input().document.path);
+    const bytes = await fs.readFile(ctx.input().document.path);
+    return {
+      document: ctx.input().document,
+      metadata: await putJSON(
+        ctx,
+        "metadata",
+        "document-metadata-ref/v1",
+        {
+          extension: path.extname(ctx.input().document.path),
+          bytes: stat.size,
+          sha256: digest(bytes),
+        },
+      ),
+    };
+  },
+
+  async routeConversions(ctx) {
+    const extension = ctx.input().metadata.extension.toLowerCase();
+    const routes = {
+      ".docx": ["pdf", "txt"],
+      ".md": ["pdf", "html"],
+      ".png": ["webp", "thumbnail"],
+    };
+    const requests = (routes[extension] || []).map((format) => ({
+      source: ctx.input().document,
+      format,
+    }));
+    return {
+      requests: await putJSON(
+        ctx,
+        "requests",
+        "conversion-request-ref-set/v1",
+        requests,
+      ),
+    };
+  },
+
+  async convert(ctx) {
+    const request = ctx.input().request;
+    const target = path.join(
+      "/work",
+      `${ctx.identity().nodeKey}.${request.format}`,
+    );
+    convert.run("document-convert", [
+      "--input",
+      request.source.path,
+      "--format",
+      request.format,
+      "--output",
+      target,
+    ]);
+    return {
+      document: await putJSON(
+        ctx,
+        "document",
+        "converted-document-ref/v1",
+        { path: target, format: request.format },
+      ),
+    };
+  },
+
+  async reduceBundleManifest(ctx) {
+    const documents = [...ctx.input().documents]
+      .sort((a, b) => a.path.localeCompare(b.path));
+    return {
+      manifest: await putJSON(
+        ctx,
+        "manifest",
+        "document-bundle-manifest-ref/v1",
+        { documents },
+      ),
+    };
+  },
+});
+```
+
+The route table is finite, and `exec:document-convert` permits one wrapper
+command. User input never becomes a command name.
 
 # Deep transformation atlas: website snapshot example
 
@@ -2146,7 +3937,7 @@ Do not write:
 
 ```js
 for (const row of hugeDataset) {
-  ctx.emit({id: row.id, input: {...wholePlan, row}});
+  ctx.emit({ id: row.id, input: { ...wholePlan, row } });
 }
 ```
 
