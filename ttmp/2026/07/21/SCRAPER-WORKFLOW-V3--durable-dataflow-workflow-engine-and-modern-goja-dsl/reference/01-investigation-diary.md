@@ -2919,3 +2919,98 @@ instead of adding ad hoc dynamic rows or JavaScript runtime callbacks.
 - Code commit: `cfc8f6d`.
 - New manifest schema: `scraper-workflow-item-manifest/v1`.
 - First map contract requires one `map-item` binding and one task output.
+
+## Step 27: Author typed lazy maps from JavaScript
+
+The safe `require("workflow")` module now exposes opaque typed set handles and a
+map builder. JavaScript declares one set input, invokes the map callback once
+with a symbolic item value, configures bounded expansion policy, and publishes
+a named set output. The resulting IR and plan are exact reviewed goldens over
+the canonical Go model from Step 26.
+
+The authoring runtime still has no execution or store authority. Descriptor
+factories receive the symbolic item through the same hidden object-identity
+map used by ordinary value refs, so plain objects and value refs cannot be
+substituted for set handles.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 25)
+
+**Assistant interpretation:** Extend the minimal DSL only after the core map
+contract is frozen, preserving direct-Go/JavaScript convergence and type parity.
+
+**Inferred user intent:** Make scale-out authorable without turning JavaScript
+callbacks into durable/runtime expansion logic.
+
+**Commit (code):** `c898571` — "workflowv3: author typed lazy maps from
+JavaScript"
+
+### What I did
+
+- Added process-local opaque `SetRef` handles to authoring state.
+- Added `inputSet<T>`, `map<I,O>`, fluent `MapBuilder`, and `outputSet`.
+- Made the map callback execute once with an opaque `map-item` value.
+- Added default expansion limits and fluent overrides.
+- Rejected value-as-set handles and callbacks that do not return a registered
+  task descriptor.
+- Extended exact TypeScript declarations without `any`.
+- Added exact map IR/plan goldens and initialized required non-map arrays as
+  empty arrays rather than JSON `null`.
+
+### What worked
+
+- `GOWORK=off go test ./pkg/workflowv3 ./pkg/gojamodules/workflow -count=1`
+  passed.
+- Focused isolated lint reported `0 issues`.
+- The exact DTS golden passed and `pnpm exec tsc --noEmit --skipLibCheck` compiled
+  it successfully.
+- `git diff --check` passed.
+- The fixture asserts the authoring callback runs exactly once.
+
+### What didn't work
+
+- The first generated map goldens exposed `inputs`, `nodes`, and `outputs` as
+  JSON `null` in a map-only workflow. These fields are required collections,
+  so authoring and compilation now initialize them as empty arrays. Goldens
+  were regenerated and reviewed after that correction.
+
+### What I learned
+
+- Omitted optional set/map collections and explicit empty required value/node
+  collections preserve both prior static-plan bytes and clear map-only schema
+  shape.
+- Descriptor factories require no separate map-specific path: the symbolic
+  item is a normal opaque value ref with a constrained `map-item` source.
+
+### What was tricky to build
+
+- The map callback must run while `activeBuild` is set so descriptor-only
+  modules accept the invocation, but its returned descriptor must be inspected
+  immediately and only normalized data retained.
+- Output schema is inferred from the exact one-output task catalog entry; the
+  runtime cannot inspect arbitrary JavaScript properties for it.
+
+### What warrants a second pair of eyes
+
+- Fluent map callback argument order and naming before wider public adoption.
+- Whether the default `pageSize=64`, `maxItems=10000`, and
+  `maxMaterializedAhead=128` should come from an explicit compiler profile
+  rather than authoring defaults in the next policy refinement.
+
+### What should be done in the future
+
+- Add strict immutable manifest encoding/validation and deterministic child-key
+  derivation with exact goldens.
+- Then add additive SQLite expansion tables and one-page transaction tests.
+
+### Code review instructions
+
+- Start with `TestAuthorCompilesLazyMapToCanonicalPlan` and the two new goldens.
+- Follow `inputSet`, `map`, and `outputSet` in `authoring.go`.
+- Compare `TypeScript()` byte-for-byte with `testdata/workflow.d.ts`.
+
+### Technical details
+
+- Code commit: `c898571`.
+- Exact plan digest: `sha256:f452bb74fe9ba4c5afbb16fb83776c174d709377ab43f20a608e3606b41f7676`.

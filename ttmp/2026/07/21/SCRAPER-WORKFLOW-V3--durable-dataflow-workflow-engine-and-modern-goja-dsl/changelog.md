@@ -225,3 +225,11 @@ Step 26: froze canonical lazy-map set/template/policy contracts and validation (
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/compiler.go — Authoritative map schema policy and binding validation
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/types.go — Canonical typed sets maps and exact plan template
+
+## 2026-07-21
+
+Step 27: added typed JavaScript set/map authoring, exact IR/plan/DTS goldens, and single-callback evidence (commit c898571).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/gojamodules/workflow/authoring.go — Safe opaque set and map authoring surface
