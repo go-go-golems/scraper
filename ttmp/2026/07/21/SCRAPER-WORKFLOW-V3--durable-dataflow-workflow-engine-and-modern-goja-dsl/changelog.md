@@ -268,3 +268,12 @@ Step 32: froze homogeneous bounded reduction IR, exact plan templates, JavaScrip
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/gojamodules/workflow/authoring.go — Safe opaque reduction authoring
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/types.go — Canonical reduction contract
+
+## 2026-07-21
+
+Step 33: implemented real bounded reduction trees with lease-local member rehydration, multi-level restart, deterministic roots, concurrent materialization, failure isolation, and privacy evidence (commit e2c48f2).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/reduction_integration_test.go — Slice 7 vertical evidence
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/reduction.go — Durable reduction level and root state machine

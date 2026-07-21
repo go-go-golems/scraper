@@ -3599,3 +3599,135 @@ encoding aggregation behavior in runtime callbacks.
 
 - Code commit: `e760069`.
 - Partition schema: `scraper-workflow-reduction-partition/v1`.
+
+## Step 33: Execute bounded deterministic reduction trees
+
+Slice 7 now has a real multi-level data path. The engine consumes a published
+map or direct set manifest, creates immutable partitions of at most the compiled
+fan-in, materializes exact reducer nodes, rehydrates partition members only in
+the lease workspace, and repeats until one root remains. The root ref is
+published idempotently and gates run success.
+
+A real JavaScript word-count workflow maps and reduces 257 documents through
+three reducer levels with fan-in eight. It deliberately closes and reopens the
+store after a level-zero partition succeeds, then reuses completed partitions
+and finishes with exact attempt cardinality and a validated root.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 25)
+
+**Assistant interpretation:** Turn the frozen reduction contract into real
+bounded dynamic nodes, member rehydration, recovery, publication, projections,
+and adversarial integration evidence.
+
+**Inferred user intent:** Prove scale-in is deterministic, restartable, bounded,
+and isolated before worker-upgrade work begins.
+
+**Commit (code):** `e2c48f2` — "workflowv3: execute bounded reduction trees"
+
+### What I did
+
+- Added strict `ReductionPartition` artifacts and exact node identity over
+  reduction key, source digest, level, ordinal, ordered member keys/digests.
+- Added additive reduction and partition tables with source, policy, level,
+  partition, status, and root-ref state.
+- Added direct-set and published-map source discovery.
+- Added atomic idempotent level materialization, exact reducer nodes, bounded
+  partition refs, level output reconstruction, max-level enforcement, and root
+  publication.
+- Added lease-time resolution of `reduction-partition` bindings.
+- Extended task workspaces to materialize partition member refs under read-only
+  local paths and exposed exact typed `members` metadata in `workflow/task` DTS.
+- Added reduction cancellation, terminal failure propagation, empty-source
+  typed failure, run-success gating, and snapshot root resolution.
+- Added authoritative reduction-source/level projections.
+- Added a real word-count bundle with map/reducer resources, exact authored
+  goldens, and guarded malformed-shard failure.
+- Added tests for a one-item identity root, capacity-1/capacity-4 root digest
+  equality, empty input, two-connection level races, malformed-shard isolation,
+  three levels, restart during reduction, exact attempts, and privacy.
+
+### Why
+
+- Reducers need member payloads immediately before invocation but control rows
+  must remain ref-only. Lease-local rehydration preserves both constraints.
+- A reduction level may be planned concurrently by multiple workers; exact
+  existing partition digests make the second materialization idempotent rather
+  than fatal.
+- Root publication must be a separate durable boundary so a successful final
+  reducer cannot make the run successful before the named output exists.
+
+### What worked
+
+- The 257-item normal fixture reaches 33 level-zero partitions, five level-one
+  partitions, and one level-two root partition (296 total attempts including
+  map children).
+- The race profile uses 65 items through the same restart path.
+- Capacity 1 and capacity 4 produce identical root digests.
+- A malformed `__fail__` shard records
+  `validation/REDUCTION_SHARD_INVALID` while an unrelated run succeeds.
+- Two independent SQLite connections can materialize the same first level and
+  converge on exactly two partitions.
+- Focused core/authoring/runtime/store tests pass; runtime/store race suites
+  pass; isolated lint reports zero issues; JS syntax and both DTS compilations
+  pass.
+
+### What didn't work
+
+- The first focused lint found one style-only issue in root publication:
+
+  `pkg/workflowv3sqlite/reduction.go:418:2: QF1003: could use tagged switch on status (staticcheck)`
+
+  I replaced the `if/else if` chain with a status switch. Lint then reported
+  zero issues.
+
+### What I learned
+
+- The same reducer can safely operate at every level when source and output item
+  schemas are homogeneous.
+- A single source item needs no reducer attempt; its existing typed ref is the
+  deterministic identity root. Empty reduction has no general identity and
+  fails with `REDUCTION_SOURCE_EMPTY` without a worker lease.
+- Partition member paths belong in attempt-local metadata, not immutable
+  partition artifacts or durable rows.
+
+### What was tricky to build
+
+- Higher-level partition identity must retain the original source-manifest
+  digest while members become prior-level output refs.
+- Level materialization writes external immutable partition artifacts before
+  one SQLite transaction inserts all exact nodes/partition refs and advances
+  the level cursor. Concurrent replay compares every existing digest.
+- Reduction and map control actions share the dispatcher but neither consumes a
+  worker lease until an actual JavaScript task node is ready.
+
+### What warrants a second pair of eyes
+
+- One transaction currently inserts all partitions for a level. At 1,807 items
+  and fan-in eight this is bounded to 226 first-level rows, but much larger
+  future sources may need paged level planning.
+- Reduction dynamic ordinal ranges are deterministic but use reserved numeric
+  ranges; node identity does not depend on ordinal.
+- Direct single-item root publication trusts the engine-validated source
+  manifest member while the store validates source and root schemas/identity
+  state.
+
+### What should be done in the future
+
+- Run full repository validation and update public/design Slice 7 status.
+- Add final migration/help/privacy audit and check the Slice 7 task.
+
+### Code review instructions
+
+- Start with `reduction_integration_test.go`, then follow `Engine.ReduceOne`,
+  `MaterializeReductionLevel`, task member materialization, and
+  `PublishReductionRoot`.
+- Compare partition identity tests and exact fixture plan golden.
+- Inspect terminal failure/cancellation updates with run-success predicates.
+
+### Technical details
+
+- Code commit: `e2c48f2`.
+- Normal source items: 257; fan-in: 8; levels: 3; reducer partitions: 39.
+- Race source items: 65.
