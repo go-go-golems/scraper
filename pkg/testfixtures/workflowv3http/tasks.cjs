@@ -54,7 +54,7 @@ exports.snapshotArticles = task.implementation(async (ctx) => {
       });
     }
     const body = await response.text();
-    articles.push({url: response.url, status: response.status, body});
+    articles.push({index: articles.length, status: response.status, body});
   }
   const snapshot = await ctx.outputs.putJSON("snapshot", {
     schema: "http-article-snapshot-ref/v1",
