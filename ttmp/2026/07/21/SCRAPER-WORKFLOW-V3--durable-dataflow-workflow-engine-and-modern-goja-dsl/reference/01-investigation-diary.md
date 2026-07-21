@@ -325,3 +325,95 @@ Validation completed before publication. The remaining ticket task was closed on
 - Dry-run command used `remarquee upload bundle ... --dry-run --non-interactive --toc-depth 2`.
 - Upload command used the same three inputs without `--dry-run`.
 - No routine post-upload listing was performed because the upload returned explicit success.
+
+## Step 4: Add the JavaScript workflow cookbook and execution atlas
+
+A new long-form cookbook now pressure-tests workflow v3 against fifteen workflows outside the RAG domain. The examples cover linear transforms, bounded web snapshots, partner API synchronization, ETL joins and quality gates, media conversion, map/reduce analytics, security policy, image classification, notifications, verified backups, inventory repair, build/release pipelines, human approvals, probe matrices, and document conversion.
+
+Each example follows authored JavaScript through normalized IR, compiled jobs, durable node materialization, leases, attempts, runner execution, artifact references, reduction, and final projections. A deep website-snapshot atlas traces one workflow across every layer, while a terminology section distinguishes definitions, plans, jobs, nodes, tasks, runners, and attempts.
+
+### Prompt Context
+
+**User prompt (verbatim):** "make a document with a whole set of example JS scripts for different workflows (not just RAG) and explain how each will be transformed ande xecuted and ultimately mapped to jobs and how these jobs get executed. Store in the ticket as well and upload to remarkable"
+
+**Assistant interpretation:** Add a comprehensive ticket document containing varied workflow-v3 JavaScript examples and explain their complete compilation and durable execution lifecycle, then publish it to reMarkable.
+
+**Inferred user intent:** Make the proposed DSL concrete enough to teach, review, and pressure-test against real orchestration patterns rather than designing only around the RAG workload.
+
+**Commit (code/docs):** a17ec75 — "docs: add workflow v3 JavaScript cookbook"
+
+### What I did
+
+- Added `reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md`.
+- Added fifteen standalone workflow examples and seventeen JavaScript code fences in total.
+- Added common terminology, a universal transformation pipeline, task-module/capability models, job/node/attempt mapping, task granularity guidance, anti-patterns, DSL pressure-test findings, test matrices, and review checklists.
+- Added `scripts/04-check-cookbook-js.py` to extract every JavaScript fence and invoke `node --check`.
+- Stored deterministic validation output at `scripts/output/workflow-cookbook-js-check.json`.
+- Updated the ticket index to link the cookbook and describe the ticket artifacts.
+- Related the cookbook to the architecture, scheduler/workflow baselines, grammar probe, and checker.
+- Validated frontmatter and ran docmgr doctor.
+- Dry-ran and uploaded a separate reMarkable PDF.
+
+### Why
+
+- A generic workflow engine should explain web, API, ETL, media, analytics, ML, security, operational, and human-in-the-loop workloads without importing their semantics into scraper core.
+- Concrete examples reveal missing DSL contracts earlier than abstract type sketches.
+- Explaining job-to-node-to-attempt expansion prevents implementers from treating a compiled job as one goroutine or one database row.
+
+### What worked
+
+- All 17 JavaScript fences passed Node syntax validation.
+- The cookbook contains 15 domain-diverse workflow definitions and a layer-by-layer website-snapshot execution atlas.
+- The examples exposed actionable DSL decisions around gates, finite resource routing, optional dependencies, typed ports, set manifests, schedules, expansion backpressure, and task-catalog metadata.
+- Frontmatter validation returned `Frontmatter OK`.
+- `docmgr doctor --ticket SCRAPER-WORKFLOW-V3 --stale-after 30` returned `✅ All checks passed`.
+- The reMarkable command returned:
+
+  `OK: uploaded SCRAPER WORKFLOW V3 JavaScript Cookbook.pdf -> /ai/2026/07/21/SCRAPER-WORKFLOW-V3`
+
+### What didn't work
+
+- N/A. The syntax checker, Markdown validation, dry-run, PDF rendering, and upload all succeeded on their first run.
+
+### What I learned
+
+- The core task/map/reduce model covers most workflows when domain modules return typed task descriptors and set manifests are first-class references.
+- Human approval cannot be modeled as a sleeping task; it justifies a first-class durable gate that releases its lease while waiting.
+- Item-dependent resource routing must be finite and compiler-visible. Arbitrary JavaScript routing at dispatch time would undermine capability validation.
+- Side-effecting workflows make node identity and idempotency keys as important as retry policy.
+
+### What was tricky to build
+
+- The examples needed to be varied without claiming nonexistent modules are already implemented. The cookbook labels every domain module and script as a proposed target contract and distinguishes syntax validation from runtime validation.
+- Some workflows naturally want dynamic routing or waiting. Rather than hiding those gaps, the examples identify design pressure and constrain safe implementation options.
+- Long examples can obscure the execution model, so each one includes a graph, mapping table, walkthrough, or correctness notes, and the website example receives a complete multi-stage atlas.
+
+### What warrants a second pair of eyes
+
+- Review `p.gate` and finite resource-routing proposals before freezing the builder API.
+- Review whether joins and multi-output map items need additional first-class types or are sufficiently represented by task descriptors and typed ports.
+- Confirm that every example's side-effecting task has adequate idempotency semantics.
+- Verify the proposed task granularity against measured store/dispatcher overhead once implementation exists.
+
+### What should be done in the future
+
+- Convert all fifteen examples into Goja fixtures with normalized-IR and compiled-plan golden files.
+- Add fake-runner execution tests for the job/node/attempt mappings and privacy assertions.
+- Keep the cookbook synchronized with any accepted changes to the DSL and task catalog contracts.
+
+### Code review instructions
+
+- Start with the cookbook's terminology and universal pipeline sections.
+- Review Examples 2, 6, 9, and 13 for map streaming, reduction, finite resource routing, and lease-free gates.
+- Run:
+
+  `ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/04-check-cookbook-js.py --doc ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md --out /tmp/workflow-cookbook-js-check.json`
+
+- Compare the test matrix to the primary architecture acceptance criteria.
+
+### Technical details
+
+- Cookbook size: approximately 1,680 lines and 65 KiB.
+- Validation result: 17/17 JavaScript fences parsed successfully.
+- reMarkable path: `/ai/2026/07/21/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 JavaScript Cookbook.pdf`.
+- The examples remain target API documentation until native modules and compiler/runtime tests exist.

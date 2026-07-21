@@ -43,3 +43,12 @@ Validated all ticket documents cleanly and uploaded the architecture evidence ca
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md — Primary document in the published bundle
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/01-investigation-diary.md — Records validation and publication
+
+## 2026-07-21
+
+Added and published the non-RAG workflow-v3 JavaScript cookbook with fifteen workflow definitions complete job/node/attempt execution mappings and 17/17 syntax-checked JavaScript blocks (commit a17ec75)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md — Cookbook and execution atlas
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/04-check-cookbook-js.py — Reproducible JavaScript fence syntax checker
