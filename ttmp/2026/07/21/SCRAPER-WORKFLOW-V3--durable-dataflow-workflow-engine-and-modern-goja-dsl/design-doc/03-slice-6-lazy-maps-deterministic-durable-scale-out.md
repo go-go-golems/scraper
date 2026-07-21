@@ -1,7 +1,7 @@
 ---
 Title: Slice 6 Lazy Maps - Deterministic Durable Scale-Out
 Ticket: SCRAPER-WORKFLOW-V3
-Status: active
+Status: complete
 Topics:
     - architecture
     - scheduler
@@ -35,8 +35,8 @@ RelatedFiles:
         Atomic paged expansion and restart transitions belong in this store
 ExternalSources: []
 Summary: Implementation contract for deterministic paged map expansion that materializes large dynamic node sets without persisting source payloads or requiring one large transaction.
-LastUpdated: 2026-07-21T20:30:00-04:00
-WhatFor: Freeze Slice 6 APIs identities state transitions transaction boundaries restart behavior and acceptance evidence before implementation.
+LastUpdated: 2026-07-22T00:50:00-04:00
+WhatFor: Define and record the implemented Slice 6 APIs identities state transitions transaction boundaries restart behavior and acceptance evidence.
 WhenToUse: Read before adding set references map authoring dynamic nodes expansion cursors or map progress to Workflow V3.
 ---
 

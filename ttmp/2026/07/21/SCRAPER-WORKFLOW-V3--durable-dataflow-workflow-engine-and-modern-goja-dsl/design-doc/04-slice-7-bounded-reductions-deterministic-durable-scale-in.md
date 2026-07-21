@@ -1,7 +1,7 @@
 ---
 Title: Slice 7 Bounded Reductions - Deterministic Durable Scale-In
 Ticket: SCRAPER-WORKFLOW-V3
-Status: active
+Status: complete
 Topics:
     - architecture
     - scheduler
@@ -35,8 +35,8 @@ RelatedFiles:
         Partition materialization and root transitions belong in this store
 ExternalSources: []
 Summary: Implementation contract for deterministic restart-safe reduction trees whose partition fan-in and payload size remain bounded regardless of source cardinality.
-LastUpdated: 2026-07-21T20:35:00-04:00
-WhatFor: Freeze Slice 7 partition identity ordering state transitions recovery and root publication before implementation.
+LastUpdated: 2026-07-22T00:50:00-04:00
+WhatFor: Define and record the implemented Slice 7 partition identity ordering state transitions recovery root publication and evidence.
 WhenToUse: Read before adding reduce authoring partition manifests dynamic reducer nodes or aggregate progress to Workflow V3.
 ---
 
