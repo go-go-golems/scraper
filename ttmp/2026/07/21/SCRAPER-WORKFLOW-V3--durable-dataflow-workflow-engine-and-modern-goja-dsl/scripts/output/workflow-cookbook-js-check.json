@@ -1,111 +1,129 @@
 {
-  "blockCount": 17,
+  "blockCount": 20,
   "checks": [
     {
       "error": null,
       "index": 1,
       "ok": true,
-      "startLine": 154
+      "startLine": 158
     },
     {
       "error": null,
       "index": 2,
       "ok": true,
-      "startLine": 283
+      "startLine": 307
     },
     {
       "error": null,
       "index": 3,
       "ok": true,
-      "startLine": 354
+      "startLine": 340
     },
     {
       "error": null,
       "index": 4,
       "ok": true,
-      "startLine": 452
+      "startLine": 373
     },
     {
       "error": null,
       "index": 5,
       "ok": true,
-      "startLine": 519
+      "startLine": 455
     },
     {
       "error": null,
       "index": 6,
       "ok": true,
-      "startLine": 597
+      "startLine": 526
     },
     {
       "error": null,
       "index": 7,
       "ok": true,
-      "startLine": 670
+      "startLine": 624
     },
     {
       "error": null,
       "index": 8,
       "ok": true,
-      "startLine": 721
+      "startLine": 691
     },
     {
       "error": null,
       "index": 9,
       "ok": true,
-      "startLine": 778
+      "startLine": 769
     },
     {
       "error": null,
       "index": 10,
       "ok": true,
-      "startLine": 831
+      "startLine": 842
     },
     {
       "error": null,
       "index": 11,
       "ok": true,
-      "startLine": 891
+      "startLine": 893
     },
     {
       "error": null,
       "index": 12,
       "ok": true,
-      "startLine": 945
+      "startLine": 950
     },
     {
       "error": null,
       "index": 13,
       "ok": true,
-      "startLine": 994
+      "startLine": 1003
     },
     {
       "error": null,
       "index": 14,
       "ok": true,
-      "startLine": 1048
+      "startLine": 1063
     },
     {
       "error": null,
       "index": 15,
       "ok": true,
-      "startLine": 1110
+      "startLine": 1117
     },
     {
       "error": null,
       "index": 16,
       "ok": true,
-      "startLine": 1157
+      "startLine": 1166
     },
     {
       "error": null,
       "index": 17,
       "ok": true,
-      "startLine": 1523
+      "startLine": 1220
+    },
+    {
+      "error": null,
+      "index": 18,
+      "ok": true,
+      "startLine": 1281
+    },
+    {
+      "error": null,
+      "index": 19,
+      "ok": true,
+      "startLine": 1328
+    },
+    {
+      "error": null,
+      "index": 20,
+      "ok": true,
+      "startLine": 1700
     }
   ],
   "document": "ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md",
   "failed": 0,
-  "passed": 17,
+  "passed": 20,
   "schemaVersion": "workflow-cookbook-js-check/v1"
 }

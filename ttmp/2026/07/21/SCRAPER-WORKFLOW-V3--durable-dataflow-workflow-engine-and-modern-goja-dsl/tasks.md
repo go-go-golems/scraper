@@ -8,3 +8,4 @@
 - [x] Validate ticket documentation and upload the design bundle to reMarkable <!-- t:5wld -->
 - [x] Author validate and publish the workflow-v3 JavaScript examples cookbook <!-- t:844e -->
 - [x] Design reproducible JavaScript task bundles and worker task registration <!-- t:8mdf -->
+- [ ] Align the JavaScript cookbook with reproducible custom task bundles and exact worker implementation binding <!-- t:wxdo -->
