@@ -24,7 +24,7 @@ func testBundle(t *testing.T) *Bundle {
 
 func TestBundleDigestChangesWithSource(t *testing.T) {
 	first := testBundle(t)
-	second, err := NewBundle(first.Manifest, map[string][]byte{
+	second, err := NewBundle(first.Manifest(), map[string][]byte{
 		"execution/tasks.cjs": []byte(`exports.normalize = () => ({changed: true});`),
 	})
 	require.NoError(t, err)

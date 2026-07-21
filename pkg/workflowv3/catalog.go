@@ -81,6 +81,16 @@ func validateTaskSpec(spec TaskSpec) error {
 			return fmt.Errorf("task %s@%s has invalid output port", identity.Kind, identity.Version)
 		}
 	}
+	seenModules := map[string]struct{}{}
+	for _, module := range spec.Modules {
+		if strings.TrimSpace(module) == "" {
+			return fmt.Errorf("task %s@%s has empty module alias", identity.Kind, identity.Version)
+		}
+		if _, exists := seenModules[module]; exists {
+			return fmt.Errorf("task %s@%s repeats module alias %q", identity.Kind, identity.Version, module)
+		}
+		seenModules[module] = struct{}{}
+	}
 	return nil
 }
 

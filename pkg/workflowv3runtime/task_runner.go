@@ -3,17 +3,18 @@ package workflowv3runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/require"
 	fsmod "github.com/go-go-golems/go-go-goja/modules/fs"
 	gggengine "github.com/go-go-golems/go-go-goja/pkg/engine"
-	jsruntime "github.com/go-go-golems/scraper/pkg/js/runtime"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 )
 
@@ -28,6 +29,14 @@ type TaskRequest struct {
 
 type TaskResult struct {
 	Outputs map[string]workflowv3.ArtifactRef
+}
+
+type TaskFailureError struct {
+	Failure workflowv3.Failure
+}
+
+func (e *TaskFailureError) Error() string {
+	return fmt.Sprintf("task failure %s/%s", e.Failure.Class, e.Failure.Code)
 }
 
 type outputState struct {
@@ -57,25 +66,33 @@ func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
 		expected: request.Task.Spec.Outputs,
 		outputs:  map[string]workflowv3.ArtifactRef{},
 	}
-	inputFS := fsmod.New(
-		fsmod.WithName("fs:input"),
-		fsmod.WithBackend(fsmod.NewReadOnlyFSBackend(fsmod.FSMount{
-			FS: os.DirFS(workspace), Root: ".", Mount: "/",
-		})),
-	)
+	modules := []gggengine.RuntimeModuleRegistrar{
+		gggengine.NativeModuleRegistrar{
+			ModuleID: "workflowv3:task", ModuleName: "workflow/task",
+			Loader: taskModuleLoader(state),
+		},
+	}
+	for _, module := range request.Task.Spec.Modules {
+		switch module {
+		case "fs:input":
+			inputFS := fsmod.New(
+				fsmod.WithName("fs:input"),
+				fsmod.WithBackend(fsmod.NewReadOnlyFSBackend(fsmod.FSMount{
+					FS: os.DirFS(workspace), Root: ".", Mount: "/",
+				})),
+			)
+			modules = append(modules, gggengine.NativeModuleRegistrar{
+				ModuleID: "workflowv3:fs-input", ModuleName: "fs:input",
+				Loader: inputFS.Loader,
+			})
+		default:
+			return TaskResult{}, fmt.Errorf("task requests unsupported module %q", module)
+		}
+	}
 	loader := bundleLoader(request.Task.Bundle)
 	factory, err := gggengine.NewRuntimeFactoryBuilder().
 		WithRequireOptions(require.WithLoader(loader)).
-		WithModules(
-			gggengine.NativeModuleRegistrar{
-				ModuleID: "workflowv3:task", ModuleName: "workflow/task",
-				Loader: taskModuleLoader(state),
-			},
-			gggengine.NativeModuleRegistrar{
-				ModuleID: "workflowv3:fs-input", ModuleName: "fs:input",
-				Loader: inputFS.Loader,
-			},
-		).
+		WithModules(modules...).
 		Build()
 	if err != nil {
 		return TaskResult{}, fmt.Errorf("build task runtime: %w", err)
@@ -103,6 +120,9 @@ func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
 		contextObject := taskContextObject(vm, request, inputValues, state)
 		value, err := function(goja.Undefined(), contextObject)
 		if err != nil {
+			if failure := exportedTaskFailure(err); failure != nil {
+				return nil, failure
+			}
 			return nil, err
 		}
 		if promise, ok := value.Export().(*goja.Promise); ok {
@@ -114,7 +134,7 @@ func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
 		return TaskResult{}, fmt.Errorf("execute task: %w", err)
 	}
 	if promise, ok := returned.(*goja.Promise); ok {
-		returned, err = jsruntime.WaitForPromise(ctx, runtime, promise)
+		returned, err = waitForTaskPromise(ctx, runtime, promise)
 		if err != nil {
 			return TaskResult{}, fmt.Errorf("await task: %w", err)
 		}
@@ -138,7 +158,23 @@ func taskModuleLoader(state *outputState) require.ModuleLoader {
 			return call.Argument(0)
 		})
 		mustSet(vm, exports, "failure", func(call goja.FunctionCall) goja.Value {
-			panic(vm.NewGoError(fmt.Errorf("task failure: %v", call.Argument(0).Export())))
+			value := call.Argument(0).ToObject(vm)
+			failure := workflowv3.Failure{
+				Class:     strings.TrimSpace(value.Get("class").String()),
+				Code:      strings.TrimSpace(value.Get("code").String()),
+				Retryable: value.Get("retryable").ToBoolean(),
+				Message:   strings.TrimSpace(value.Get("message").String()),
+			}
+			if err := workflowv3.ValidateFailure(failure); err != nil {
+				panic(vm.NewTypeError("invalid task failure: %s", err))
+			}
+			object := vm.NewObject()
+			mustSet(vm, object, "class", failure.Class)
+			mustSet(vm, object, "code", failure.Code)
+			mustSet(vm, object, "retryable", failure.Retryable)
+			mustSet(vm, object, "message", failure.Message)
+			mustSet(vm, object, "__workflowTaskFailure", true)
+			return object
 		})
 	}
 }
@@ -230,6 +266,83 @@ func validateInputRefs(spec workflowv3.TaskSpec, refs map[string]workflowv3.Arti
 		}
 	}
 	return nil
+}
+
+func exportedTaskFailure(err error) *TaskFailureError {
+	var exception *goja.Exception
+	if !errors.As(err, &exception) {
+		return nil
+	}
+	return taskFailureFromValue(exception.Value())
+}
+
+func taskFailureFromValue(value goja.Value) *TaskFailureError {
+	object, ok := value.(*goja.Object)
+	if !ok {
+		return nil
+	}
+	marker := object.Get("__workflowTaskFailure")
+	if marker == nil || !marker.ToBoolean() {
+		return nil
+	}
+	return &TaskFailureError{Failure: workflowv3.Failure{
+		Class:     strings.TrimSpace(object.Get("class").String()),
+		Code:      strings.TrimSpace(object.Get("code").String()),
+		Retryable: object.Get("retryable").ToBoolean(),
+		Message:   strings.TrimSpace(object.Get("message").String()),
+	}}
+}
+
+type taskPromiseSnapshot struct {
+	state   goja.PromiseState
+	value   any
+	failure *TaskFailureError
+	message string
+}
+
+func waitForTaskPromise(ctx context.Context, runtime *gggengine.Runtime, promise *goja.Promise) (any, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		result, err := runtime.Owner.Call(ctx, "workflowv3.task.promise", func(_ context.Context, _ *goja.Runtime) (any, error) {
+			snapshot := taskPromiseSnapshot{state: promise.State()}
+			switch snapshot.state {
+			case goja.PromiseStateFulfilled:
+				value := promise.Result()
+				if value != nil && !goja.IsUndefined(value) && !goja.IsNull(value) {
+					snapshot.value = value.Export()
+				}
+			case goja.PromiseStateRejected:
+				value := promise.Result()
+				snapshot.failure = taskFailureFromValue(value)
+				if snapshot.failure == nil && value != nil {
+					snapshot.message = value.String()
+				}
+			}
+			return snapshot, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		snapshot := result.(taskPromiseSnapshot)
+		switch snapshot.state {
+		case goja.PromiseStatePending:
+			time.Sleep(5 * time.Millisecond)
+		case goja.PromiseStateFulfilled:
+			return snapshot.value, nil
+		case goja.PromiseStateRejected:
+			if snapshot.failure != nil {
+				return nil, snapshot.failure
+			}
+			if snapshot.message == "" {
+				return nil, fmt.Errorf("promise rejected")
+			}
+			return nil, fmt.Errorf("promise rejected: %s", snapshot.message)
+		default:
+			return nil, fmt.Errorf("unknown promise state %v", snapshot.state)
+		}
+	}
 }
 
 func validateReturnedOutputs(returned any, state *outputState) error {
