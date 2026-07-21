@@ -31,7 +31,6 @@ func RegisterSite(root *cobra.Command, siteRegistry *siteregistry.Registry, def 
 	}
 
 	registry, err := jsverbs.ScanFS(def.VerbsFS, def.VerbsRoot, jsverbs.ScanOptions{
-		IncludePublicFunctions: false,
 		Extensions:             []string{".js"},
 		FailOnErrorDiagnostics: true,
 	})

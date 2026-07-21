@@ -22,7 +22,6 @@ func LoadSiteVerbs(def siteregistry.Definition) (*SiteVerbs, error) {
 	}
 
 	registry, err := jsverbs.ScanFS(def.VerbsFS, def.VerbsRoot, jsverbs.ScanOptions{
-		IncludePublicFunctions: false,
 		Extensions:             []string{".js"},
 		FailOnErrorDiagnostics: true,
 	})
