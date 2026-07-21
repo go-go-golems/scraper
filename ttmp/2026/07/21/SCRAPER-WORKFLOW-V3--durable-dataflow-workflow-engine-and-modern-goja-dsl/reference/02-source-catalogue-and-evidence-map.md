@@ -25,8 +25,8 @@ ExternalSources:
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/scraper
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/go-go-goja
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/widget-dsl
-Summary: Catalogue of repository evidence, historical PARC notes, xgoja references, and reproducible probes used by the workflow v3 design.
-LastUpdated: 2026-07-21T14:50:00Z
+Summary: Catalogue of repository evidence, current go-go-goja host-module contracts, historical PARC notes, xgoja references, and reproducible probes used by the workflow v3 design and cookbook.
+LastUpdated: 2026-07-21T21:00:00Z
 WhatFor: Trace workflow-engine and JavaScript DSL recommendations back to source code, executable probes, and historical architecture notes.
 WhenToUse: Read when reviewing the primary design, validating a claim, or resuming implementation after a gap.
 ---
@@ -67,6 +67,23 @@ This document identifies the evidence used to design scraper workflow v3 and its
 | `rag-evaluation-system/pkg/widgetdsl/testdata/v3/examples` | Executable authoring examples and golden serialized IR. |
 | `go-go-goja/pkg/xgoja/providerapi` | Provider packages, module setup context, host services, module factories, TypeScript descriptors, and help sources. |
 | `go-go-goja/pkg/xgoja/app` | RuntimePlan, selected module aliases, TypeScript execution/bundling, jsverbs sources, and generated host lifecycle. |
+
+## Current go-go-goja execution-module contracts
+
+| Source | JavaScript contract used in cookbook implementations |
+|---|---|
+| `go-go-goja/modules/fetch/typescript.go` | Direct `fetch` plus fluent clients, request builders, JSON/text responses, timeouts, and host-owned authentication. |
+| `go-go-goja/modules/database/database.go` | Synchronous `query`, `exec`, and explicit transactions; xgoja can disable script-side `configure()`. |
+| `go-go-goja/modules/fs/fs.go` | Async/sync filesystem calls, backend capability reporting, host filesystems, and read-only embedded mounts. |
+| `go-go-goja/modules/exec/exec.go` | Trusted-runtime `run(command, args)` primitive. |
+| `go-go-goja/pkg/xgoja/providers/host/host.go` | Explicit host-module registration, aliases, allow gates, command allowlists, and preconfigured database instances. |
+| `go-go-goja/modules/crypto/crypto.go` | UUID/random helpers and incremental SHA-family hashing. |
+| `go-go-goja/modules/path/path.go` | Portable path join, resolve, dirname, basename, extension, and relative-path helpers. |
+| `go-go-goja/modules/yaml/yaml.go` | YAML parse, stringify, and validation. |
+| `go-go-goja/modules/time/time.go` | Runtime-local monotonic `now()` and `since()` measurements. |
+
+These modules are appropriate only in the trusted lease-scoped execution phase.
+Descriptor-only authoring runtimes continue to receive none of them.
 
 ## Historical extracts saved under `sources/`
 
