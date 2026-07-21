@@ -98,3 +98,12 @@ Started workflow-v3 implementation: documented trusted Goja module aliases and e
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3 — Canonical workflow-v3 model catalog compiler and tests
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md — Trusted module model and twelve executable vertical slices
+
+## 2026-07-21
+
+Implemented the minimal require(workflow) Goja authoring DSL with define/input/task/after/output/validate/digest/toIR/compile, generated descriptor factories, TypeScript declaration, direct-Go parity, and IR/plan goldens (commit b4d54ba)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/gojamodules/workflow/authoring.go — Minimal safe workflow authoring native modules
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/gojamodules/workflow/testdata/linear-transform.plan.json — Exact-identity compiled-plan golden
