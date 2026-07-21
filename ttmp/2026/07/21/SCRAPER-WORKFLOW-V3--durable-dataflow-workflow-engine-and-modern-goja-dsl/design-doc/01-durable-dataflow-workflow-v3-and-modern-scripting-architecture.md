@@ -31,8 +31,8 @@ ExternalSources:
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/scraper
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/go-go-goja
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/widget-dsl
-Summary: Evidence-backed architecture and intern-oriented implementation guide for a compact, work-conserving durable dataflow engine and typed Goja workflow DSL shared by scraper, researchctl, and RAG.
-LastUpdated: 2026-07-21T16:30:00Z
+Summary: Evidence-backed architecture, executable vertical-slice sequence, and implementation guide for a compact durable dataflow engine and typed Goja workflow DSL; the minimal file-transform slice is now running end to end.
+LastUpdated: 2026-07-21T22:30:00Z
 WhatFor: Implement scraper workflow v3 without repeating the source-bearing payload, fixed-cycle scheduling, untyped scripting, and observability defects found during the real-provider TTC preparation run.
 WhenToUse: Read before changing scraper persistence, scheduling, workflow APIs, Goja/xgoja integration, or adapting researchctl and RAG to durable workflow execution.
 ---
@@ -1650,6 +1650,54 @@ Exit criteria: exact-profile TTC preflight proves compact persistence, malformed
 - remove duplicated JS context emit decoders;
 - remove v2 scheduler after all supported runs finish;
 - publish migration and operational recovery documentation.
+
+## Implemented minimal vertical slice
+
+As of the first implementation tranche, Slices 1 and 2 are executable rather
+than design-only.
+
+| Boundary | Implementation evidence |
+|---|---|
+| Canonical model/compiler | `pkg/workflowv3` strict IR, catalog, exact identity, validation, digest, bundle, registry, failure, and artifact contracts |
+| Minimal authoring DSL | `pkg/gojamodules/workflow` plus IR, plan, and DTS goldens |
+| Real bundle | `pkg/testfixtures/workflowv3linear` paired workflow and `execution/tasks.cjs` source |
+| Fresh task runtime | `pkg/workflowv3runtime/task_runner.go` with `workflow/task` and declared `fs:input` only |
+| Durable execution | `pkg/workflowv3runtime/engine.go` and `pkg/workflowv3sqlite` compact schema/store |
+| Restart/privacy proof | `TestEngineRunsAuthoredWorkflowAcrossRestartWithoutPersistingSource` over 12,000 JSONL rows |
+| Fencing/identity proof | cancellation, expired lease, concurrent lease, and wrong bundle/entrypoint/ABI tests |
+
+The implemented DSL surface is deliberately the smallest complete path:
+`define`, typed `input`, descriptor-backed `task`, `after`, `output`, `toIR`,
+`validate`, `digest`, and `compile`. Goja objects are opaque handles backed by
+Go-owned runtime maps; JavaScript properties do not constitute identity.
+
+The store persists plan and ref metadata but never artifact bodies. Task inputs
+are copied into a temporary read-only mount containing only bound refs. Output
+bytes enter the content-addressed artifact store before their refs are
+transactionally committed, so a crash may leave an unreferenced immutable
+object but cannot publish an invalid partial output.
+
+The first executor is deterministic and sequential. This is an intentional
+walking-skeleton scheduling policy, not a v3 compatibility shim: plans, nodes,
+attempts, registry identities, refs, and fence transactions already use the
+final v3 control-plane contracts. Slice 4 will replace only admission/refill
+policy with the work-conserving dispatcher.
+
+Focused validation:
+
+```text
+GOWORK=off go test ./pkg/workflowv3 \
+  ./pkg/gojamodules/workflow \
+  ./pkg/workflowv3runtime \
+  ./pkg/workflowv3sqlite -count=1
+
+GOWORK=off go test -race \
+  ./pkg/workflowv3runtime \
+  ./pkg/workflowv3sqlite -count=1
+```
+
+The public implementation overview is
+`pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md`.
 
 ## Testing strategy
 

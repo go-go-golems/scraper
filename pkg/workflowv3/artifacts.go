@@ -62,7 +62,7 @@ func (s *FileArtifactStore) Put(ctx context.Context, schema, mediaType string, b
 		return ArtifactRef{}, fmt.Errorf("create artifact temporary file: %w", err)
 	}
 	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
+	defer func() { _ = os.Remove(temporaryName) }()
 	if _, err := temporary.Write(body); err != nil {
 		_ = temporary.Close()
 		return ArtifactRef{}, fmt.Errorf("write artifact: %w", err)

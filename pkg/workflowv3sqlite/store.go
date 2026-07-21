@@ -43,7 +43,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(4)
 	if _, err := db.ExecContext(ctx, schemaSQL); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("migrate workflow v3 SQLite: %w", err)
 	}
 	return &Store{db: db}, nil
@@ -74,7 +74,7 @@ func (s *Store) CreateRun(ctx context.Context, runID workflowv3.RunID, plan work
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	stamp := formatTime(now)
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO v3_runs(run_id, name, plan_digest, plan_json, status, created_at, updated_at)
@@ -136,7 +136,7 @@ func (s *Store) LeaseNext(ctx context.Context, registry *workflowv3.SealedRegist
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err := reclaimExpired(ctx, tx, now); err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ LIMIT 100`)
 	if err != nil {
 		return nil, fmt.Errorf("query ready nodes: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var selected *leaseCandidate
 	for rows.Next() {
 		candidate, err := scanLeaseCandidate(rows)
@@ -263,7 +263,7 @@ func (s *Store) Complete(ctx context.Context, lease workflowv3.Lease, outputs ma
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err := checkFence(ctx, tx, lease); err != nil {
 		return err
 	}
@@ -319,7 +319,7 @@ func (s *Store) Fail(ctx context.Context, lease workflowv3.Lease, failure workfl
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err := checkFence(ctx, tx, lease); err != nil {
 		return err
 	}
@@ -359,7 +359,7 @@ func (s *Store) Cancel(ctx context.Context, runID workflowv3.RunID, now time.Tim
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	stamp := formatTime(now)
 	result, err := tx.ExecContext(ctx, `
 UPDATE v3_runs SET status = 'canceled', cancel_epoch = cancel_epoch + 1,
@@ -433,7 +433,7 @@ FROM v3_attempts WHERE run_id = ? ORDER BY node_key, attempt_no`, runID)
 	if err != nil {
 		return workflowv3.RunSnapshot{}, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		attempt, err := scanAttempt(rows, runID)
 		if err != nil {
