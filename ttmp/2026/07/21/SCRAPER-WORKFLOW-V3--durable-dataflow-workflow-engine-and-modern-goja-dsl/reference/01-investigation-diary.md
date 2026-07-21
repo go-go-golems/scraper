@@ -2652,3 +2652,163 @@ from that frontend bundle changed in this tranche.
 - Final implementation commits: `b05e5a0`, `7df9f59`, `c1e0023`, `c4c670b`.
 - Final documentation commits through the preceding step: `d35709e`,
   `3115402`.
+
+## Step 25: Audit and document the complete twelve-slice architecture
+
+The next implementation tranche began with the required documentation audit.
+Slices 6–10 had short sections in the primary architecture and relevant
+material in the cookbook, but they did not have dedicated implementation-ready
+design documents. Five dedicated design documents now exist, and a separate
+intern-oriented guide explains the architectural progression and acceptance
+boundary for every slice from the linear foundation through paid RAG/TTC work.
+
+The guide deliberately distinguishes implemented evidence for Slices 1–5 from
+target contracts for Slices 6–12. It does not report planned maps, reductions,
+rolling generations, budgets, gates, process isolation, or RAG integration as
+already running.
+
+### Prompt Context
+
+**User prompts (verbatim):**
+
+> slices 6. Lazy maps: scale-out is real 7. Reductions: scale-in is real 8. Registry generations: upgrades are real 9. Budgets/projections: operations are real 10. Approval gates: waiting is real Before you start: are the slices documented in their own right in a design doc?
+
+> Ok, write a detailed design / analysis guide about all the slices, with a section for each, for an intern, from the architectural point of view.
+>
+> 3. HTTP snapshot: external work is real
+>    4. Dispatcher: concurrency is real
+>    5. Database sync: side effects are real
+>    6. Lazy maps: scale-out is real
+>    7. Reductions: scale-in is real
+>    8. Registry generations: upgrades are real
+>    9. Budgets/projections: operations are real
+>    10. Approval gates: waiting is real
+>    11. Process isolation: broader trust is viable
+>    12. RAG/TTC: expensive production workload is safe
+>
+> for all these
+
+> and slices 1 2 as well. Go over your diary and all to refresh your memory if needed.
+>
+> once done, upload to remarkable as a bundle
+
+**Assistant interpretation:** Audit the prior documentation, refresh the full
+implementation history, and write one detailed intern guide covering the
+architectural purpose, state, failures, and evidence contract for all twelve
+vertical slices before implementing Slices 6–10.
+
+**Inferred user intent:** Give a new engineer one coherent explanation of why
+the slices are ordered this way and what each one must prove, while also making
+the immediate Slice 6–10 designs explicit enough to implement safely.
+
+**Active goal:** `f47fcc94-5a32-47e1-8a60-d6b19cd8a417`.
+
+### What I did
+
+- Re-read the complete investigation diary, evidence catalogue, existing slice
+  sequence, bundle-generation design, current canonical types, registry,
+  dispatcher, schema, and projections.
+- Confirmed the audit answer: Slices 6–10 were broadly documented but did not
+  each have their own implementation-ready design document.
+- Added six docmgr tasks for Slices 6–10 and their final audit.
+- Created dedicated design documents 03–07 for lazy maps, reductions, registry
+  generations, budgets/projections, and approval gates.
+- Added `design-doc/08-workflow-v3-slices-1-through-12-intern-architecture-and-analysis-guide.md`.
+- Documented shared representation, privacy, identity, lease, attempt,
+  capability, state, migration, and evidence invariants.
+- Added one detailed section per slice, including implemented paths and measured
+  evidence for Slices 1–5 and explicit state/schema/transaction/test contracts
+  for Slices 6–12.
+- Added a cross-slice state model, dependency sequence, intern workflow, status
+  table, review paths, and source links.
+- Replaced all five generated templates with implementation-ready contracts for
+  canonical APIs, durable schemas, transaction ordering, state machines,
+  failure vocabularies, migration, projections, test matrices, alternatives,
+  and hard acceptance criteria.
+- Validated all six new design documents, checked local links and Markdown
+  fences, ran docmgr doctor, and checked whitespace/placeholders.
+- Uploaded the six-document bundle as `SCRAPER WORKFLOW V3 Slices 1 Through 12
+  Architecture Guide.pdf`.
+
+### Why
+
+- Short roadmap bullets are insufficient for dynamic graph, upgrade, budget,
+  and gate implementation because they do not freeze state-machine and crash
+  semantics.
+- Slices 11 and 12 must remain visible while implementing 6–10 so in-process
+  trust assumptions and final RAG acceptance do not get lost.
+- The previous TTC failure shows that storage, scheduling, privacy, and paid
+  provider behavior must be explained as one sequence rather than isolated
+  features.
+
+### What worked
+
+- The existing diary provided exact implementation failures and evidence for
+  Slices 1–5 rather than requiring reconstruction from commit messages.
+- The new guide covers all twelve requested slices and explicitly labels future
+  behavior as target architecture.
+- Current package and fixture paths are linked directly in frontmatter.
+- Frontmatter validation returned `Frontmatter OK` for all six documents;
+  docmgr doctor returned `✅ All checks passed`.
+- Link/fence validation passed. The six documents contain 14,648 words total
+  after docmgr relations were added.
+- reMarkable returned:
+
+  `OK: uploaded SCRAPER WORKFLOW V3 Slices 1 Through 12 Architecture Guide.pdf -> /ai/2026/07/21/SCRAPER-WORKFLOW-V3`
+
+### What didn't work
+
+- The initial answer to the audit correctly said the slices were not documented
+  in their own right; the five generated docmgr documents initially contained
+  only templates. They were all replaced before implementation began.
+- The first `git diff --check` found trailing whitespace copied verbatim from
+  the prompt's aligned slice list and one extra changelog newline. I normalized
+  trailing padding and final newlines, then reran the check successfully.
+
+### What I learned
+
+- The twelve-slice sequence is best understood as progressive introduction of
+  failure boundaries: identity, authoring, remote I/O, concurrency, side
+  effects, cardinality, aggregation, upgrades, operations, waiting, trust, and
+  paid production integration.
+- The dedicated Slice 6–10 documents need more precision than the cross-slice
+  guide around exact APIs, tables, transaction ordering, migrations, and test
+  matrices.
+
+### What was tricky to build
+
+- The guide had to teach future contracts without implying they already exist.
+  Every section therefore states implementation status and separates current
+  evidence from required evidence.
+- Dynamic maps and reductions must be described without putting item payloads
+  or huge dependency sets back into SQLite. The guide uses immutable manifests,
+  deterministic keys, bounded pages, and bounded fan-in throughout.
+
+### What warrants a second pair of eyes
+
+- Proposed map child-key encoding and reduction partition identity before they
+  become persisted public contracts.
+- Generation acquisition ordering relative to durable lease creation.
+- Conservative settlement semantics for ambiguous provider timeout/lease loss.
+- Gate compare-and-swap behavior during approval/cancellation races.
+
+### What should be done in the future
+
+- Commit the validated documentation tranche, then implement Slice 6 from its
+  frozen design and evidence matrix.
+
+### Code review instructions
+
+- Read design document 08 in order, then compare each Slice 6–10 section with
+  its dedicated design document.
+- Cross-check Slices 1–5 against the real fixtures and diary Steps 10–24.
+- Run frontmatter validation, docmgr doctor, link checks, and
+  `git diff --check` before committing.
+
+### Technical details
+
+- Intern guide covers Slices 1–12 in approximately 45 KiB and 6,238 words.
+- Dedicated slice design paths are `design-doc/03-*.md` through
+  `design-doc/07-*.md`.
+- Bundle destination:
+  `/ai/2026/07/21/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 Slices 1 Through 12 Architecture Guide.pdf`.

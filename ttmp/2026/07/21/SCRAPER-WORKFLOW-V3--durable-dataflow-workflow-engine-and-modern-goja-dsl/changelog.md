@@ -192,3 +192,19 @@ Finalized typed privacy contracts: completed failure vocabulary, exact workflow/
 ## 2026-07-21
 
 Completed Slices 3–5 audit: make validate, full isolated lint, race suites, TypeScript DTS compile, JavaScript syntax, help smoke, migration/retry/resource/fairness/crash/reopen/privacy verbose evidence, generated output review, and placeholder scan all pass
+
+## 2026-07-21
+
+Started the dedicated Slice 6-10 designs and an intern-facing architecture guide covering executable Slices 3-12 before further implementation.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/ — Dedicated slice contracts and intern architecture guide
+
+## 2026-07-21
+
+Completed the intern architecture guide for Slices 1-12 and implementation-ready dedicated designs for Slices 6-10; validated and uploaded the six-document bundle to reMarkable.
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/08-workflow-v3-slices-1-through-12-intern-architecture-and-analysis-guide.md — Cross-slice intern guide and bundle entry point
