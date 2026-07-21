@@ -28,7 +28,7 @@ RelatedFiles:
     - Path: repo://pkg/testfixtures/workflowv3database
       Note: Executable Slice 5 database workflow
 ExternalSources: []
-Summary: Intern-oriented architectural guide to all twelve Workflow V3 vertical slices, including implemented evidence for Slices 1-8 and implementation contracts for Slices 9-12.
+Summary: Intern-oriented architectural guide to all twelve Workflow V3 vertical slices, including implemented evidence for Slices 1-9 and implementation contracts for Slices 10-12.
 LastUpdated: 2026-07-21T20:15:00-04:00
 WhatFor: Understand why each Workflow V3 slice exists, which architectural boundary it proves, how it changes durable state, and what evidence is required before advancing.
 WhenToUse: Read before implementing, reviewing, testing, or operating any Workflow V3 slice, and before changing canonical IR, SQLite state, worker registries, task capabilities, or RAG integration.
@@ -61,7 +61,7 @@ The sequence is:
 11. **Process isolation: broader trust is viable.**
 12. **RAG/TTC: an expensive production workload is safe.**
 
-Slices 1–8 are implemented and validated. Slices 9–12 are target contracts.
+Slices 1–9 are implemented and validated. Slices 10–12 are target contracts.
 This distinction is important: a design section explains what must become true;
 it is not evidence that the behavior already exists.
 
@@ -687,10 +687,10 @@ source or stack dumps in durable events.
 
 ### 10.1 Status and purpose
 
-Slice 9 is not implemented yet. It adds transactional usage limits and a
-complete operator view derived from authoritative state. This is required
-before paid provider work: retry and concurrency limits alone do not bound
-requests, tokens, bytes, or money.
+Slice 9 is implemented. Transactional integer usage limits now share the lease
+transaction, while one-read-transaction operational snapshots reconstruct
+committed truth. This is required before paid provider work: retry and
+concurrency limits alone do not bound requests, tokens, bytes, or money.
 
 ### 10.2 Integer budget model
 
@@ -699,8 +699,9 @@ dimensions may include:
 
 ```text
 requests
-generated_tokens
-embedded_tokens
+input_tokens
+output_tokens
+embedding_tokens
 input_bytes
 output_bytes
 cost_microunits
@@ -759,7 +760,7 @@ Operational snapshots extend beyond queue counts. They should include:
 Events stream committed changes, but snapshots remain the source of truth after
 missed events or reconnect.
 
-### 10.6 Required evidence
+### 10.6 Implemented evidence
 
 - race two connections for one budget unit;
 - reserve, settle below estimate, and release the remainder;
@@ -1087,7 +1088,7 @@ isolation.
 | 6 | implemented and validated | preserve deterministic paged expansion, publication, and privacy invariants |
 | 7 | implemented and validated | preserve bounded fan-in, level recovery, deterministic root, and privacy invariants |
 | 8 | implemented and validated | preserve exact generation acquisition, draining, quarantine, and retry-debt separation |
-| 9 | design target | freeze integer budget dimensions and settlement policy |
+| 9 | implemented and validated | preserve atomic reservation, exact settlement/recovery, and authoritative projections |
 | 10 | design target | freeze gate CAS/operator/state contract |
 | 11 | design target | define worker protocol and isolation profiles |
 | 12 | design target | implement only after Slices 6–11 pass their preflights |

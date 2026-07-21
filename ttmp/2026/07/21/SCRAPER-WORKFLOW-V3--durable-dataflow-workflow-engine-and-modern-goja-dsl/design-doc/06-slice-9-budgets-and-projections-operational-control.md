@@ -1,7 +1,7 @@
 ---
 Title: Slice 9 Budgets and Projections - Operational Control
 Ticket: SCRAPER-WORKFLOW-V3
-Status: active
+Status: complete
 Topics:
     - architecture
     - scheduler
@@ -314,6 +314,40 @@ implemented from the same authoritative query components, not duplicate state.
 8. Exercise all prior fixtures plus map/reduction under budgets.
 9. Update help, diary, changelog, relations, generated artifacts.
 10. Run race, full validation, privacy, docmgr, and diff checks.
+
+## Implementation outcome
+
+Commit `f07cbb7` implements closed integer dimensions, run accounts, task
+maximums, requested/effective claims, JavaScript and TypeScript authoring, and
+checked microunit arithmetic. Optional canonical fields preserve old plan
+bytes; budgeted plans intentionally pin account policy and bundle/catalog
+identity.
+
+SQLite now stores compact account totals, per-node claims, and immutable
+attempt reservations. Immediate lease transactions reserve all dimensions or
+none. Completion settles actual usage, failure may settle trusted reported
+usage, ambiguous execution/lease loss/cancellation charges conservatively, and
+preparation failure releases reservations. Startup reconciliation fails closed
+on account/reservation disagreement. Versioned operator increases use actor and
+expected-version evidence.
+
+The real JavaScript fixture reports request/output-token usage, proves
+below-reservation release, failed-task actual settlement, overage failure,
+zero-charge preparation denial, conservative cancellation, reopen, and privacy.
+Independent SQLite connections prove final-unit admission and terminal races.
+Map children and reduction partitions inherit claims through ordinary dynamic
+node materialization.
+
+`OperationalSnapshot` uses one read transaction and supports global/run
+filters. It includes status counts, retries, lease losses, parsed ages, explicit
+60/300-second terminal windows, resources, blocked reasons, maps, reductions,
+budgets, and an event high-water mark. Bounded `EventsAfter` continuation and
+runtime registry augmentation complete the local operator view. Slice 10 adds
+the gate section and converts the existing lease-free `require-approval` bridge
+into durable decisions.
+
+No cross-run account scope, invoice reconciliation, exchange rates, or remote
+worker heartbeat was added; those remain outside the documented Slice 9 scope.
 
 ## Acceptance criteria
 

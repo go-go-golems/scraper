@@ -3970,3 +3970,14 @@ Lint also found an ineffectual initialized failure value and one unused clone he
 - Review fail-run event evidence because no task lease/attempt is created on admission denial.
 - Finish comprehensive Slice 9 documentation/help, full validation, and publication before checking task `gkai`.
 - Then implement Slice 10 durable lease-free approval gates.
+
+### Slice 9 completion evidence
+
+**Commit (implementation):** `f07cbb7` — "workflowv3: add transactional budgets and projections"
+
+- `make validate` passed: full isolated Go tests, web unit tests, generation, Go build, TypeScript build, and Vite build. Runtime package completed in 48.877 seconds; only the existing non-failing Vite chunk advisory remained.
+- Full runtime/store race suites passed in 13.418 and 1.859 seconds.
+- Full isolated lint returned `0 issues`.
+- Focused verbose budget/store evidence passed in 0.523 seconds and real JavaScript budget runtime evidence in 0.136 seconds.
+- All fixture JavaScript parsed; exact authoring/task DTS compiled; help rendered the Slices 1–9 budget section; docmgr doctor/frontmatter and `git diff --check` passed.
+- `go generate ./...` produced the expected new `pkg/testfixtures/workflowv3budget/logcopter.go` package registration.
