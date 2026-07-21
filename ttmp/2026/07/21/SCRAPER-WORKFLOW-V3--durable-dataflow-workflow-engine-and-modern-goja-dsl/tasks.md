@@ -22,7 +22,7 @@
 - [x] Implement Slice 4 work-conserving dispatcher with independent capacity fairness restart and blocked evidence <!-- t:bjbi -->
 - [x] Implement Slice 5 idempotent preconfigured database synchronization with denied configure crash recovery and privacy <!-- t:7gmp -->
 - [x] Validate document audit and publish evidence for workflow v3 Slices 3 through 5 <!-- t:v8h8 -->
-- [ ] Design and implement Slice 6 deterministic restart-safe lazy maps <!-- t:r9t3 -->
+- [x] Design and implement Slice 6 deterministic restart-safe lazy maps <!-- t:r9t3 -->
 - [ ] Design and implement Slice 7 bounded deterministic reductions <!-- t:w450 -->
 - [ ] Design and implement Slice 8 rolling immutable registry generations <!-- t:x8rm -->
 - [ ] Design and implement Slice 9 transactional budgets and authoritative projections <!-- t:gkai -->

@@ -250,3 +250,12 @@ Step 29: added additive expansion tables and atomic deterministic map-page mater
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/expansion.go — Atomic lazy-map page state machine
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/schema.sql — Additive expansion persistence
+
+## 2026-07-21
+
+Steps 30-31: completed Slice 6 real 1,807-item lazy maps, deterministic publication, projections, cancellation/failure, migration, public docs, and full validation (commits 0481f33, c055c1a, f05ba65).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md — Public Slices 1-6 operations and validation guide
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/map_integration_test.go — Final Slice 6 vertical acceptance evidence

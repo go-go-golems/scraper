@@ -28,7 +28,7 @@ RelatedFiles:
     - Path: repo://pkg/testfixtures/workflowv3database
       Note: Executable Slice 5 database workflow
 ExternalSources: []
-Summary: Intern-oriented architectural guide to all twelve Workflow V3 vertical slices, including implemented evidence for Slices 1-5 and implementation contracts for Slices 6-12.
+Summary: Intern-oriented architectural guide to all twelve Workflow V3 vertical slices, including implemented evidence for Slices 1-6 and implementation contracts for Slices 7-12.
 LastUpdated: 2026-07-21T20:15:00-04:00
 WhatFor: Understand why each Workflow V3 slice exists, which architectural boundary it proves, how it changes durable state, and what evidence is required before advancing.
 WhenToUse: Read before implementing, reviewing, testing, or operating any Workflow V3 slice, and before changing canonical IR, SQLite state, worker registries, task capabilities, or RAG integration.
@@ -61,7 +61,7 @@ The sequence is:
 11. **Process isolation: broader trust is viable.**
 12. **RAG/TTC: an expensive production workload is safe.**
 
-Slices 1–5 are implemented and validated. Slices 6–12 are target contracts.
+Slices 1–6 are implemented and validated. Slices 7–12 are target contracts.
 This distinction is important: a design section explains what must become true;
 it is not evidence that the behavior already exists.
 
@@ -446,10 +446,11 @@ not inferred from attempt status; it is enforced by the target domain.
 
 ### 7.1 Status and purpose
 
-Slice 6 is not implemented yet. It adds dynamic graph cardinality while keeping
-submission, restart, and scheduler memory bounded. A 1,807-item source must not
-become 1,807 source-bearing static plan nodes or one transaction containing the
-entire expanded graph.
+Slice 6 is implemented. It adds dynamic graph cardinality while keeping
+submission, restart, and scheduler memory bounded. The executable fixture
+expands and runs 1,807 source items across reopen, then publishes one ordered
+output manifest. Source items do not become source-bearing static plan nodes or
+one transaction containing the entire expanded graph.
 
 ### 7.2 Canonical authoring contract
 
@@ -1082,7 +1083,7 @@ isolation.
 | 3 | implemented and validated | reuse typed external-failure boundary |
 | 4 | implemented and validated | preserve database-scoped admission |
 | 5 | implemented and validated | reuse stable operation keys for publication |
-| 6 | design target | freeze dedicated map IR/state/transaction contract |
+| 6 | implemented and validated | preserve deterministic paged expansion, publication, and privacy invariants |
 | 7 | design target | freeze partition identity and bounded tree contract |
 | 8 | design target | freeze generation-manager admission/refcount contract |
 | 9 | design target | freeze integer budget dimensions and settlement policy |

@@ -15,6 +15,8 @@ Owners: []
 RelatedFiles:
     - Path: repo://pkg/gojamodules/workflow/authoring.go
       Note: Go-backed map and set-ref authoring handles
+    - Path: repo://pkg/testfixtures/workflowv3map/fixture.go
+      Note: Executable 1,807-item Slice 6 bundle and authored workflow fixture
     - Path: repo://pkg/workflowv3/compiler.go
       Note: Authoritative map template and policy validation
     - Path: repo://pkg/workflowv3/types.go
@@ -23,6 +25,8 @@ RelatedFiles:
         Canonical map and typed set contracts will extend this model
     - Path: repo://pkg/workflowv3runtime/dispatcher.go
       Note: Interleaving expansion and task dispatch under backpressure
+    - Path: repo://pkg/workflowv3runtime/map_integration_test.go
+      Note: Scale restart concurrency publication and privacy acceptance evidence
     - Path: repo://pkg/workflowv3sqlite/schema.sql
       Note: Expansion cursors pages and dynamic child persistence
     - Path: repo://pkg/workflowv3sqlite/store.go
@@ -35,6 +39,7 @@ LastUpdated: 2026-07-21T20:30:00-04:00
 WhatFor: Freeze Slice 6 APIs identities state transitions transaction boundaries restart behavior and acceptance evidence before implementation.
 WhenToUse: Read before adding set references map authoring dynamic nodes expansion cursors or map progress to Workflow V3.
 ---
+
 
 
 # Slice 6 Lazy Maps - Deterministic Durable Scale-Out
@@ -50,6 +55,30 @@ atomically with each page, so restart cannot omit or duplicate children.
 The slice is complete when at least 1,807 real items expand and execute across
 multiple crashes with an identical ordered item-key set and output digest,
 while workflow SQLite remains compact and source-free.
+
+## Implementation status on 2026-07-21
+
+The executable Slice 6 path now exists in commits `cfc8f6d`, `c898571`,
+`e88f95d`, `5ae1f14`, and `0481f33`:
+
+- canonical typed set/map IR, exact plan templates, policy, and DTS;
+- single-invocation JavaScript map authoring with opaque item/set handles;
+- strict ordered immutable item manifests and opaque child keys;
+- additive expansion/page/item tables;
+- atomic bounded page materialization with source identity, cursor CAS,
+  backpressure, reopen, and independent-connection tests;
+- dynamic children through the ordinary task/lease/attempt/resource path;
+- ordered content-addressed output-manifest publication;
+- cancellation and terminal-child failure transitions;
+- authoritative progress and `map-backpressure` projections;
+- a real trusted JavaScript fixture executing 1,807 items across restart.
+
+Normal evidence reports 7,561,185 source bytes and approximately 5,353,472
+workflow SQLite bytes, with source-private canaries absent from control rows and
+the output manifest. The full workload runs normally; race instrumentation uses
+257 items through the same path to keep repository race validation bounded.
+The remaining completion work is repository-wide validation and the final
+requirement audit, not deferred Slice 6 behavior.
 
 ## Problem statement
 

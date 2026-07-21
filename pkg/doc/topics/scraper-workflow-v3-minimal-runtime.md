@@ -1,7 +1,7 @@
 ---
-Title: Workflow V3 Runtime Slices 1–5
+Title: Workflow V3 Runtime Slices 1–6
 Slug: scraper-workflow-v3-minimal-runtime
-Short: "Explains executable workflow-v3 file, HTTP, dispatcher, and database slices with exact capabilities and durable privacy boundaries."
+Short: "Explains executable workflow-v3 file, HTTP, dispatcher, database, and lazy-map slices with exact capabilities and durable privacy boundaries."
 Topics:
 - scraper
 - runtime
@@ -17,11 +17,12 @@ ShowPerDefault: true
 SectionType: GeneralTopic
 ---
 
-Workflow v3 has five executable vertical slices for trusted first-party
+Workflow v3 has six executable vertical slices for trusted first-party
 JavaScript tasks: linear file processing, typed authoring, allowlisted HTTP,
-work-conserving resource dispatch, and idempotent database synchronization. It
-remains intentionally separate from the existing v2 site and submission
-runtime while later map/reduction/budget capabilities are added.
+work-conserving resource dispatch, idempotent database synchronization, and
+deterministic lazy maps. It remains intentionally separate from the existing
+v2 site and submission runtime while later reduction/budget capabilities are
+added.
 
 ## What runs today
 
@@ -30,10 +31,12 @@ module, then use:
 
 - `workflow.define(name, callback)`;
 - `plan.input(name, {schema})`;
+- `plan.inputSet(name, {itemSchema, manifestSchema})`;
 - `plan.task(nodeKey, taskDescriptor, callback?)`;
+- `plan.map(name, set, itemCallback, mapPolicyCallback?)`;
 - `job.after(otherJob)`;
 - `job.output(port)`;
-- `plan.output(name, value)`;
+- `plan.output(name, value)` and `plan.outputSet(name, set)`;
 - `workflow.validate`, `workflow.digest`, `workflow.toIR`, and
   `workflow.compile`.
 
@@ -92,6 +95,30 @@ blocked reasons (`dependency`, `retry-backoff`, `resource-capacity`, and
 an immutable failed attempt and return the node to pending with a durable
 `ready_at` deadline.
 
+## Lazy map behavior
+
+A typed set input is one immutable ordered manifest artifact. Each manifest
+entry has a canonical unique item key and compact artifact ref. JavaScript map
+callbacks execute once during authoring with an opaque symbolic item; callback
+code is never persisted or replayed during expansion.
+
+The store records one `v3_expansions` row per declared map. This is first-class
+Slice 6 control state, not a backwards-compatibility table. It owns the source
+ref, bounded expansion policy, cursor, materialized/terminal counts, status,
+and published output ref. Older static runs simply have no expansion rows.
+
+Expansion inserts at most one configured page in an atomic transaction. Child
+keys hash the map key, source-manifest digest, and canonical item key. Dynamic
+children then use the ordinary node, lease, attempt, resource, retry, fencing,
+and output path. Materialized-ahead backpressure prevents the graph from being
+expanded without bound. Queue projections expose source, materialized,
+terminal, and execution backlog plus `map-backpressure`.
+
+After every child succeeds, the engine constructs one ordered immutable output
+manifest from validated child refs. The run cannot succeed until that manifest
+artifact reference reaches durable `published` state. Empty maps publish an
+empty manifest without acquiring a task lease.
+
 ## HTTP and database behavior
 
 The HTTP fixture snapshots at most eight explicitly supplied article URLs.
@@ -129,13 +156,18 @@ cd web && pnpm exec tsc --noEmit --skipLibCheck \
   ../pkg/workflowv3runtime/testdata/workflow-task.d.ts
 ```
 
-The focused tests cover the 12,000-row file workflow plus real local HTTP and
-SQLite target servers. They prove typed retry, allowlist and redirect denial,
+The focused tests cover the 12,000-row file workflow, real local HTTP and
+SQLite target servers, and a 1,807-item JavaScript lazy map. They prove typed
+retry, allowlist and redirect denial,
 response limits, in-flight cancellation, independent resource refill,
 per-resource fairness, blocked projections, database reconfiguration denial,
-post-commit crash recovery, failure isolation, reopen, and SQLite/WAL/SHM
-canary privacy. The 500-row database fixture persisted 90,112 workflow bytes
-for 499,554 source bytes (18.04%).
+post-commit crash recovery, deterministic paged expansion, backpressure,
+ordered map publication, failure isolation, reopen, and SQLite/WAL/SHM canary
+privacy. The 500-row database fixture persisted 90,112 workflow bytes for
+499,554 source bytes (18.04%). The normal lazy-map evidence processes 1,807
+items across restart and records 7,561,185 source bytes versus approximately
+5,353,472 workflow SQLite bytes (70.80%); source-private fields are absent from
+control persistence and the published output manifest.
 
 ## Source map
 
@@ -150,7 +182,9 @@ for 499,554 source bytes (18.04%).
 - `pkg/testfixtures/workflowv3http` — bounded public HTTP snapshot workflow.
 - `pkg/testfixtures/workflowv3database` — idempotent database synchronization
   workflow.
+- `pkg/testfixtures/workflowv3map` — real 1,807-item lazy-map workflow and
+  trusted JavaScript bundle.
 
-Later slices add lazy maps, bounded reductions, budgets, gates, rolling
-registry generations, and stronger process isolation. V3 does not translate or
-silently accept v2 raw operations.
+Later slices add bounded reductions, rolling registry generations, budgets,
+gates, and stronger process isolation. V3 does not translate or silently accept
+v2 raw operations.
