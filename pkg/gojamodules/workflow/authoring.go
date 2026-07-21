@@ -350,6 +350,72 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 			ManifestSchema: workflowv3.ItemManifestSchemaV1,
 		})
 	})
+	mustSet(vm, object, "reduce", func(call goja.FunctionCall) goja.Value {
+		b.ensureOpen(vm)
+		key := strings.TrimSpace(call.Argument(0).String())
+		source, ok := b.state.sets[call.Argument(1).ToObject(vm)]
+		build, buildOK := goja.AssertFunction(call.Argument(2))
+		if key == "" || !ok || !buildOK {
+			panic(vm.NewTypeError("reduce requires a key, set, and partition task callback"))
+		}
+		for _, node := range b.ir.Nodes {
+			if string(node.Key) == key {
+				panic(vm.NewTypeError("reduction key %s conflicts with a node", key))
+			}
+		}
+		for _, mapped := range b.ir.Maps {
+			if mapped.Key == key {
+				panic(vm.NewTypeError("reduction key %s conflicts with a map", key))
+			}
+		}
+		for _, reduced := range b.ir.Reductions {
+			if reduced.Key == key {
+				panic(vm.NewTypeError("reduction %s is already defined", key))
+			}
+		}
+		partition := b.newRef(vm, workflowv3.ValueRef{
+			Source: "reduction-partition", ReduceKey: key,
+			Schema: workflowv3.ReductionPartitionSchemaV1,
+		})
+		value, err := build(goja.Undefined(), partition)
+		if err != nil {
+			panic(err)
+		}
+		invocation, ok := b.state.tasks[value.ToObject(vm)]
+		if !ok {
+			panic(vm.NewTypeError("reduce callback must return a task descriptor"))
+		}
+		policy := workflowv3.ReducePolicy{FanIn: 16, MaxLevels: 8}
+		if configure, configureOK := goja.AssertFunction(call.Argument(3)); configureOK {
+			reduceBuilder := vm.NewObject()
+			mustSet(vm, reduceBuilder, "fanIn", func(option goja.FunctionCall) goja.Value {
+				policy.FanIn = int(option.Argument(0).ToInteger())
+				return reduceBuilder
+			})
+			mustSet(vm, reduceBuilder, "maxLevels", func(option goja.FunctionCall) goja.Value {
+				policy.MaxLevels = int(option.Argument(0).ToInteger())
+				return reduceBuilder
+			})
+			if _, err := configure(goja.Undefined(), reduceBuilder); err != nil {
+				panic(err)
+			}
+		}
+		b.ir.Reductions = append(b.ir.Reductions, workflowv3.IRReduce{
+			Key: key, Source: source, PartitionTask: invocation.key,
+			Bindings: invocation.bindings, Policy: policy,
+		})
+		spec, found := b.state.catalog.Lookup(invocation.key)
+		if !found || len(spec.Outputs) != 1 {
+			panic(vm.NewTypeError("reduction task must declare exactly one output"))
+		}
+		outputSchema := ""
+		for _, schema := range spec.Outputs {
+			outputSchema = schema
+		}
+		return b.newRef(vm, workflowv3.ValueRef{
+			Source: "reduction-output", ReduceKey: key, Schema: outputSchema,
+		})
+	})
 	mustSet(vm, object, "output", func(call goja.FunctionCall) goja.Value {
 		b.ensureOpen(vm)
 		name := strings.TrimSpace(call.Argument(0).String())
@@ -472,6 +538,10 @@ func TypeScript() string {
     maxItems(value: number): MapBuilder;
     maxMaterializedAhead(value: number): MapBuilder;
   }
+  export interface ReduceBuilder {
+    fanIn(value: number): ReduceBuilder;
+    maxLevels(value: number): ReduceBuilder;
+  }
   export interface PlanBuilder {
     input<T = unknown>(
       name: string,
@@ -492,6 +562,12 @@ func TypeScript() string {
       task: (item: ValueRef<I>) => unknown,
       build?: (map: MapBuilder) => void,
     ): SetRef<O>;
+    reduce<I, O>(
+      name: string,
+      source: SetRef<I>,
+      task: (partition: ValueRef<readonly I[]>) => unknown,
+      build?: (reduce: ReduceBuilder) => void,
+    ): ValueRef<O>;
     output(name: string, value: ValueRef): PlanBuilder;
     outputSet(name: string, value: SetRef): PlanBuilder;
   }

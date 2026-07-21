@@ -203,6 +203,51 @@ func TestAuthorCompilesRealLazyMapFixtureToGoldens(t *testing.T) {
 	require.Equal(t, workflowv3map.ResourceClass, result.Plan.Maps[0].ResourceClass)
 }
 
+func TestAuthorCompilesBoundedReductionToGoldens(t *testing.T) {
+	const bundleDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	catalog, err := workflowv3.NewCatalog(
+		workflowv3.TaskSpec{
+			Identity: workflowv3.ImplementationIdentity{TaskKey: workflowv3.TaskKey{Kind: "count", Version: "v1"}, BundleDigest: bundleDigest, Entrypoint: "tasks.cjs#count", ABI: workflowv3.TaskABI},
+			Inputs:   map[string]string{"document": "document/v1"}, Outputs: map[string]string{"count": "word-count/v1"},
+		},
+		workflowv3.TaskSpec{
+			Identity: workflowv3.ImplementationIdentity{TaskKey: workflowv3.TaskKey{Kind: "merge", Version: "v1"}, BundleDigest: bundleDigest, Entrypoint: "tasks.cjs#merge", ABI: workflowv3.TaskABI},
+			Inputs:   map[string]string{"partition": workflowv3.ReductionPartitionSchemaV1}, Outputs: map[string]string{"count": "word-count/v1"}, ResourceClass: "cpu.reduce",
+		},
+	)
+	require.NoError(t, err)
+	source := `
+const workflow = require("workflow");
+const tasks = require("word-count-tasks");
+let reduceCallbacks = 0;
+module.exports = workflow.compile(workflow.define("word-count", plan => {
+  const documents = plan.inputSet("documents", {
+    itemSchema: "document/v1",
+    manifestSchema: "scraper-workflow-item-manifest/v1",
+  });
+  const counts = plan.map("count-documents", documents,
+    document => tasks.count({document}),
+    map => map.pageSize(16).maxItems(100).maxMaterializedAhead(32));
+  const total = plan.reduce("merge-counts", counts, partition => {
+    reduceCallbacks += 1;
+    return tasks.merge({partition});
+  }, reduce => reduce.fanIn(8).maxLevels(4));
+  plan.output("count", total);
+}));
+if (reduceCallbacks !== 1) throw new Error("reduce callback must run once");`
+	result, err := workflowmodule.Author(
+		context.Background(), source, catalog,
+		workflowmodule.DescriptorModule{Name: "word-count-tasks", Factories: map[string]workflowv3.TaskKey{
+			"count": {Kind: "count", Version: "v1"}, "merge": {Kind: "merge", Version: "v1"},
+		}},
+	)
+	require.NoError(t, err)
+	require.Len(t, result.IR.Reductions, 1)
+	require.Equal(t, workflowv3.ReducePolicy{FanIn: 8, MaxLevels: 4}, result.IR.Reductions[0].Policy)
+	assertGolden(t, "bounded-reduction.ir.json", result.IR)
+	assertGolden(t, "bounded-reduction.plan.json", result.Plan)
+}
+
 func TestAuthorRejectsInvalidLazyMapHandles(t *testing.T) {
 	catalog, err := workflowv3.NewCatalog(workflowv3.TaskSpec{
 		Identity: workflowv3.ImplementationIdentity{
@@ -264,7 +309,7 @@ func TestTypeScriptDeclaresMinimalSurface(t *testing.T) {
 	require.Equal(t, string(expectedDeclaration), declaration)
 	for _, expected := range []string{
 		"declare module \"workflow\"", "function define", "function compile",
-		"input<T = unknown>", "inputSet<T = unknown>", "map<I, O>(",
+		"input<T = unknown>", "inputSet<T = unknown>", "map<I, O>(", "reduce<I, O>(",
 		"outputSet(name: string", "task(", "output(name: string",
 	} {
 		require.Contains(t, declaration, expected)

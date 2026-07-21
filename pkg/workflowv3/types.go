@@ -3,11 +3,12 @@ package workflowv3
 import "time"
 
 const (
-	IRSchema             = "scraper-workflow-ir/v3"
-	PlanSchema           = "scraper-workflow-plan/v3"
-	TaskABI              = "scraper-js-task/v1"
-	ResourceCPUDefault   = "cpu.default"
-	ItemManifestSchemaV1 = "scraper-workflow-item-manifest/v1"
+	IRSchema                   = "scraper-workflow-ir/v3"
+	PlanSchema                 = "scraper-workflow-plan/v3"
+	TaskABI                    = "scraper-js-task/v1"
+	ResourceCPUDefault         = "cpu.default"
+	ItemManifestSchemaV1       = "scraper-workflow-item-manifest/v1"
+	ReductionPartitionSchemaV1 = "scraper-workflow-reduction-partition/v1"
 )
 
 type RunID string
@@ -48,12 +49,13 @@ type TaskSpec struct {
 }
 
 type ValueRef struct {
-	Source  string  `json:"source"`
-	Name    string  `json:"name,omitempty"`
-	NodeKey NodeKey `json:"nodeKey,omitempty"`
-	MapKey  string  `json:"mapKey,omitempty"`
-	Port    string  `json:"port,omitempty"`
-	Schema  string  `json:"schema"`
+	Source    string  `json:"source"`
+	Name      string  `json:"name,omitempty"`
+	NodeKey   NodeKey `json:"nodeKey,omitempty"`
+	MapKey    string  `json:"mapKey,omitempty"`
+	ReduceKey string  `json:"reduceKey,omitempty"`
+	Port      string  `json:"port,omitempty"`
+	Schema    string  `json:"schema"`
 }
 
 type SetRef struct {
@@ -101,6 +103,19 @@ type IRSetOutput struct {
 	Value SetRef `json:"value"`
 }
 
+type ReducePolicy struct {
+	FanIn     int `json:"fanIn"`
+	MaxLevels int `json:"maxLevels"`
+}
+
+type IRReduce struct {
+	Key           string              `json:"key"`
+	Source        SetRef              `json:"source"`
+	PartitionTask TaskKey             `json:"partitionTask"`
+	Bindings      map[string]ValueRef `json:"bindings"`
+	Policy        ReducePolicy        `json:"policy"`
+}
+
 type IROutput struct {
 	Name  string   `json:"name"`
 	Value ValueRef `json:"value"`
@@ -113,6 +128,7 @@ type WorkflowIR struct {
 	SetInputs  []IRSetInput  `json:"setInputs,omitempty"`
 	Nodes      []IRNode      `json:"nodes"`
 	Maps       []IRMap       `json:"maps,omitempty"`
+	Reductions []IRReduce    `json:"reductions,omitempty"`
 	Outputs    []IROutput    `json:"outputs"`
 	SetOutputs []IRSetOutput `json:"setOutputs,omitempty"`
 }
@@ -142,6 +158,19 @@ type PlanMap struct {
 	Policy         MapPolicy              `json:"policy"`
 }
 
+type PlanReduce struct {
+	Key            string                 `json:"key"`
+	Source         SetRef                 `json:"source"`
+	Implementation ImplementationIdentity `json:"implementation"`
+	Bindings       map[string]ValueRef    `json:"bindings"`
+	InputSchemas   map[string]string      `json:"inputSchemas"`
+	OutputSchemas  map[string]string      `json:"outputSchemas"`
+	Modules        []string               `json:"modules,omitempty"`
+	ResourceClass  string                 `json:"resourceClass"`
+	Retry          RetryPolicy            `json:"retry"`
+	Policy         ReducePolicy           `json:"policy"`
+}
+
 type WorkflowPlan struct {
 	Schema        string        `json:"schema"`
 	Name          string        `json:"name"`
@@ -151,6 +180,7 @@ type WorkflowPlan struct {
 	SetInputs     []IRSetInput  `json:"setInputs,omitempty"`
 	Nodes         []PlanNode    `json:"nodes"`
 	Maps          []PlanMap     `json:"maps,omitempty"`
+	Reductions    []PlanReduce  `json:"reductions,omitempty"`
 	Outputs       []IROutput    `json:"outputs"`
 	SetOutputs    []IRSetOutput `json:"setOutputs,omitempty"`
 	Digest        string        `json:"digest"`

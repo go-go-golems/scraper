@@ -10,6 +10,10 @@ declare module "workflow" {
     maxItems(value: number): MapBuilder;
     maxMaterializedAhead(value: number): MapBuilder;
   }
+  export interface ReduceBuilder {
+    fanIn(value: number): ReduceBuilder;
+    maxLevels(value: number): ReduceBuilder;
+  }
   export interface PlanBuilder {
     input<T = unknown>(
       name: string,
@@ -30,6 +34,12 @@ declare module "workflow" {
       task: (item: ValueRef<I>) => unknown,
       build?: (map: MapBuilder) => void,
     ): SetRef<O>;
+    reduce<I, O>(
+      name: string,
+      source: SetRef<I>,
+      task: (partition: ValueRef<readonly I[]>) => unknown,
+      build?: (reduce: ReduceBuilder) => void,
+    ): ValueRef<O>;
     output(name: string, value: ValueRef): PlanBuilder;
     outputSet(name: string, value: SetRef): PlanBuilder;
   }

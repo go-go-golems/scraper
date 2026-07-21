@@ -184,6 +184,49 @@ func TestCompileMapPinsTemplateAndSetIdentity(t *testing.T) {
 	require.Equal(t, MapPolicy{PageSize: 64, MaxItems: 2000, MaxMaterializedAhead: 128}, first.Maps[0].Policy)
 }
 
+func TestCompileReductionPinsBoundedHomogeneousTemplate(t *testing.T) {
+	catalog, err := NewCatalog(
+		TaskSpec{
+			Identity: ImplementationIdentity{TaskKey: TaskKey{Kind: "count", Version: "v1"}, BundleDigest: testBundleDigest, Entrypoint: "tasks.cjs#count", ABI: TaskABI},
+			Inputs:   map[string]string{"item": "document/v1"}, Outputs: map[string]string{"count": "word-count/v1"},
+		},
+		TaskSpec{
+			Identity: ImplementationIdentity{TaskKey: TaskKey{Kind: "merge", Version: "v1"}, BundleDigest: testBundleDigest, Entrypoint: "tasks.cjs#merge", ABI: TaskABI},
+			Inputs:   map[string]string{"partition": ReductionPartitionSchemaV1}, Outputs: map[string]string{"count": "word-count/v1"},
+			ResourceClass: "cpu.reduce",
+		},
+	)
+	require.NoError(t, err)
+	ir := WorkflowIR{
+		Schema: IRSchema, Name: "word-count", Inputs: []IRInput{}, Nodes: []IRNode{},
+		SetInputs: []IRSetInput{{Name: "documents", ItemSchema: "document/v1", ManifestSchema: ItemManifestSchemaV1}},
+		Maps: []IRMap{{
+			Key: "count-documents", Source: SetRef{Source: "set-input", Name: "documents", ItemSchema: "document/v1", ManifestSchema: ItemManifestSchemaV1},
+			ItemTask: TaskKey{Kind: "count", Version: "v1"},
+			Bindings: map[string]ValueRef{"item": {Source: "map-item", MapKey: "count-documents", Schema: "document/v1"}},
+			Policy:   MapPolicy{PageSize: 16, MaxItems: 100, MaxMaterializedAhead: 32},
+		}},
+		Reductions: []IRReduce{{
+			Key: "merge-counts", Source: SetRef{Source: "map-output", MapKey: "count-documents", ItemSchema: "word-count/v1", ManifestSchema: ItemManifestSchemaV1},
+			PartitionTask: TaskKey{Kind: "merge", Version: "v1"},
+			Bindings:      map[string]ValueRef{"partition": {Source: "reduction-partition", ReduceKey: "merge-counts", Schema: ReductionPartitionSchemaV1}},
+			Policy:        ReducePolicy{FanIn: 8, MaxLevels: 4},
+		}},
+		Outputs: []IROutput{{Name: "count", Value: ValueRef{Source: "reduction-output", ReduceKey: "merge-counts", Schema: "word-count/v1"}}},
+	}
+	plan, err := Compile(ir, catalog)
+	require.NoError(t, err)
+	require.Len(t, plan.Reductions, 1)
+	require.Equal(t, "cpu.reduce", plan.Reductions[0].ResourceClass)
+	require.Equal(t, ReducePolicy{FanIn: 8, MaxLevels: 4}, plan.Reductions[0].Policy)
+	require.Equal(t, "word-count/v1", plan.Outputs[0].Value.Schema)
+
+	invalid := ir
+	invalid.Reductions = append([]IRReduce(nil), ir.Reductions...)
+	invalid.Reductions[0].Policy.FanIn = 1
+	require.ErrorContains(t, ValidateIR(invalid, catalog), "invalid reduction policy")
+}
+
 func TestValidateIRRejectsInvalidMapContracts(t *testing.T) {
 	catalog, err := NewCatalog(TaskSpec{
 		Identity: ImplementationIdentity{
