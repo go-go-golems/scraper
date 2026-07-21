@@ -3505,3 +3505,97 @@ bounded reduction work begins.
 - Slice 6 code commits: `cfc8f6d`, `c898571`, `e88f95d`, `5ae1f14`,
   `0481f33`, `c055c1a`, `f05ba65`.
 - Existing Vite large-chunk advisory remains non-failing and unrelated.
+
+## Step 32: Freeze bounded reduction IR and authoring
+
+Slice 7 implementation started with one homogeneous bounded reduction contract.
+A reduction consumes a typed set, invokes its JavaScript authoring callback once
+with an opaque symbolic partition value, pins one exact reducer task, and
+publishes one typed root value. Fan-in and maximum levels are canonical policy.
+
+The first contract requires reducer output schema to equal source item schema.
+This makes every intermediate level type-stable and avoids hidden per-level task
+selection while the durable tree is introduced.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 25)
+
+**Assistant interpretation:** Start Slice 7 from canonical Go/JavaScript parity
+before adding reduction state or dynamic partition nodes.
+
+**Inferred user intent:** Make scale-in deterministic and bounded rather than
+encoding aggregation behavior in runtime callbacks.
+
+**Commit (code):** `e760069` — "workflowv3: freeze bounded reduction contracts"
+
+### What I did
+
+- Added reduction partition schema identity, `ReducePolicy`, `IRReduce`, and
+  exact `PlanReduce`.
+- Added `reduceKey` to symbolic values and reduction-output workflow refs.
+- Added compiler validation for key conflicts, source sets, fan-in/level policy,
+  exact task identity, one partition binding, one task output, homogeneous
+  output schema, and named root output.
+- Added safe `plan.reduce<I,O>` authoring, opaque partition handles, fluent
+  `fanIn`/`maxLevels`, and exact TypeScript declarations.
+- Added direct core validation plus exact authored IR/plan/DTS goldens and a
+  callback-once assertion.
+
+### Why
+
+- Partition identity and tree materialization need a stable normalized template
+  before tables or transactions are introduced.
+- Homogeneous intermediate values let one exact reducer implementation operate
+  at every level and keep root schema validation direct.
+
+### What worked
+
+- Core and authoring package tests pass.
+- Focused isolated lint reports `0 issues`.
+- `git diff --check` passes.
+- The authored reduction plan pins `cpu.reduce`, fan-in 8, and four maximum
+  levels with no retained JavaScript function.
+
+### What didn't work
+
+- N/A. The first normalized contract passed after formatting and golden review.
+
+### What I learned
+
+- Existing `IROutput` can represent a reduction root by adding an explicit
+  `reduction-output` source; a separate output collection is unnecessary.
+- A partition is a value ref, not a set ref: each dynamic reducer receives one
+  bounded immutable partition artifact.
+
+### What was tricky to build
+
+- Reduction output validation must resolve the reducer root separately from
+  static node outputs while preserving the existing output JSON shape.
+- A reduction key shares identity space with static nodes and maps even though
+  its dynamic partition nodes receive derived keys later.
+
+### What warrants a second pair of eyes
+
+- The initial homogeneous schema rule versus future explicitly typed
+  heterogeneous final reducers.
+- Default fan-in 16 and max-level 8 policy ownership before production profile
+  binding.
+
+### What should be done in the future
+
+- Define strict compact partition manifests and exact level/ordinal/member
+  identity.
+- Add additive reduction/partition tables and materialize level zero from a
+  published map manifest.
+
+### Code review instructions
+
+- Start with the bounded-reduction authoring test/goldens, then review compiler
+  validation and the new types.
+- Confirm the reducer callback executes once and only normalized bindings remain.
+
+### Technical details
+
+- Code commit: `e760069`.
+- Partition schema: `scraper-workflow-reduction-partition/v1`.
