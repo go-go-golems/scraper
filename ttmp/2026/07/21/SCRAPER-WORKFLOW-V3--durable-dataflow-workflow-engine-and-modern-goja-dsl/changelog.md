@@ -135,3 +135,11 @@ Completed the minimal workflow-v3 vertical slice: repository tests, race suites,
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md — Public implemented API durability and validation guide
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/gojamodules/workflow/testdata/workflow.d.ts — Exact TypeScript declaration golden
+
+## 2026-07-21
+
+Strengthened the minimal workflow DTS so input<T> preserves the caller's value type while runtime schema validation remains Go-authoritative; exact DTS and focused runtime/lint checks pass (commit 3136cd6)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/gojamodules/workflow/authoring.go — Generic typed input declaration
