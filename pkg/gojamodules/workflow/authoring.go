@@ -25,6 +25,7 @@ type AuthoringResult struct {
 type authoringState struct {
 	catalog     *workflowv3.Catalog
 	refs        map[*goja.Object]workflowv3.ValueRef
+	sets        map[*goja.Object]workflowv3.SetRef
 	tasks       map[*goja.Object]taskInvocation
 	jobs        map[*goja.Object]workflowv3.NodeKey
 	workflows   map[*goja.Object]workflowv3.WorkflowIR
@@ -51,6 +52,7 @@ func Author(ctx context.Context, source string, catalog *workflowv3.Catalog, mod
 	state := &authoringState{
 		catalog:   catalog,
 		refs:      map[*goja.Object]workflowv3.ValueRef{},
+		sets:      map[*goja.Object]workflowv3.SetRef{},
 		tasks:     map[*goja.Object]taskInvocation{},
 		jobs:      map[*goja.Object]workflowv3.NodeKey{},
 		workflows: map[*goja.Object]workflowv3.WorkflowIR{},
@@ -110,7 +112,10 @@ func (s *authoringState) workflowLoader(vm *goja.Runtime, moduleObject *goja.Obj
 		if s.activeBuild != nil {
 			panic(vm.NewTypeError("nested workflow.define is not allowed"))
 		}
-		builder := &planBuilder{state: s, ir: workflowv3.WorkflowIR{Schema: workflowv3.IRSchema, Name: name}}
+		builder := &planBuilder{state: s, ir: workflowv3.WorkflowIR{
+			Schema: workflowv3.IRSchema, Name: name,
+			Inputs: []workflowv3.IRInput{}, Nodes: []workflowv3.IRNode{}, Outputs: []workflowv3.IROutput{},
+		}}
 		s.activeBuild = builder
 		_, err := build(goja.Undefined(), builder.object(vm))
 		s.activeBuild = nil
@@ -217,6 +222,32 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 		b.ir.Inputs = append(b.ir.Inputs, workflowv3.IRInput{Name: name, Schema: schema})
 		return b.newRef(vm, workflowv3.ValueRef{Source: "input", Name: name, Schema: schema})
 	})
+	mustSet(vm, object, "inputSet", func(call goja.FunctionCall) goja.Value {
+		b.ensureOpen(vm)
+		name := strings.TrimSpace(call.Argument(0).String())
+		options := call.Argument(1).ToObject(vm)
+		itemSchema := strings.TrimSpace(options.Get("itemSchema").String())
+		manifestSchema := strings.TrimSpace(options.Get("manifestSchema").String())
+		if name == "" || itemSchema == "" || manifestSchema == "" {
+			panic(vm.NewTypeError("set input name, itemSchema, and manifestSchema are required"))
+		}
+		for _, input := range b.ir.Inputs {
+			if input.Name == name {
+				panic(vm.NewTypeError("input %s is already defined", name))
+			}
+		}
+		for _, input := range b.ir.SetInputs {
+			if input.Name == name {
+				panic(vm.NewTypeError("set input %s is already defined", name))
+			}
+		}
+		b.ir.SetInputs = append(b.ir.SetInputs, workflowv3.IRSetInput{
+			Name: name, ItemSchema: itemSchema, ManifestSchema: manifestSchema,
+		})
+		return b.newSet(vm, workflowv3.SetRef{
+			Source: "set-input", Name: name, ItemSchema: itemSchema, ManifestSchema: manifestSchema,
+		})
+	})
 	mustSet(vm, object, "task", func(call goja.FunctionCall) goja.Value {
 		b.ensureOpen(vm)
 		key := workflowv3.NodeKey(strings.TrimSpace(call.Argument(0).String()))
@@ -252,6 +283,73 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 		}
 		return job
 	})
+	mustSet(vm, object, "map", func(call goja.FunctionCall) goja.Value {
+		b.ensureOpen(vm)
+		key := strings.TrimSpace(call.Argument(0).String())
+		source, ok := b.state.sets[call.Argument(1).ToObject(vm)]
+		build, buildOK := goja.AssertFunction(call.Argument(2))
+		if key == "" || !ok || !buildOK {
+			panic(vm.NewTypeError("map requires a key, set, and item task callback"))
+		}
+		for _, node := range b.ir.Nodes {
+			if string(node.Key) == key {
+				panic(vm.NewTypeError("map key %s conflicts with a node", key))
+			}
+		}
+		for _, mapped := range b.ir.Maps {
+			if mapped.Key == key {
+				panic(vm.NewTypeError("map %s is already defined", key))
+			}
+		}
+		item := b.newRef(vm, workflowv3.ValueRef{
+			Source: "map-item", MapKey: key, Schema: source.ItemSchema,
+		})
+		value, err := build(goja.Undefined(), item)
+		if err != nil {
+			panic(err)
+		}
+		invocation, ok := b.state.tasks[value.ToObject(vm)]
+		if !ok {
+			panic(vm.NewTypeError("map item callback must return a task descriptor"))
+		}
+		policy := workflowv3.MapPolicy{
+			PageSize: 64, MaxItems: 10000, MaxMaterializedAhead: 128,
+		}
+		if configure, configureOK := goja.AssertFunction(call.Argument(3)); configureOK {
+			mapBuilder := vm.NewObject()
+			mustSet(vm, mapBuilder, "pageSize", func(option goja.FunctionCall) goja.Value {
+				policy.PageSize = int(option.Argument(0).ToInteger())
+				return mapBuilder
+			})
+			mustSet(vm, mapBuilder, "maxItems", func(option goja.FunctionCall) goja.Value {
+				policy.MaxItems = int(option.Argument(0).ToInteger())
+				return mapBuilder
+			})
+			mustSet(vm, mapBuilder, "maxMaterializedAhead", func(option goja.FunctionCall) goja.Value {
+				policy.MaxMaterializedAhead = int(option.Argument(0).ToInteger())
+				return mapBuilder
+			})
+			if _, err := configure(goja.Undefined(), mapBuilder); err != nil {
+				panic(err)
+			}
+		}
+		b.ir.Maps = append(b.ir.Maps, workflowv3.IRMap{
+			Key: key, Source: source, ItemTask: invocation.key,
+			Bindings: invocation.bindings, Policy: policy,
+		})
+		spec, found := b.state.catalog.Lookup(invocation.key)
+		if !found || len(spec.Outputs) != 1 {
+			panic(vm.NewTypeError("map item task must declare exactly one output"))
+		}
+		outputSchema := ""
+		for _, schema := range spec.Outputs {
+			outputSchema = schema
+		}
+		return b.newSet(vm, workflowv3.SetRef{
+			Source: "map-output", MapKey: key, ItemSchema: outputSchema,
+			ManifestSchema: workflowv3.ItemManifestSchemaV1,
+		})
+	})
 	mustSet(vm, object, "output", func(call goja.FunctionCall) goja.Value {
 		b.ensureOpen(vm)
 		name := strings.TrimSpace(call.Argument(0).String())
@@ -265,6 +363,26 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 			}
 		}
 		b.ir.Outputs = append(b.ir.Outputs, workflowv3.IROutput{Name: name, Value: ref})
+		return object
+	})
+	mustSet(vm, object, "outputSet", func(call goja.FunctionCall) goja.Value {
+		b.ensureOpen(vm)
+		name := strings.TrimSpace(call.Argument(0).String())
+		set, ok := b.state.sets[call.Argument(1).ToObject(vm)]
+		if name == "" || !ok {
+			panic(vm.NewTypeError("set output requires a name and workflow set"))
+		}
+		for _, output := range b.ir.Outputs {
+			if output.Name == name {
+				panic(vm.NewTypeError("output %s is already defined", name))
+			}
+		}
+		for _, output := range b.ir.SetOutputs {
+			if output.Name == name {
+				panic(vm.NewTypeError("set output %s is already defined", name))
+			}
+		}
+		b.ir.SetOutputs = append(b.ir.SetOutputs, workflowv3.IRSetOutput{Name: name, Value: set})
 		return object
 	})
 	return object
@@ -288,6 +406,12 @@ func (b *planBuilder) jobObject(vm *goja.Runtime, key workflowv3.NodeKey, taskKe
 func (b *planBuilder) newRef(vm *goja.Runtime, ref workflowv3.ValueRef) *goja.Object {
 	object := vm.NewObject()
 	b.state.refs[object] = ref
+	return object
+}
+
+func (b *planBuilder) newSet(vm *goja.Runtime, ref workflowv3.SetRef) *goja.Object {
+	object := vm.NewObject()
+	b.state.sets[object] = ref
 	return object
 }
 
@@ -338,21 +462,38 @@ func jsonValue(vm *goja.Runtime, value any) goja.Value {
 func TypeScript() string {
 	return `declare module "workflow" {
   export interface ValueRef<T = unknown> { readonly schema?: string }
+  export interface SetRef<T = unknown> { readonly itemSchema?: string }
   export interface JobRef<T = unknown> {
     output(name: string): ValueRef<T>;
   }
   export interface JobBuilder { after(job: JobRef): JobBuilder }
+  export interface MapBuilder {
+    pageSize(value: number): MapBuilder;
+    maxItems(value: number): MapBuilder;
+    maxMaterializedAhead(value: number): MapBuilder;
+  }
   export interface PlanBuilder {
     input<T = unknown>(
       name: string,
       options: {schema: string},
     ): ValueRef<T>;
+    inputSet<T = unknown>(
+      name: string,
+      options: {itemSchema: string; manifestSchema: string},
+    ): SetRef<T>;
     task(
       name: string,
       task: unknown,
       build?: (job: JobBuilder) => void,
     ): JobRef;
+    map<I, O>(
+      name: string,
+      source: SetRef<I>,
+      task: (item: ValueRef<I>) => unknown,
+      build?: (map: MapBuilder) => void,
+    ): SetRef<O>;
     output(name: string, value: ValueRef): PlanBuilder;
+    outputSet(name: string, value: SetRef): PlanBuilder;
   }
   export interface Workflow {}
   export interface WorkflowPlanV3 { readonly schema: "scraper-workflow-plan/v3" }

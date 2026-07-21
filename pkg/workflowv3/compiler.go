@@ -220,9 +220,10 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 		Name:          ir.Name,
 		IRDigest:      irDigest,
 		CatalogDigest: catalogDigest,
-		Inputs:        append([]IRInput(nil), ir.Inputs...),
+		Inputs:        append([]IRInput{}, ir.Inputs...),
 		SetInputs:     append([]IRSetInput(nil), ir.SetInputs...),
-		Outputs:       append([]IROutput(nil), ir.Outputs...),
+		Nodes:         make([]PlanNode, 0, len(ir.Nodes)),
+		Outputs:       append([]IROutput{}, ir.Outputs...),
 		SetOutputs:    append([]IRSetOutput(nil), ir.SetOutputs...),
 	}
 	for _, node := range ir.Nodes {

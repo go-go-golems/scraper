@@ -133,6 +133,98 @@ func TestAuthorCompilesHTTPAndDatabaseSlicesToGoldens(t *testing.T) {
 	}
 }
 
+func TestAuthorCompilesLazyMapToCanonicalPlan(t *testing.T) {
+	catalog, err := workflowv3.NewCatalog(workflowv3.TaskSpec{
+		Identity: workflowv3.ImplementationIdentity{
+			TaskKey:      workflowv3.TaskKey{Kind: "cookbook.map.normalize-customer", Version: "v1"},
+			BundleDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Entrypoint:   "tasks.cjs#normalizeCustomer", ABI: workflowv3.TaskABI,
+		},
+		Inputs:        map[string]string{"customer": "customer/v1"},
+		Outputs:       map[string]string{"normalized": "normalized-customer/v1"},
+		ResourceClass: "cpu.normalize", Retry: workflowv3.RetryPolicy{MaxAttempts: 2, BackoffMillis: 10},
+	})
+	require.NoError(t, err)
+	source := `
+const workflow = require("workflow");
+const tasks = require("customer-map-tasks");
+let callbacks = 0;
+const definition = workflow.define("mapped-customers", plan => {
+  const customers = plan.inputSet("customers", {
+    itemSchema: "customer/v1",
+    manifestSchema: "scraper-workflow-item-manifest/v1",
+  });
+  const normalized = plan.map(
+    "normalize",
+    customers,
+    customer => {
+      callbacks += 1;
+      return tasks.normalizeCustomer({customer});
+    },
+    map => map.pageSize(64).maxItems(2000).maxMaterializedAhead(128),
+  );
+  plan.outputSet("customers", normalized);
+});
+if (callbacks !== 1) throw new Error("map callback must execute exactly once");
+module.exports = workflow.compile(definition);`
+	result, err := workflowmodule.Author(
+		context.Background(), source, catalog,
+		workflowmodule.DescriptorModule{
+			Name: "customer-map-tasks",
+			Factories: map[string]workflowv3.TaskKey{
+				"normalizeCustomer": {Kind: "cookbook.map.normalize-customer", Version: "v1"},
+			},
+		},
+	)
+	require.NoError(t, err)
+	require.Len(t, result.IR.Maps, 1)
+	require.Equal(t, "map-item", result.IR.Maps[0].Bindings["customer"].Source)
+	require.Equal(t, workflowv3.MapPolicy{
+		PageSize: 64, MaxItems: 2000, MaxMaterializedAhead: 128,
+	}, result.IR.Maps[0].Policy)
+	assertGolden(t, "lazy-map.ir.json", result.IR)
+	assertGolden(t, "lazy-map.plan.json", result.Plan)
+}
+
+func TestAuthorRejectsInvalidLazyMapHandles(t *testing.T) {
+	catalog, err := workflowv3.NewCatalog(workflowv3.TaskSpec{
+		Identity: workflowv3.ImplementationIdentity{
+			TaskKey:      workflowv3.TaskKey{Kind: "map-item", Version: "v1"},
+			BundleDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Entrypoint:   "tasks.cjs#run", ABI: workflowv3.TaskABI,
+		},
+		Inputs: map[string]string{"item": "item/v1"}, Outputs: map[string]string{"output": "result/v1"},
+	})
+	require.NoError(t, err)
+	module := workflowmodule.DescriptorModule{
+		Name: "map-tasks", Factories: map[string]workflowv3.TaskKey{
+			"run": {Kind: "map-item", Version: "v1"},
+		},
+	}
+	_, err = workflowmodule.Author(context.Background(), `
+const workflow = require("workflow");
+const tasks = require("map-tasks");
+module.exports = workflow.compile(workflow.define("bad", p => {
+  const item = p.input("item", {schema: "item/v1"});
+  const mapped = p.map("mapped", item, value => tasks.run({item: value}));
+  p.outputSet("results", mapped);
+}));`, catalog, module)
+	require.ErrorContains(t, err, "map requires a key, set, and item task callback")
+
+	_, err = workflowmodule.Author(context.Background(), `
+const workflow = require("workflow");
+const tasks = require("map-tasks");
+module.exports = workflow.compile(workflow.define("bad", p => {
+  const items = p.inputSet("items", {
+    itemSchema: "item/v1",
+    manifestSchema: "scraper-workflow-item-manifest/v1",
+  });
+  const mapped = p.map("mapped", items, value => ({value}));
+  p.outputSet("results", mapped);
+}));`, catalog, module)
+	require.ErrorContains(t, err, "map item callback must return a task descriptor")
+}
+
 func TestAuthorRejectsUnknownTaskInput(t *testing.T) {
 	source := `
 const workflow = require("workflow");
@@ -155,7 +247,8 @@ func TestTypeScriptDeclaresMinimalSurface(t *testing.T) {
 	require.Equal(t, string(expectedDeclaration), declaration)
 	for _, expected := range []string{
 		"declare module \"workflow\"", "function define", "function compile",
-		"input<T = unknown>", "task(", "output(name: string",
+		"input<T = unknown>", "inputSet<T = unknown>", "map<I, O>(",
+		"outputSet(name: string", "task(", "output(name: string",
 	} {
 		require.Contains(t, declaration, expected)
 	}
