@@ -146,10 +146,12 @@ VALUES (?, ?, ?)`, runID, node.Key, dependency); err != nil {
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO v3_expansions(
   run_id, map_key, source_schema, source_digest, source_media_type,
-  source_size_bytes, source_locator, status, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+  source_size_bytes, source_locator, page_size, max_items,
+  max_materialized_ahead, status, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
 			runID, mapped.Key, sourceSchema, sourceDigest, sourceMediaType,
-			sourceSize, sourceLocator, stamp); err != nil {
+			sourceSize, sourceLocator, mapped.Policy.PageSize, mapped.Policy.MaxItems,
+			mapped.Policy.MaxMaterializedAhead, stamp); err != nil {
 			return fmt.Errorf("insert expansion %s: %w", mapped.Key, err)
 		}
 	}
@@ -421,7 +423,7 @@ WHERE run_id = ? AND status = 'running'
     SELECT 1 FROM v3_nodes WHERE run_id = ? AND status != 'succeeded'
   )
   AND NOT EXISTS (
-    SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'succeeded'
+    SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'published'
   )`, stamp, lease.RunID, lease.RunID, lease.RunID); err != nil {
 		return err
 	}
@@ -480,6 +482,17 @@ WHERE run_id = ? AND node_key = ? AND lease_token = ? AND status = 'running'`,
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `
+UPDATE v3_expansions SET status = 'failed', updated_at = ?
+WHERE run_id = ? AND status NOT IN ('published','failed','canceled')
+  AND EXISTS (
+    SELECT 1 FROM v3_map_items item
+    WHERE item.run_id = v3_expansions.run_id
+      AND item.map_key = v3_expansions.map_key
+      AND item.node_key = ?
+  )`, stamp, lease.RunID, lease.NodeKey); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
 UPDATE v3_runs SET status = 'failed', updated_at = ?
 WHERE run_id = ? AND status = 'running'`, stamp, lease.RunID); err != nil {
 			return err
@@ -519,6 +532,11 @@ WHERE run_id = ? AND status = 'running'`, stamp, runID); err != nil {
 UPDATE v3_nodes SET status = 'canceled', lease_token = NULL,
   lease_cancel_epoch = NULL, lease_expires_at = NULL
 WHERE run_id = ? AND status IN ('pending', 'running')`, runID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE v3_expansions SET status = 'canceled', updated_at = ?
+WHERE run_id = ? AND status != 'published'`, stamp, runID); err != nil {
 		return err
 	}
 	if err := insertEvent(ctx, tx, runID, "", "run.canceled", map[string]any{}, now); err != nil {
@@ -562,6 +580,24 @@ FROM v3_node_outputs WHERE run_id = ? AND node_key = ? AND port = ?`,
 		}
 		if err != nil {
 			return workflowv3.RunSnapshot{}, fmt.Errorf("resolve run output %s: %w", output.Name, err)
+		}
+		snapshot.Outputs[output.Name] = ref
+	}
+	for _, output := range plan.SetOutputs {
+		if output.Value.Source != "map-output" {
+			return workflowv3.RunSnapshot{}, fmt.Errorf("unsupported set output source %q", output.Value.Source)
+		}
+		row := s.db.QueryRowContext(ctx, `
+SELECT output_schema, output_digest, output_media_type, output_size_bytes,
+  output_locator
+FROM v3_expansions WHERE run_id = ? AND map_key = ? AND status = 'published'`,
+			runID, output.Value.MapKey)
+		ref, err := scanRef(row)
+		if err == sql.ErrNoRows && snapshot.Status != "succeeded" {
+			continue
+		}
+		if err != nil {
+			return workflowv3.RunSnapshot{}, fmt.Errorf("resolve run set output %s: %w", output.Name, err)
 		}
 		snapshot.Outputs[output.Name] = ref
 	}
