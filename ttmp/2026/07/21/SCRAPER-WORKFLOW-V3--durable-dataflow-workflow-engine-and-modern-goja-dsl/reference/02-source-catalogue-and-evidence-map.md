@@ -13,6 +13,8 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: abs:///home/manuel/code/wesen/go-go-golems/go-go-goja/modules
+      Note: Current fetch, database, filesystem, exec, crypto, path, YAML, and time module contracts used by the cookbook
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/01-fetch-research-sources.sh
       Note: Reproducibly preserves historical and xgoja reference material
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/02-inventory-current-scripting.py
@@ -21,6 +23,10 @@ RelatedFiles:
       Note: Executable target grammar and deterministic plan probe
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/05-js-task-bundle-registration-probe.mjs
       Note: Reproducible custom JavaScript task registration experiment
+    - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/06-format-cookbook-js.py
+      Note: Deterministic 80-column JavaScript fence formatting and enforcement
+    - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/07-check-cookbook-bundles.py
+      Note: Catalog handler and module import consistency validation
 ExternalSources:
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/scraper
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/go-go-goja
@@ -30,6 +36,7 @@ LastUpdated: 2026-07-21T21:00:00Z
 WhatFor: Trace workflow-engine and JavaScript DSL recommendations back to source code, executable probes, and historical architecture notes.
 WhenToUse: Read when reviewing the primary design, validating a claim, or resuming implementation after a gap.
 ---
+
 
 
 

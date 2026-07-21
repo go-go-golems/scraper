@@ -734,3 +734,140 @@ The self-contained cookbook was rendered and uploaded under an explicit v2 name.
 
 - Remote directory: `/ai/2026/07/21/SCRAPER-WORKFLOW-V3`.
 - Remote document: `SCRAPER WORKFLOW V3 JavaScript Cookbook V2.pdf`.
+
+## Step 9: Show readable trusted JavaScript task implementations
+
+The cookbook now shows the complete illustrative `execution/tasks.cjs` source
+for every companion bundle rather than stopping at catalog declarations. All
+JavaScript fences—not only the new implementations—are deterministically
+formatted to an 80-column ceiling so code remains readable in the reMarkable
+PDF layout.
+
+The implementations use current go-go-goja host modules where appropriate:
+HTTP clients, preconfigured databases, attempt-scoped filesystems, portable
+paths, hashing, YAML, monotonic timing, and allowlisted process execution.
+Catalog module profiles and implementation imports are checked for exact
+agreement.
+
+### Prompt Context
+
+**User prompt (verbatim):** "can you format the example bundle so they are 80 char wide, i can't actually see their implementation in JS. Also use some of the more \"advanced\" goja modules since we are now in \"safe code\" territory, for example to do HTTP requests or quiery the db or load from the fs."
+
+**Assistant interpretation:** Make all cookbook JavaScript readable at 80
+columns and include visible implementations for every task bundle, using
+trusted execution-phase go-go-goja modules for realistic I/O.
+
+**Inferred user intent:** See how domain task behavior is actually implemented,
+not just registered, and understand how trusted worker JavaScript performs
+HTTP, database, filesystem, tool, and structured-data operations.
+
+**Commit (code/docs):** 89d38be — "docs: show guarded JavaScript task implementations"
+
+### What I did
+
+- Added complete illustrative `execution/tasks.cjs` blocks for all fifteen
+  bundles and every catalog task.
+- Used current `fetch`, `database`, `fs`, `exec`, `crypto`, `path`, `yaml`, and
+  `time` APIs through worker-profile aliases.
+- Kept model and signer behavior behind dedicated host modules.
+- Added explicit trusted-code security boundaries for credentials, DSNs,
+  filesystems, process allowlists, and process/container isolation.
+- Added current go-go-goja module API provenance to the evidence catalogue.
+- Added `scripts/06-format-cookbook-js.py` to format and enforce an 80-column
+  JavaScript-fence ceiling.
+- Added `scripts/07-check-cookbook-bundles.py` to prove catalog tasks match
+  implementation handlers and catalog module profiles match implementation
+  imports.
+- Reformatted all fifty-two JavaScript fences.
+- Regenerated the syntax-check artifact.
+- Published the result non-destructively as cookbook V3 on reMarkable.
+
+### Why
+
+- Catalogs prove identity and registration but do not teach task-domain
+  implementation.
+- Wide code fences are clipped or unreadable in a portrait PDF.
+- Trusted lease-scoped worker code can use explicitly selected host modules;
+  pretending all domain behavior is a Go helper would hide the intended
+  JavaScript extensibility model.
+
+### What worked
+
+- The width checker reported `formatted=52 maxWidth=80 violations=0`.
+- All 52/52 JavaScript blocks passed syntax validation.
+- Bundle validation reported
+  `bundles=15 catalogsMatchHandlers=true modulesMatchImports=true`.
+- Frontmatter validation and docmgr doctor passed.
+- reMarkable upload and remote listing both showed
+  `SCRAPER WORKFLOW V3 JavaScript Cookbook V3`.
+
+### What didn't work
+
+- The first bulk catalog edit was rejected because
+  `namespace: "cookbook.linear"` appeared in both the detailed opening example
+  and appendix. The edit was retried with bundle-name context so each target
+  was unique.
+- A second edit was rejected because two identical `modules` lines were not
+  unique. The retry included adjacent task identity context.
+
+### What I learned
+
+- Bundle-level module profiles are the correct concise representation when one
+  CommonJS entrypoint file imports modules at top level: every exported handler
+  needs those imports available during module evaluation.
+- Current xgoja host providers support aliases, so examples can distinguish
+  `db:warehouse`, `db:restore-sandbox`, `fetch:partner`, and `fetch:probe`
+  without inventing different JavaScript APIs.
+- `database` calls are synchronous while `fetch` and async `fs` calls return
+  promises; the examples now reflect those actual contracts.
+
+### What was tricky to build
+
+- Each catalog had to enumerate exactly the module aliases imported by its
+  implementation. The new checker prevents either undeclared imports or stale
+  unused declarations.
+- Tool execution had to remain visibly safe: command names are finite and
+  profile-allowlisted, while worker process/container isolation constrains the
+  host filesystem and resources.
+- Dynamic SQL table identifiers cannot use placeholders, so the backup example
+  includes a strict identifier validator before interpolation.
+- The approval initializer had to remain a short JavaScript execution while
+  the engine owns long-lived lease-free waiting.
+
+### What warrants a second pair of eyes
+
+- Review whether module grants should remain bundle-level or be split into one
+  entrypoint module per least-privilege task before production implementation.
+- Review the proposed `ctx.outputs.createGate(...)` and lease-local resolved-ref
+  `path` representation before freezing the task ABI.
+- Inspect code-block readability on the physical reMarkable device.
+- Treat `exec:*` as trusted-code convenience, not security isolation; validate
+  the subprocess/container design before enabling third-party publishers.
+
+### What should be done in the future
+
+- Convert these illustrative sources into actual immutable fixture bundles.
+- Run them through xgoja-generated worker profiles with preconfigured aliases.
+- Add runtime integration tests for HTTP, database, filesystem, and allowlisted
+  command examples using local fake services and temporary stores.
+
+### Code review instructions
+
+- Start at `Companion task bundles for all examples` in the cookbook.
+- For each bundle, compare catalog task names to the following
+  `execution/tasks.cjs` handler names.
+- Run scripts 04, 06, and 07; expect 52/52 syntax, zero width violations, and
+  exact catalog/handler/module agreement.
+- Review the module contracts cited in the evidence catalogue against the
+  current go-go-goja source.
+- Open the V3 PDF and inspect long implementations such as partner sync,
+  database backup, release build, and deployment.
+
+### Technical details
+
+- Commit: `89d38be`.
+- JavaScript fences: 52.
+- Width ceiling: 80 characters.
+- Companion implementations: 15 bundles, all catalog tasks covered.
+- Remote document:
+  `/ai/2026/07/21/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 JavaScript Cookbook V3.pdf`.
