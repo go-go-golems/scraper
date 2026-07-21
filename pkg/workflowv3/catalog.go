@@ -2,9 +2,12 @@ package workflowv3
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
+
+var resourceClassPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.:-][a-z0-9]+)*$`)
 
 type Catalog struct {
 	tasks map[TaskKey]TaskSpec
@@ -13,6 +16,7 @@ type Catalog struct {
 func NewCatalog(specs ...TaskSpec) (*Catalog, error) {
 	catalog := &Catalog{tasks: make(map[TaskKey]TaskSpec, len(specs))}
 	for _, spec := range specs {
+		spec = normalizeTaskSpec(spec)
 		if err := validateTaskSpec(spec); err != nil {
 			return nil, err
 		}
@@ -81,6 +85,15 @@ func validateTaskSpec(spec TaskSpec) error {
 			return fmt.Errorf("task %s@%s has invalid output port", identity.Kind, identity.Version)
 		}
 	}
+	if !resourceClassPattern.MatchString(spec.ResourceClass) {
+		return fmt.Errorf("task %s@%s has invalid resource class %q", identity.Kind, identity.Version, spec.ResourceClass)
+	}
+	if spec.Retry.MaxAttempts < 1 {
+		return fmt.Errorf("task %s@%s retry max attempts must be positive", identity.Kind, identity.Version)
+	}
+	if spec.Retry.BackoffMillis < 0 || spec.Retry.BackoffMillis > 24*60*60*1000 {
+		return fmt.Errorf("task %s@%s retry backoff is invalid", identity.Kind, identity.Version)
+	}
 	seenModules := map[string]struct{}{}
 	for _, module := range spec.Modules {
 		if strings.TrimSpace(module) == "" {
@@ -94,8 +107,18 @@ func validateTaskSpec(spec TaskSpec) error {
 	return nil
 }
 
+func normalizeTaskSpec(spec TaskSpec) TaskSpec {
+	if strings.TrimSpace(spec.ResourceClass) == "" {
+		spec.ResourceClass = ResourceCPUDefault
+	}
+	if spec.Retry.MaxAttempts == 0 {
+		spec.Retry.MaxAttempts = 1
+	}
+	return spec
+}
+
 func cloneTaskSpec(spec TaskSpec) TaskSpec {
-	ret := spec
+	ret := normalizeTaskSpec(spec)
 	ret.Inputs = cloneStringMap(spec.Inputs)
 	ret.Outputs = cloneStringMap(spec.Outputs)
 	ret.Modules = append([]string(nil), spec.Modules...)

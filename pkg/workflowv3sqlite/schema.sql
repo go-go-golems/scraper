@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS v3_runs (
   plan_json BLOB NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'failed', 'canceled')),
   cancel_epoch INTEGER NOT NULL DEFAULT 0,
+  dispatch_count INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -36,12 +37,24 @@ CREATE TABLE IF NOT EXISTS v3_nodes (
   input_schemas_json BLOB NOT NULL,
   output_schemas_json BLOB NOT NULL,
   modules_json BLOB NOT NULL,
+  resource_class TEXT NOT NULL DEFAULT 'cpu.default',
+  max_attempts INTEGER NOT NULL DEFAULT 1,
+  retry_backoff_ms INTEGER NOT NULL DEFAULT 0,
+  ready_at TEXT,
   status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'canceled')),
   attempt_count INTEGER NOT NULL DEFAULT 0,
   lease_token TEXT,
   lease_cancel_epoch INTEGER,
   lease_expires_at TEXT,
   PRIMARY KEY (run_id, node_key),
+  FOREIGN KEY (run_id) REFERENCES v3_runs(run_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS v3_run_resource_dispatch (
+  run_id TEXT NOT NULL,
+  resource_class TEXT NOT NULL,
+  dispatch_count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (run_id, resource_class),
   FOREIGN KEY (run_id) REFERENCES v3_runs(run_id) ON DELETE CASCADE
 );
 
@@ -62,6 +75,7 @@ CREATE TABLE IF NOT EXISTS v3_attempts (
   lease_token TEXT NOT NULL,
   cancel_epoch INTEGER NOT NULL,
   registry_generation TEXT NOT NULL,
+  resource_class TEXT NOT NULL DEFAULT 'cpu.default',
   started_at TEXT NOT NULL,
   finished_at TEXT,
   failure_class TEXT,

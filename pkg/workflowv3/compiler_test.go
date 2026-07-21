@@ -85,6 +85,8 @@ func TestCompilePinsExactIdentityAndIsDeterministic(t *testing.T) {
 	require.Equal(t, testBundleDigest, first.Nodes[0].Implementation.BundleDigest)
 	require.Equal(t, "./execution/tasks.cjs#normalizeCustomers", first.Nodes[0].Implementation.Entrypoint)
 	require.Equal(t, TaskABI, first.Nodes[0].Implementation.ABI)
+	require.Equal(t, ResourceCPUDefault, first.Nodes[0].ResourceClass)
+	require.Equal(t, RetryPolicy{MaxAttempts: 1}, first.Nodes[0].Retry)
 }
 
 func TestValidateIRRejectsSchemaMismatch(t *testing.T) {
@@ -112,6 +114,24 @@ func TestCatalogRejectsUnsupportedABI(t *testing.T) {
 		Inputs: map[string]string{"input": "x/v1"}, Outputs: map[string]string{"output": "y/v1"},
 	})
 	require.ErrorContains(t, err, "not supported")
+}
+
+func TestCatalogRejectsInvalidResourceAndRetryPolicy(t *testing.T) {
+	base := TaskSpec{
+		Identity: ImplementationIdentity{
+			TaskKey: TaskKey{Kind: "x", Version: "v1"}, BundleDigest: testBundleDigest,
+			Entrypoint: "tasks.cjs#run", ABI: TaskABI,
+		},
+		Inputs: map[string]string{"input": "x/v1"}, Outputs: map[string]string{"output": "y/v1"},
+	}
+	invalidResource := base
+	invalidResource.ResourceClass = "NOT VALID"
+	_, err := NewCatalog(invalidResource)
+	require.ErrorContains(t, err, "invalid resource class")
+	invalidRetry := base
+	invalidRetry.Retry = RetryPolicy{MaxAttempts: -1}
+	_, err = NewCatalog(invalidRetry)
+	require.ErrorContains(t, err, "max attempts")
 }
 
 func TestStrictDecodeRejectsUnknownFields(t *testing.T) {

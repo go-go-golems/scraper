@@ -17,6 +17,13 @@ func sealedLinearRegistry(t *testing.T) *workflowv3.SealedRegistry {
 	return registry
 }
 
+func fsTaskModules(t *testing.T) *TaskModuleRegistry {
+	t.Helper()
+	modules, err := NewTaskModuleRegistry(FSInputModule())
+	require.NoError(t, err)
+	return modules
+}
+
 func taskByKind(t *testing.T, registry *workflowv3.SealedRegistry, kind string) workflowv3.RegisteredTask {
 	t.Helper()
 	catalog, err := registry.Catalog()
@@ -47,6 +54,7 @@ func TestRunTaskExecutesRealFileTransformInFreshRuntimes(t *testing.T) {
 		RunID: "run-1", NodeKey: "normalize", Attempt: 1,
 		Task:   taskByKind(t, registry, "cookbook.linear.normalize-customers"),
 		Inputs: map[string]workflowv3.ArtifactRef{"source": source}, Artifacts: artifacts,
+		Modules: fsTaskModules(t),
 	})
 	require.NoError(t, err)
 
@@ -54,7 +62,7 @@ func TestRunTaskExecutesRealFileTransformInFreshRuntimes(t *testing.T) {
 		RunID: "run-1", NodeKey: "validate", Attempt: 1,
 		Task:      taskByKind(t, registry, "cookbook.linear.validate-dataset"),
 		Inputs:    map[string]workflowv3.ArtifactRef{"dataset": normalized.Outputs["dataset"]},
-		Artifacts: artifacts,
+		Artifacts: artifacts, Modules: fsTaskModules(t),
 	})
 	require.NoError(t, err)
 	body, err := workflowv3.ReadArtifact(ctx, artifacts, validated.Outputs["validatedDataset"])
@@ -85,13 +93,14 @@ func TestRunTaskPreservesTypedFailure(t *testing.T) {
 		RunID: "run", NodeKey: "normalize", Attempt: 1,
 		Task:   taskByKind(t, registry, "cookbook.linear.normalize-customers"),
 		Inputs: map[string]workflowv3.ArtifactRef{"source": source}, Artifacts: artifacts,
+		Modules: fsTaskModules(t),
 	})
 	require.NoError(t, err)
 	_, err = RunTask(ctx, TaskRequest{
 		RunID: "run", NodeKey: "validate", Attempt: 1,
 		Task:      taskByKind(t, registry, "cookbook.linear.validate-dataset"),
 		Inputs:    map[string]workflowv3.ArtifactRef{"dataset": normalized.Outputs["dataset"]},
-		Artifacts: artifacts,
+		Artifacts: artifacts, Modules: fsTaskModules(t),
 	})
 	var failure *TaskFailureError
 	require.True(t, errors.As(err, &failure))
@@ -122,6 +131,7 @@ exports.validateDataset = task.implementation(async ctx => {
 	)
 	require.NoError(t, err)
 	builder := workflowv3.NewRegistryBuilder()
+	require.NoError(t, builder.AdvertiseModules("fs:input"))
 	require.NoError(t, builder.AddBundle(bundle))
 	registry, err := builder.Seal()
 	require.NoError(t, err)
@@ -138,6 +148,7 @@ exports.validateDataset = task.implementation(async ctx => {
 		RunID: "run", NodeKey: "normalize", Attempt: 1,
 		Task:   taskByKind(t, registry, "cookbook.linear.normalize-customers"),
 		Inputs: map[string]workflowv3.ArtifactRef{"source": ref}, Artifacts: artifacts,
+		Modules: fsTaskModules(t),
 	})
 	require.ErrorContains(t, err, "output dataset schema wrong/v1 does not match")
 }
@@ -156,6 +167,7 @@ func TestRunTaskRejectsUnsupportedModuleProfile(t *testing.T) {
 	)
 	require.NoError(t, err)
 	builder := workflowv3.NewRegistryBuilder()
+	require.NoError(t, builder.AdvertiseModules("db:ambient", "fs:input"))
 	require.NoError(t, builder.AddBundle(bundle))
 	registry, err := builder.Seal()
 	require.NoError(t, err)
@@ -168,10 +180,13 @@ func TestRunTaskRejectsUnsupportedModuleProfile(t *testing.T) {
 		[]byte("{\"id\":\"1\",\"email\":\"a@example.com\"}\n"),
 	)
 	require.NoError(t, err)
+	modules, modulesErr := NewTaskModuleRegistry(FSInputModule())
+	require.NoError(t, modulesErr)
 	_, err = RunTask(ctx, TaskRequest{
 		RunID: "run", NodeKey: "normalize", Attempt: 1,
 		Task:   taskByKind(t, registry, "cookbook.linear.normalize-customers"),
 		Inputs: map[string]workflowv3.ArtifactRef{"source": ref}, Artifacts: artifacts,
+		Modules: modules,
 	})
 	require.ErrorContains(t, err, `unsupported module "db:ambient"`)
 }
@@ -186,6 +201,7 @@ func TestRunTaskRejectsWrongInputSchema(t *testing.T) {
 		RunID: "run", NodeKey: "normalize", Attempt: 1,
 		Task:   taskByKind(t, sealedLinearRegistry(t), "cookbook.linear.normalize-customers"),
 		Inputs: map[string]workflowv3.ArtifactRef{"source": ref}, Artifacts: artifacts,
+		Modules: fsTaskModules(t),
 	})
 	require.ErrorContains(t, err, "does not match")
 }

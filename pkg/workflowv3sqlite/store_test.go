@@ -23,6 +23,9 @@ func storeFixture(t *testing.T, source string) (*workflowv3.SealedRegistry, work
 				Entrypoint: "tasks.cjs#normalize",
 				Inputs:     map[string]string{"source": "source/v1"},
 				Outputs:    map[string]string{"dataset": "dataset/v1"},
+				Retry: workflowv3.RetryPolicy{
+					MaxAttempts: 3, BackoffMillis: 1000,
+				},
 			},
 			{
 				TaskKey:    workflowv3.TaskKey{Kind: "linear.validate", Version: "v1"},
@@ -171,6 +174,49 @@ func TestStoreReclaimsExpiredLeaseAsNewAttempt(t *testing.T) {
 	require.Equal(t, "running", snapshot.Attempts[1].Status)
 }
 
+func TestStoreRetryBackoffSurvivesReopen(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := storeFixture(t, "first")
+	path := filepath.Join(t.TempDir(), "workflow.db")
+	store, err := Open(ctx, path)
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	require.NoError(t, store.CreateRun(ctx, "retry", plan, map[string]workflowv3.ArtifactRef{
+		"source": artifactRef("source/v1", "retry"),
+	}, now))
+	lease, err := store.LeaseNext(ctx, registry, now, time.Minute)
+	require.NoError(t, err)
+	require.NoError(t, store.Fail(ctx, *lease, workflowv3.Failure{
+		Class: "transport", Code: "TRANSIENT", Retryable: true,
+		Message: "redacted transient failure",
+	}, now.Add(time.Millisecond)))
+	require.NoError(t, store.Close())
+
+	reopened, err := Open(ctx, path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reopened.Close()) })
+	queue, err := reopened.QueueSnapshot(
+		ctx, registry, map[string]int{workflowv3.ResourceCPUDefault: 1},
+		now.Add(500*time.Millisecond),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, queue.BlockedByReason["retry-backoff"])
+	blocked, err := reopened.LeaseNext(
+		ctx, registry, now.Add(500*time.Millisecond), time.Minute,
+	)
+	require.NoError(t, err)
+	require.Nil(t, blocked)
+	retried, err := reopened.LeaseNext(
+		ctx, registry, now.Add(2*time.Second), time.Minute,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 2, retried.Attempt)
+	snapshot, err := reopened.Snapshot(ctx, "retry")
+	require.NoError(t, err)
+	require.Equal(t, "failed", snapshot.Attempts[0].Status)
+	require.True(t, snapshot.Attempts[0].Failure.Retryable)
+}
+
 func TestStoreConcurrentLeaseRaceHasSingleWinner(t *testing.T) {
 	ctx := context.Background()
 	registry, plan := storeFixture(t, "first")
@@ -211,6 +257,44 @@ func TestStoreConcurrentLeaseRaceHasSingleWinner(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, winners)
+}
+
+func TestStoreResourceCapacityAndFairnessAcrossRuns(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := storeFixture(t, "first")
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	now := time.Now().UTC()
+	for _, runID := range []workflowv3.RunID{"run-a", "run-b"} {
+		require.NoError(t, store.CreateRun(ctx, runID, plan, map[string]workflowv3.ArtifactRef{
+			"source": artifactRef("source/v1", string(runID)),
+		}, now))
+		now = now.Add(time.Millisecond)
+	}
+	capacities := map[string]int{workflowv3.ResourceCPUDefault: 1}
+	first, err := store.LeaseNextWithResources(ctx, registry, capacities, now, time.Minute)
+	require.NoError(t, err)
+	require.Equal(t, workflowv3.RunID("run-a"), first.RunID)
+
+	blocked, err := store.LeaseNextWithResources(ctx, registry, capacities, now, time.Minute)
+	require.NoError(t, err)
+	require.Nil(t, blocked)
+	queue, err := store.QueueSnapshot(ctx, registry, capacities, now)
+	require.NoError(t, err)
+	require.Equal(t, 1, queue.ActiveByResource[workflowv3.ResourceCPUDefault])
+	require.Equal(t, 2, queue.BlockedByReason["dependency"])
+	require.Equal(t, 1, queue.BlockedByReason["resource-capacity"])
+
+	require.NoError(t, store.Complete(ctx, *first, map[string]workflowv3.ArtifactRef{
+		"dataset": artifactRef("dataset/v1", "fair-a"),
+	}, now.Add(time.Second)))
+	second, err := store.LeaseNextWithResources(
+		ctx, registry, capacities, now.Add(2*time.Second), time.Minute,
+	)
+	require.NoError(t, err)
+	require.Equal(t, workflowv3.RunID("run-b"), second.RunID)
+	require.Equal(t, workflowv3.NodeKey("normalize"), second.NodeKey)
 }
 
 func TestStoreDoesNotLeaseImplementationFromDifferentBundle(t *testing.T) {

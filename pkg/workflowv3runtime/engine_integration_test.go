@@ -52,6 +52,7 @@ func TestEngineRunsAuthoredWorkflowAcrossRestartWithoutPersistingSource(t *testi
 	require.NoError(t, err)
 	engine := &Engine{
 		Store: store, Registry: registry, Artifacts: artifacts,
+		Modules:       fsTaskModules(t),
 		LeaseDuration: time.Minute, Now: func() time.Time { return now },
 	}
 	require.NoError(t, engine.Submit(ctx, "linear-real-1", authored.Plan, map[string]workflowv3.ArtifactRef{
@@ -70,6 +71,7 @@ func TestEngineRunsAuthoredWorkflowAcrossRestartWithoutPersistingSource(t *testi
 	require.NoError(t, err)
 	restarted := &Engine{
 		Store: reopenedStore, Registry: registry, Artifacts: artifacts,
+		Modules:       fsTaskModules(t),
 		LeaseDuration: time.Minute, Now: func() time.Time { return now.Add(time.Second) },
 	}
 	require.NoError(t, restarted.RunUntilIdle(ctx))
@@ -138,7 +140,10 @@ func TestEnginePersistsTypedTaskFailureWithoutTaskMessage(t *testing.T) {
 	store, err := workflowv3sqlite.Open(ctx, filepath.Join(t.TempDir(), "failure.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, store.Close()) })
-	engine := &Engine{Store: store, Registry: registry, Artifacts: artifacts}
+	engine := &Engine{
+		Store: store, Registry: registry, Artifacts: artifacts,
+		Modules: fsTaskModules(t),
+	}
 	require.NoError(t, engine.Submit(ctx, "duplicate", authored.Plan, map[string]workflowv3.ArtifactRef{
 		"source": source,
 	}))

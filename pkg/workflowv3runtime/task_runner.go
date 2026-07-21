@@ -13,7 +13,6 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/require"
-	fsmod "github.com/go-go-golems/go-go-goja/modules/fs"
 	gggengine "github.com/go-go-golems/go-go-goja/pkg/engine"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 )
@@ -25,6 +24,7 @@ type TaskRequest struct {
 	Task      workflowv3.RegisteredTask
 	Inputs    map[string]workflowv3.ArtifactRef
 	Artifacts workflowv3.ArtifactStore
+	Modules   *TaskModuleRegistry
 }
 
 type TaskResult struct {
@@ -49,8 +49,8 @@ type outputState struct {
 var safePort = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
 
 func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
-	if request.Task.Bundle == nil || request.Artifacts == nil {
-		return TaskResult{}, fmt.Errorf("task bundle and artifact store are required")
+	if request.Task.Bundle == nil || request.Artifacts == nil || request.Modules == nil {
+		return TaskResult{}, fmt.Errorf("task bundle, artifact store, and module registry are required")
 	}
 	if err := validateInputRefs(request.Task.Spec, request.Inputs); err != nil {
 		return TaskResult{}, err
@@ -72,22 +72,14 @@ func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
 			Loader: taskModuleLoader(state),
 		},
 	}
-	for _, module := range request.Task.Spec.Modules {
-		switch module {
-		case "fs:input":
-			inputFS := fsmod.New(
-				fsmod.WithName("fs:input"),
-				fsmod.WithBackend(fsmod.NewReadOnlyFSBackend(fsmod.FSMount{
-					FS: os.DirFS(workspace), Root: ".", Mount: "/",
-				})),
-			)
-			modules = append(modules, gggengine.NativeModuleRegistrar{
-				ModuleID: "workflowv3:fs-input", ModuleName: "fs:input",
-				Loader: inputFS.Loader,
-			})
-		default:
-			return TaskResult{}, fmt.Errorf("task requests unsupported module %q", module)
+	for _, alias := range request.Task.Spec.Modules {
+		module, err := request.Modules.build(alias, TaskModuleContext{
+			Request: request, Workspace: workspace,
+		})
+		if err != nil {
+			return TaskResult{}, err
 		}
+		modules = append(modules, module)
 	}
 	loader := bundleLoader(request.Task.Bundle)
 	factory, err := gggengine.NewRuntimeFactoryBuilder().
@@ -181,11 +173,18 @@ func taskModuleLoader(state *outputState) require.ModuleLoader {
 
 func taskContextObject(vm *goja.Runtime, request TaskRequest, inputs map[string]any, state *outputState) *goja.Object {
 	object := vm.NewObject()
+	operationKey, err := workflowv3.Digest(struct {
+		RunID   workflowv3.RunID   `json:"runId"`
+		NodeKey workflowv3.NodeKey `json:"nodeKey"`
+	}{RunID: request.RunID, NodeKey: request.NodeKey})
+	if err != nil {
+		panic(vm.NewGoError(err))
+	}
 	mustSet(vm, object, "input", func() map[string]any { return inputs })
 	mustSet(vm, object, "identity", func() map[string]any {
 		return map[string]any{
 			"runId": string(request.RunID), "nodeKey": string(request.NodeKey),
-			"attempt": request.Attempt,
+			"attempt": request.Attempt, "operationKey": operationKey,
 		}
 	})
 	mustSet(vm, object, "checkpoint", func() {
