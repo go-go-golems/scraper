@@ -1669,9 +1669,9 @@ Exit criteria: exact-profile TTC preflight proves compact persistence, malformed
 - remove v2 scheduler after all supported runs finish;
 - publish migration and operational recovery documentation.
 
-## Implemented vertical slices 1–5
+## Implemented vertical slices 1–6
 
-Slices 1–5 are now executable rather than design-only. The exact identity,
+Slices 1–6 are now executable rather than design-only. The exact identity,
 compact-reference, attempt, fencing, privacy, and reopen contracts from the
 minimal tranche remain unchanged while HTTP, resources, retries, and database
 side effects use the same durable path.
@@ -1688,9 +1688,10 @@ side effects use the same durable path.
 | Allowlisted HTTP | `pkg/testfixtures/workflowv3http`, exact `fetch:public`, typed retry, response limit, redirect denial, cancellation, redaction, and reopen tests |
 | Work-conserving dispatch | `pkg/workflowv3runtime/dispatcher.go`, transactional resource admission, per-resource fairness, blocked projections, and mixed-resource timeline test |
 | Database synchronization | `pkg/testfixtures/workflowv3database`, exact preconfigured `db:sync`, denied `configure()`, transaction marker, post-commit crash/restart, and failure-isolation tests |
+| Lazy maps | `pkg/testfixtures/workflowv3map`, typed set/map authoring, strict manifests, deterministic child keys, paged expansion, backpressure, ordinary dynamic attempts, ordered publication, and 1,807-item restart/privacy evidence |
 
-The implemented DSL surface is deliberately the smallest complete path:
-`define`, typed `input`, descriptor-backed `task`, `after`, `output`, `toIR`,
+The implemented DSL surface includes `define`, typed `input` and `inputSet`,
+descriptor-backed `task`, `map`, `after`, `output` and `outputSet`, `toIR`,
 `validate`, `digest`, and `compile`. Goja objects are opaque handles backed by
 Go-owned runtime maps; JavaScript properties do not constitute identity.
 
@@ -1700,8 +1701,10 @@ bytes enter the content-addressed artifact store before their refs are
 transactionally committed, so a crash may leave an unreferenced immutable
 object but cannot publish an invalid partial output.
 
-`Engine.RunOne` remains the deterministic one-action hook. Production-style v3
-execution now uses a long-lived completion-driven `Dispatcher`: it leases until
+`Engine.RunOne` remains the deterministic bounded-action hook. It can advance
+one map page or publication and one task lease. Production-style v3 execution
+uses a long-lived completion-driven `Dispatcher`: it interleaves bounded map
+control actions, leases until
 all compatible resource capacities are full and refills immediately after each
 completion. SQLite admission counts active nodes by resource class, while
 fairness counters are keyed by `(run_id, resource_class)`. No fixed worker batch
@@ -1736,7 +1739,7 @@ GOWORK=off go test -race \
 
 The public implementation overview is
 `pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md`. Its historical slug is
-stable, while its title and content now cover Slices 1–5.
+stable, while its title and content now cover Slices 1–6.
 
 ## Testing strategy
 

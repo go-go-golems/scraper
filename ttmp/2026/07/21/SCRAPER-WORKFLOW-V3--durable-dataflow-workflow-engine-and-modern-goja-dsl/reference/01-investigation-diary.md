@@ -3221,3 +3221,287 @@ not only a canonical DSL feature.
 
 - Code commit: `5ae1f14`.
 - First page test policy: page size 2, materialized-ahead 2.
+
+## Step 30: Execute, publish, and project a real 1,807-item lazy map
+
+Slice 6 now runs its full vertical path. The engine reads and verifies the
+submitted manifest artifact, interleaves bounded expansion with ordinary
+resource-aware leasing, executes each dynamic child in a fresh Goja runtime,
+and publishes one ordered immutable output manifest after every child succeeds.
+The run does not become successful until that manifest reference is committed.
+
+A real JavaScript fixture processes 1,807 separate source artifacts across a
+store close/reopen and eight-way work-conserving dispatch. It produces exactly
+1,807 attempts and an ordered output manifest, while source-private fields stay
+outside final outputs and workflow SQLite.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 25)
+
+**User follow-up (verbatim):** "is v3_expansions a table for backwards compatibility?"
+
+**Assistant interpretation:** Finish Slice 6 runtime/publication/projection and
+clarify the persistence purpose of the new expansion table.
+
+**Inferred user intent:** Confirm that new schema is principled first-class map
+state rather than a legacy shim, and obtain real scale/restart evidence.
+
+**Commit (code):** `0481f33` — "workflowv3: execute and publish real lazy maps"
+
+### What I did
+
+- Added engine discovery and artifact rehydration for expandable maps.
+- Interleaved one expansion action, one finalization action, and ordinary lease
+  dispatch under materialized-ahead backpressure.
+- Added canonical ordered output-manifest construction from successful child
+  refs and idempotent artifact publication.
+- Added `published` expansion state and prevented run success before map output
+  publication.
+- Exposed named set outputs through the existing run snapshot output map.
+- Added authoritative map progress/backlog fields and derived
+  `map-backpressure` reason to queue projections.
+- Added terminal child failure and run cancellation transitions for expansion
+  state.
+- Added a real authored JavaScript map bundle and exact fixture IR/plan goldens.
+- Executed 1,807 items across restart, verified all attempts/cardinality/order,
+  inspected a real normalized output, and scanned persistence/output manifests
+  for a private canary.
+- Added a smaller 257-item execution of the same state machine under Go race
+  instrumentation while retaining the full 1,807-item normal acceptance test.
+
+### Why
+
+- Expansion without root publication cannot provide a durable typed set to
+  downstream reductions.
+- A map cursor is not sufficient operational truth; materialized, terminal,
+  source backlog, execution backlog, and backpressure must be derived visibly.
+- `v3_expansions` is first-class Slice 6 state, not a backward-compatibility
+  table. Compatibility comes from additive creation and the absence of rows for
+  old static runs.
+
+### What worked
+
+- Full focused workflow-v3 packages pass.
+- Runtime/store race suites pass after using the 257-item race profile.
+- Focused isolated lint reports `0 issues`.
+- Both new JavaScript files pass `node --check`.
+- Logcopter generated-file check passes.
+- Normal scale evidence:
+
+  `source=7561185 persistedSQLite=5353472 ratio=0.7080`
+
+- Race profile evidence:
+
+  `source=1075178 persistedSQLite=872448 ratio=0.8114`
+
+- The normal run completed in approximately 27 seconds and produced exact first
+  and last keys `record-0000` and `record-1806`.
+
+### What didn't work
+
+- Running the 1,807 fresh-Goja attempts under the race detector exceeded first
+  a 45-second and then a 120-second test deadline. The exact failures were:
+
+  `Condition never satisfied`
+
+  at `map_integration_test.go:92`, after approximately 54 and 131 seconds.
+  This was instrumentation overhead, not a failed durable invariant: the same
+  full workload passed normally. I added build-tagged race-test constants so
+  race mode runs 257 real items through the identical restart/concurrency path,
+  while normal mode retains the hard 1,807-item acceptance cardinality. The
+  complete race package suite then passed in about eight seconds.
+
+### What I learned
+
+- Map publication needs an explicit `published` state after child success;
+  otherwise a run can report success before its named output reference exists.
+- Backpressure belongs in expansion state/projections, while dynamic task
+  resource capacity remains in the existing node dispatcher.
+- The output manifest can be rebuilt deterministically from item-index order and
+  child output refs after a crash; artifact publication is content-addressed
+  and idempotent.
+
+### What was tricky to build
+
+- Final child completion, expansion success, artifact creation, output-ref
+  publication, and run success span SQLite and the external artifact store.
+  Immutable artifact bytes are written first, then the compact reference and
+  run state commit transactionally; a crash may orphan bytes but cannot publish
+  partial state.
+- The dispatcher must avoid expanding all items before execution. It alternates
+  control actions and leasing, and the persisted ahead ceiling stops further
+  pages until terminal children release backlog.
+- Empty maps need a zero-item canonical output manifest and no task lease.
+
+### What warrants a second pair of eyes
+
+- Whether `RunSnapshot.Outputs` should remain a unified map for value and set
+  manifest refs or gain a typed set-output field in a later API revision.
+- Full-manifest decode cost before each page; current 1,807-item evidence is
+  acceptable, but indexed page artifacts may be needed at much larger scale.
+- Fairness among multiple simultaneously expandable maps; current candidate
+  ordering is deterministic but has not yet added persistent expansion dispatch
+  counts.
+
+### What should be done in the future
+
+- Add deterministic completion-order/concurrency comparison and explicit
+  expansion fairness if review requires it.
+- Update public help and Slice 6 implementation status after final focused/full
+  validation.
+- Begin Slice 7 bounded reduction only after the Slice 6 completion audit.
+
+### Code review instructions
+
+- Start at `map_integration_test.go`, then follow `Engine.ExpandOne`,
+  `ExpandNextPage`, normal node execution, `MapOutputManifest`, and
+  `PublishMapOutput`.
+- Inspect `workflowv3map/workflow.js` and `tasks.cjs` for the exact authored and
+  executed paths.
+- Reproduce normal and race-focused commands separately.
+
+### Technical details
+
+- Code commit: `0481f33`.
+- Normal item count: 1,807; race-instrumented item count: 257.
+- Resource capacity: `cpu.map=8`.
+- Page size: 64; max materialized ahead: 128.
+
+## Step 31: Complete the Slice 6 validation audit
+
+Slice 6 now has fresh repository-wide validation, concurrency-independent output
+evidence, additive migration coverage, public help, updated architecture status,
+and a requirement-by-requirement audit. The task is ready to close without
+deferring map behavior to Slice 7.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 25)
+
+**Assistant interpretation:** Harden the final scale test, prove output identity
+across concurrency levels, update public/design documentation, and close Slice 6
+only after full validation.
+
+**Inferred user intent:** Receive a reviewable finished scale-out slice before
+bounded reduction work begins.
+
+**Commits (code):**
+
+- `c055c1a` — "workflowv3: stabilize map scale and migration evidence"
+- `f05ba65` — "workflowv3: prove map digest across concurrency levels"
+
+### Outcome audit
+
+| Slice 6 requirement | Fresh evidence |
+|---|---|
+| Typed set/map authoring | `inputSet`, opaque item callback, `map`, fluent bounded policy, `outputSet`, exact DTS |
+| Go-owned canonical truth | Direct/core compiler tests plus authored real fixture IR/plan goldens |
+| Deterministic item identity | Strict ordered manifest and exact opaque child-key golden |
+| Bounded lazy expansion | Page size and materialized-ahead persisted; one atomic page per action |
+| Restart-safe cardinality/order | 1,807-item fixture closes after 70 actions, reopens, and finishes with exact first/last keys and 1,807 attempts |
+| Multi-connection safety | Two SQLite connections materialize four unique items in two pages |
+| Ordinary execution invariants | Dynamic children use exact registry, resource admission, append-only attempts, retries, cancellation epoch, schemas, and fenced completion |
+| Backpressure/projections | Map totals, cursors, materialized/terminal backlogs, and `map-backpressure` assertions |
+| Failure/cancellation isolation | Terminal child failure marks map/run failed; cancel stops candidates; global stale completion fencing remains covered |
+| Deterministic scale-in handoff | Ordered output manifest publication is idempotent; 65-item normal runs at capacities 1 and 8 have identical digest |
+| Empty map | Publishes a zero-item manifest with no lease |
+| Privacy/storage | 7,561,185 source bytes versus about 5.35 MB workflow SQLite; source-private canary absent from SQLite and output manifest |
+| Compatibility | Existing static goldens unchanged; old completed minimal database opens with all additive expansion tables/columns |
+
+### What I did
+
+- Added migration assertions for expansion, page, and item tables/columns.
+- Added a capacity-1 versus capacity-8 output-digest comparison.
+- Increased the full scale test deadline for loaded repository runs and added
+  timeout snapshot/queue diagnostics.
+- Updated public help to Slices 1–6 and documented `v3_expansions` as new
+  first-class map state rather than compatibility storage.
+- Updated the primary architecture, dedicated Slice 6 design, and all-slice
+  intern guide implementation status.
+- Ran local CI, full isolated lint, race suites, JS syntax, DTS compilation,
+  help rendering, generated checks, placeholder scan, docmgr validation, and
+  whitespace checks.
+
+### What worked
+
+- Final `make validate` passed, including all Go tests, web unit tests, code
+  generation, Go binary build, TypeScript build, and Vite production build.
+- `GOWORK=off .bin/golangci-lint run ./cmd/... ./pkg/...` reported `0 issues`.
+- Runtime/store race suites passed.
+- Both authoring/task DTS files compile with TypeScript.
+- Map JavaScript workflow/task files pass `node --check`.
+- Public help renders title `Workflow V3 Runtime Slices 1–6`.
+- Relevant design frontmatter and docmgr doctor pass.
+- Logcopter generated check, placeholder scan, and `git diff --check` pass.
+
+### What didn't work
+
+- The first repository `make validate` run reached the new 1,807-item test under
+  full-suite load and exceeded its original 45-second deadline after 47.40
+  seconds. The focused test had passed in about 27–35 seconds. I changed the
+  deadline to 120 seconds and added diagnostic snapshot/queue logging. The next
+  full validation passed; the runtime package completed in 76.515 seconds.
+- The first full lint command found only formatting in the newly edited
+  migration assertion map:
+
+  `pkg/workflowv3sqlite/store_test.go:153:1: File is not properly formatted (gofmt)`
+
+  I ran `gofmt`; lint then reported zero issues.
+- I incorrectly ran docmgr ticket-frontmatter validation against the public
+  Glazed help page. It reported missing `Ticket` and `DocType`, which are not
+  fields in the help-page schema. The help page was instead validated by the
+  successful rendered CLI smoke and repository build; docmgr validation was
+  rerun only on ticket documents and passed.
+- The first 65-item serial/concurrent digest test under race instrumentation
+  exceeded 20 seconds and then 90 seconds in its serial fresh-runtime branch.
+  Race mode now uses nine items for this ordering/concurrency comparison, while
+  normal mode retains 65 items across two pages; the separate race scale path
+  remains 257 items and normal hard scale remains 1,807. Both complete race
+  suites pass.
+
+### What I learned
+
+- Full-suite load is materially different from a focused 1,807-fresh-runtime
+  run, so a scale acceptance test needs a generous deadline plus state
+  diagnostics rather than a tight performance assertion.
+- Public help frontmatter and docmgr ticket frontmatter are separate schemas;
+  rendered help/build is the correct smoke for the former.
+- Deterministic output identity can be proven with a modest multi-page fixture,
+  while cardinality and race instrumentation remain separate tests with clear
+  purposes.
+
+### What was tricky to build
+
+- Completion-order independence needed evidence without doubling the expensive
+  1,807-item run. The dedicated 65-item two-page test compares capacity 1 and 8
+  artifacts, while the large run proves scale/restart/privacy.
+- Migration evidence must prove not only new columns on old v3 tables but that
+  entirely new Slice 6 tables appear when an old Slice 1–2 database opens.
+
+### What warrants a second pair of eyes
+
+- Map expansion fairness among many runs remains deterministic through run
+  creation/map key ordering but is not yet persisted with separate expansion
+  dispatch counters.
+- Full manifest decode per expansion page is acceptable at 1,807 items but
+  should be benchmarked before materially larger production sets.
+- Unified `RunSnapshot.Outputs` representation for value and set refs.
+
+### What should be done in the future
+
+- Begin Slice 7 from its dedicated design using the published map manifest as
+  the immutable reduction source.
+
+### Code review instructions
+
+- Review commits `cfc8f6d..f05ba65` in order with diary Steps 26–31.
+- Reproduce `make validate`, isolated lint/race, TypeScript, JavaScript, help,
+  generated, docmgr, and privacy commands.
+- Inspect the 1,807-item and concurrency-digest tests separately.
+
+### Technical details
+
+- Slice 6 code commits: `cfc8f6d`, `c898571`, `e88f95d`, `5ae1f14`,
+  `0481f33`, `c055c1a`, `f05ba65`.
+- Existing Vite large-chunk advisory remains non-failing and unrelated.
