@@ -4119,3 +4119,37 @@ and acceptance criteria. Public help and the all-slice intern guide now identify
 Slices 1–10 as implemented and Slices 11–12 as future contracts.
 
 **Slice 10 implementation commit:** `00f36b3` — `workflowv3: add durable approval gates`.
+
+## Step 38: Audit and publish Workflow V3 Slices 6 through 10
+
+### Requirement-to-evidence audit
+
+| Objective requirement | Fresh evidence and disposition |
+|---|---|
+| Dedicated implementation-ready design for every slice | `design-doc/03` through `07` are complete and cover contracts, state/schema/API, invariants, restart/failure/cancel/privacy/migration, tests, and acceptance; `design-doc/08` maps all slices and now marks 1–10 implemented. |
+| Slice 6 deterministic lazy scale-out | Focused verbose runtime/store suites passed: serial vs capacity-8 output digest equality, 1,807-item restart run, deterministic paging/identity, independent-connection expansion CAS, backpressure, empty map, cancellation, terminal failure, and manifest drift. Fresh privacy evidence: `source=7561185 persistedSQLite=5443584 ratio=0.7199`. |
+| Slice 7 bounded deterministic scale-in | Focused verbose suites passed: capacity-independent root digest, 257-item multi-level restart reduction, bounded partition levels, independent-connection idempotency, empty-set failure without lease, and malformed-run failure isolation. |
+| Slice 8 immutable rolling generations | Focused verbose suites passed: activation/coexistence/draining/removal, exact durable A/B attempt pinning, failed-candidate atomicity, construction quarantine without semantic retry debt, and concurrent acquire/activate safety. |
+| Slice 9 transactional budgets and projections | Focused verbose suites passed: real JavaScript usage, atomic final-unit admission, actual/conservative/zero settlement, lease-loss/retry recovery, cancellation race, fail/block/approval exhaustion, dynamic map/reduction propagation, CAS increase, reopen invariant refusal, parsed-time rates, and operational/event evidence. |
+| Slice 10 durable lease-free gates | Focused verbose core/authoring/runtime/store suites passed: exact goldens, invalid graph/policy/role checks, dedicated budget gates and cycle rejection, zero-attempt waiting, independent connection CAS/races, reopen/deadline, typed continuation, reject/expire/cancel, bounded projection, authority denial, budget increase, dispatcher restart, unrelated-run progress, and SQLite/WAL/event/projection privacy. |
+| Preserve Slices 1–5, v2, migrations, and existing behavior | Final `make validate` passed every Go package, existing scheduler/store/services, web unit tests, generation, tagged Go build, TypeScript build, and Vite build. Additive migration test passed; no compatibility shim or raw-v2 translation was added. |
+| Stale fencing, retries, failure isolation, privacy, concurrency | Full tests include stale lease/cancel epoch fencing and retries; slice-specific focused tests prove failure isolation and multi-connection CAS; runtime/store race suites passed; canary tests prove compact external payload handling. |
+| No shortcuts/TODO/dead duplicated path | New gate implementation/fixtures contain no TODO/FIXME/HACK/XXX markers. Gates reuse ordinary node admission/attempt execution and keep one independent bounded control-state path because they intentionally never execute. |
+| Full final validation | Final `make validate` passed with runtime in 46.735s; runtime/store `-race` passed (12.598s/1.544s before the test-only timeout adjustment); isolated lint returned `0 issues`; all fixture JS parsed; standalone DTS compiled; help, managed frontmatter, docmgr doctor, generated goldens, migration, privacy checks, and `git diff --check` passed. |
+
+The focused Slice 6 audit initially reproduced the concurrency fixture's
+20-second host-load deadline twice. This was not a lease or identity failure:
+the same workload had passed in 15–18 seconds and the 1,807-item workload still
+completed correctly. The deterministic 65-item serial/concurrent fixture now
+allows 40 seconds on non-race shared hosts (race remains 90 seconds), with an
+inline rationale. It then passed in 15.15 and 16.85 seconds. No production
+runtime behavior changed.
+
+### Publication
+
+`remarquee upload bundle` published the five dedicated Slice 6–10 designs, the
+all-slice intern guide, and the append-only diary as:
+
+`/ai/2026/07/22/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 SLICES 6 THROUGH 10 COMPLETION.pdf`
+
+The upload returned `OK: uploaded`; no post-upload listing was needed.

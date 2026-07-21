@@ -74,7 +74,9 @@ func runMapDigest(t *testing.T, capacity int) string {
 	t.Cleanup(cancel)
 	done := make(chan error, 1)
 	go func() { done <- dispatcher.Run(dispatchCtx) }()
-	timeout := 20 * time.Second
+	// The serial fixture executes 65 fresh Goja runtimes and can exceed 20
+	// seconds on shared validation hosts without violating any workflow lease.
+	timeout := 40 * time.Second
 	if raceDetectorEnabled {
 		timeout = 90 * time.Second
 	}

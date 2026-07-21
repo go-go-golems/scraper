@@ -323,3 +323,7 @@ Implemented Slice 10 durable approval gates with typed JavaScript authoring, lea
 - ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/07-slice-10-approval-gates-durable-lease-free-waiting.md — Implemented contract and evidence
 
 Implementation commit: `00f36b3` (`workflowv3: add durable approval gates`). Fresh `make validate`, full runtime/store race suites, isolated lint, JavaScript/TypeScript checks, help, migration/goldens, docmgr, privacy, and diff checks passed before commit.
+
+## 2026-07-22
+
+Completed the evidence-backed Slices 6–10 requirement audit, normalized Slice 6/7 document status, hardened the shared-host map fixture deadline without changing runtime behavior, passed final repository validation, and published the completion bundle to `/ai/2026/07/22/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 SLICES 6 THROUGH 10 COMPLETION.pdf`

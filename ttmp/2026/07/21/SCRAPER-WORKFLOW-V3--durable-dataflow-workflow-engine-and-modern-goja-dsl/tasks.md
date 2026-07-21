@@ -27,4 +27,4 @@
 - [x] Design and implement Slice 8 rolling immutable registry generations <!-- t:x8rm -->
 - [x] Design and implement Slice 9 transactional budgets and authoritative projections <!-- t:gkai -->
 - [x] Design and implement Slice 10 durable lease-free approval gates <!-- t:ks62 -->
-- [ ] Validate document audit and publish evidence for workflow v3 Slices 6 through 10 <!-- t:gjfd -->
+- [x] Validate document audit and publish evidence for workflow v3 Slices 6 through 10 <!-- t:gjfd -->
