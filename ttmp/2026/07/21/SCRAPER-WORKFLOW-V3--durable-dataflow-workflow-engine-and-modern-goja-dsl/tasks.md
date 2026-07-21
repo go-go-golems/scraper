@@ -11,8 +11,8 @@
 - [x] Align the JavaScript cookbook with reproducible custom task bundles and exact worker implementation binding <!-- t:wxdo -->
 - [x] Make every cookbook workflow self-contained with a companion task-bundle catalog and publish cookbook v2 <!-- t:k4q6 -->
 - [x] Show complete 80-column JavaScript task implementations for all cookbook bundles using guarded go-go-goja host modules <!-- t:al5f -->
-- [ ] Revise architecture and bundle design for trusted Goja modules and vertical-slice implementation order <!-- t:foy2 -->
-- [ ] Implement canonical workflow v3 IR, validation, digest, task catalog, and compiler <!-- t:0jm0 -->
+- [x] Revise architecture and bundle design for trusted Goja modules and vertical-slice implementation order <!-- t:foy2 -->
+- [x] Implement canonical workflow v3 IR, validation, digest, task catalog, and compiler <!-- t:0jm0 -->
 - [ ] Implement minimal require(workflow) Goja authoring DSL and descriptor-only task module <!-- t:as4j -->
 - [ ] Implement sealed exact-identity bundle registry and fresh lease-scoped JavaScript task runtime <!-- t:9pis -->
 - [ ] Implement compact SQLite v3 runs nodes attempts outputs leases and restart-safe executor <!-- t:eyzy -->
