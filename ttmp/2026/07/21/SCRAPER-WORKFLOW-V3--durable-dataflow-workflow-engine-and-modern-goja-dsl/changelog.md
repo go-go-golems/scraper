@@ -79,3 +79,13 @@ Made all fifteen cookbook workflows self-contained with one companion JavaScript
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md — Self-contained workflow and companion-bundle cookbook v2
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/output/workflow-cookbook-js-check.json — 36-block syntax validation
+
+## 2026-07-21
+
+Added visible 80-column JavaScript implementations for every cookbook bundle, using guarded go-go-goja HTTP/database/filesystem/process/crypto/YAML/path/time modules; validated 52/52 syntax blocks, all fifteen catalog/handler/module mappings, and published cookbook V3 (commit 89d38be)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md — Readable complete trusted JavaScript task implementations
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/06-format-cookbook-js.py — 80-column enforcement
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/07-check-cookbook-bundles.py — Bundle implementation consistency checks

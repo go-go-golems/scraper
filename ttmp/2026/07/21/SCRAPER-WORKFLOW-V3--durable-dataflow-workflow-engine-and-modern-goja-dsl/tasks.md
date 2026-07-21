@@ -10,4 +10,4 @@
 - [x] Design reproducible JavaScript task bundles and worker task registration <!-- t:8mdf -->
 - [x] Align the JavaScript cookbook with reproducible custom task bundles and exact worker implementation binding <!-- t:wxdo -->
 - [x] Make every cookbook workflow self-contained with a companion task-bundle catalog and publish cookbook v2 <!-- t:k4q6 -->
-- [ ] Show complete 80-column JavaScript task implementations for all cookbook bundles using guarded go-go-goja host modules <!-- t:al5f -->
+- [x] Show complete 80-column JavaScript task implementations for all cookbook bundles using guarded go-go-goja host modules <!-- t:al5f -->
