@@ -70,3 +70,12 @@ Aligned all fifteen cookbook workflows with namespaced descriptor-only custom ta
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md — Updated bundle-aware cookbook
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/output/workflow-cookbook-js-check.json — 20-block syntax validation result
+
+## 2026-07-21
+
+Made all fifteen cookbook workflows self-contained with one companion JavaScript task-bundle catalog each; verified 15/15 import/catalog coverage and 36/36 syntax blocks, then published JavaScript Cookbook V2 to reMarkable (commit e216481)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md — Self-contained workflow and companion-bundle cookbook v2
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/output/workflow-cookbook-js-check.json — 36-block syntax validation

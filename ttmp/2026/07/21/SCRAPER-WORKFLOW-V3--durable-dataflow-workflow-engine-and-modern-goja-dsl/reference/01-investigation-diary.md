@@ -594,3 +594,143 @@ A new cookbook chapter follows one custom data task from bundle source through c
 - Updated cookbook size: approximately 1,900 lines and 77 KiB.
 - Validation output: `scripts/output/workflow-cookbook-js-check.json`.
 - Updated reMarkable path: `/ai/2026/07/21/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 JavaScript Cookbook Task Bundles.pdf`.
+
+## Step 7: Add a companion task bundle to every cookbook workflow
+
+Every one of the fifteen workflows now imports one dedicated companion bundle and links directly to its complete catalog later in the cookbook. The companion catalogs enumerate all task factories used by their workflow, namespaced task identities, exact bundle-local entrypoints, input/output contracts, primary resources, requested modules/capabilities, side-effect/idempotency semantics, and generated authoring export groups.
+
+The cookbook also defines a shared build-only bundle helper, required source layout, and execution-entrypoint obligations. This keeps the document readable while making each workflow self-contained at the workflow/task contract level.
+
+### Prompt Context
+
+**User prompt (verbatim):** "for each example, can you also add the repsective task bundle, to have it kind of \"self-contained\""
+
+**Assistant interpretation:** Pair every cookbook workflow with a concrete custom JavaScript task-bundle catalog so readers can see both authored workflow intent and all domain task implementations/contracts it requires.
+
+**Inferred user intent:** Make each example independently understandable and prevent task factories from appearing as unexplained external magic.
+
+**Commit (code/docs):** e216481 — "docs: add companion bundles to cookbook examples"
+
+### What I did
+
+- Changed all fifteen workflow imports to unique `cookbook-*-tasks` companion bundles.
+- Added an explicit `Companion task bundle` subsection to every example.
+- Added a shared build-only catalog helper and required bundle source layout.
+- Added fifteen full companion `catalog.js` definitions.
+- Enumerated every task key, entrypoint export, output port, resource, module/capability request, and relevant side-effect/idempotency policy.
+- Updated the first bundle's detailed catalog, descriptor-only authoring module, worker lock, and binding chain to match its workflow exactly.
+- Updated the website atlas and fixture layout to use cookbook bundle namespaces.
+- Added consistency validation proving 15 workflows, 15 bundle headings, and exact import-to-bundle-name equality.
+- Regenerated JavaScript syntax-check output.
+
+### Why
+
+- A workflow script alone does not explain where domain task descriptors and worker implementations come from.
+- One companion bundle per example makes ownership, registration, execution, resource, and capability boundaries visible without assuming scraper built-ins.
+- Exact catalog entries provide a direct implementation checklist for future fixture bundles.
+
+### What worked
+
+- The consistency check reported `examples=15 companionBundles=15 importsMatch=true`.
+- All 36 JavaScript fences passed Node syntax validation.
+- The existing registration probe remained deterministic.
+- Frontmatter validation and docmgr doctor passed.
+- The cookbook grew to approximately 2,350 lines and 99 KiB while retaining a navigable two-level structure.
+
+### What didn't work
+
+- N/A. Catalog insertion, namespace alignment, consistency assertions, syntax checks, and document validation passed.
+
+### What I learned
+
+- Pairing examples one-to-one with bundles is clearer than sharing broad hypothetical modules across unrelated examples.
+- A build-only catalog helper can remove repetitive registration boilerplate without entering authoring or execution runtimes.
+- “Self-contained” should mean complete task identities/contracts and entrypoint obligations, while privileged capability implementations remain host-owned and policy-constrained.
+
+### What was tricky to build
+
+- Catalogs had to match every method called by each workflow, including grouped exports such as `{web, data}` and `{ops, notify}`.
+- Task bundle code must remain concise enough for a cookbook while still documenting exact resources, outputs, capabilities, and side effects.
+- The approval example required distinguishing a bundle-provided gate initializer from engine-owned lease-free waiting state.
+
+### What warrants a second pair of eyes
+
+- Verify every catalog output port against the corresponding workflow's `output(...)` references.
+- Review whether the shared helper's `authoring` metadata is the preferred source for generated module groups/factory names.
+- Review default semantics versus explicit side-effect declarations before converting catalogs into executable fixtures.
+
+### What should be done in the future
+
+- Materialize each appendix catalog as a real fixture directory with schemas and `execution/tasks.cjs`.
+- Generate descriptor modules and DTS from the catalogs.
+- Add runtime tests that build all fifteen bundles and compile their paired workflows.
+
+### Code review instructions
+
+- Confirm each example's `Companion task bundle` link resolves to the matching appendix heading.
+- Compare each workflow's `tasks.*` calls to its catalog factories.
+- Run the syntax checker and the 15-example/15-bundle import consistency assertion.
+
+### Technical details
+
+- Cookbook validation: 36/36 JavaScript blocks passed.
+- Companion coverage: 15/15 examples.
+- Bundle catalogs are proposed source contracts; host capabilities and task runtime modules remain future implementation.
+
+## Step 8: Publish the self-contained cookbook as v2
+
+The self-contained cookbook was rendered and uploaded under an explicit v2 name. The previous cookbook PDFs were not overwritten, preserving any existing annotations.
+
+### Prompt Context
+
+**User prompt (verbatim):** "upload as v2 to remarkable when done"
+
+**Assistant interpretation:** Publish the completed companion-bundle cookbook as a separately named v2 PDF on reMarkable.
+
+**Inferred user intent:** Make the revised self-contained edition easy to distinguish from previous cookbook uploads while preserving older copies.
+
+### What I did
+
+- Ran the required dry-run with the final cookbook.
+- Rendered a level-two table-of-contents bundle.
+- Uploaded `SCRAPER WORKFLOW V3 JavaScript Cookbook V2.pdf` to the existing ticket directory.
+
+### Why
+
+- A new versioned name avoids destructive `--force` replacement and protects annotations on earlier PDFs.
+
+### What worked
+
+- Dry-run identified the expected source, output name, and destination.
+- Upload returned:
+
+  `OK: uploaded SCRAPER WORKFLOW V3 JavaScript Cookbook V2.pdf -> /ai/2026/07/21/SCRAPER-WORKFLOW-V3`
+
+### What didn't work
+
+- N/A. Rendering and upload succeeded.
+
+### What I learned
+
+- The expanded 99 KiB cookbook, including thirty-six JavaScript blocks and fifteen bundle catalogs, renders successfully with the standard layout.
+
+### What was tricky to build
+
+- Versioning the remote document rather than overwriting was important because reMarkable annotations are attached to the existing document identity.
+
+### What warrants a second pair of eyes
+
+- Inspect the long bundle-catalog code blocks and table widths on-device when convenient.
+
+### What should be done in the future
+
+- Publish a v3 only after executable fixture bundles or accepted DSL contract changes materially alter the cookbook.
+
+### Code review instructions
+
+- Review `/ai/2026/07/21/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 JavaScript Cookbook V2.pdf`.
+
+### Technical details
+
+- Remote directory: `/ai/2026/07/21/SCRAPER-WORKFLOW-V3`.
+- Remote document: `SCRAPER WORKFLOW V3 JavaScript Cookbook V2.pdf`.
