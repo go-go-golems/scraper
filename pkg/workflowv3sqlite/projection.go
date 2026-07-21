@@ -12,7 +12,7 @@ import (
 // run/node/lease records. It does not persist a second mutable queue state.
 func (s *Store) QueueSnapshot(
 	ctx context.Context,
-	registry *workflowv3.SealedRegistry,
+	registry workflowv3.RegistryResolver,
 	capacities map[string]int,
 	now time.Time,
 ) (workflowv3.QueueSnapshot, error) {

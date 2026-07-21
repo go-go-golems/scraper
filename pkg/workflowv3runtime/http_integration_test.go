@@ -351,7 +351,7 @@ func newHTTPEngine(
 	return engine, dispatcher, artifacts
 }
 
-func authoredHTTPPlan(t *testing.T, registry *workflowv3.SealedRegistry) workflowmodule.AuthoringResult {
+func authoredHTTPPlan(t *testing.T, registry workflowv3.RegistryResolver) workflowmodule.AuthoringResult {
 	t.Helper()
 	catalog, err := registry.Catalog()
 	require.NoError(t, err)

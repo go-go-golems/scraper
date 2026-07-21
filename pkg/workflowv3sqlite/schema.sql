@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS v3_nodes (
   ready_at TEXT,
   status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'canceled')),
   attempt_count INTEGER NOT NULL DEFAULT 0,
+  failure_count INTEGER NOT NULL DEFAULT 0,
   lease_token TEXT,
   lease_cancel_epoch INTEGER,
   lease_expires_at TEXT,

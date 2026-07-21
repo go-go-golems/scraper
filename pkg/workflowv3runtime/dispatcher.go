@@ -136,7 +136,18 @@ func (d *Dispatcher) QueueSnapshot(ctx context.Context) (workflowv3.QueueSnapsho
 	if err := d.validate(); err != nil {
 		return workflowv3.QueueSnapshot{}, err
 	}
-	return d.Engine.Store.QueueSnapshot(ctx, d.Engine.Registry, d.Capacities, d.Engine.now())
+	snapshot, err := d.Engine.Store.QueueSnapshot(
+		ctx, d.Engine.Registry, d.Capacities, d.Engine.now(),
+	)
+	if err != nil {
+		return snapshot, err
+	}
+	if provider, ok := d.Engine.Registry.(interface {
+		Progress() []workflowv3.RegistryGenerationProgress
+	}); ok {
+		snapshot.RegistryGenerations = provider.Progress()
+	}
+	return snapshot, nil
 }
 
 func (d *Dispatcher) validate() error {

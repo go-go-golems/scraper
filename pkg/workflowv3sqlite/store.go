@@ -46,7 +46,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate workflow v3 SQLite: %w", err)
 	}
-	if err := migrateSliceThreeToFive(ctx, db); err != nil {
+	if err := migrateAdditiveColumns(ctx, db); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate workflow v3 slice 3-5 columns: %w", err)
 	}
@@ -191,7 +191,7 @@ INSERT INTO v3_reductions(
 	return tx.Commit()
 }
 
-func (s *Store) LeaseNext(ctx context.Context, registry *workflowv3.SealedRegistry, now time.Time, duration time.Duration) (*workflowv3.Lease, error) {
+func (s *Store) LeaseNext(ctx context.Context, registry workflowv3.RegistryResolver, now time.Time, duration time.Duration) (*workflowv3.Lease, error) {
 	return s.LeaseNextWithResources(ctx, registry, nil, now, duration)
 }
 
@@ -200,7 +200,7 @@ func (s *Store) LeaseNext(ctx context.Context, registry *workflowv3.SealedRegist
 // deterministic single-step execution; dispatchers always provide capacities.
 func (s *Store) LeaseNextWithResources(
 	ctx context.Context,
-	registry *workflowv3.SealedRegistry,
+	registry workflowv3.RegistryResolver,
 	capacities map[string]int,
 	now time.Time,
 	duration time.Duration,
@@ -228,7 +228,8 @@ SELECT
   n.run_id, n.node_key, n.task_kind, n.task_version, n.bundle_digest,
   n.entrypoint, n.task_abi, n.bindings_json, n.input_schemas_json,
   n.output_schemas_json, n.modules_json, n.resource_class,
-  n.max_attempts, n.retry_backoff_ms, n.attempt_count, r.cancel_epoch
+  n.max_attempts, n.retry_backoff_ms, n.attempt_count, n.failure_count,
+  r.cancel_epoch
 FROM v3_nodes n
 JOIN v3_runs r ON r.run_id = n.run_id
 LEFT JOIN v3_run_resource_dispatch fairness
@@ -253,6 +254,9 @@ ORDER BY COALESCE(fairness.dispatch_count, 0), r.created_at, n.ordinal, n.run_id
 	}
 	defer func() { _ = rows.Close() }()
 	var selected *leaseCandidate
+	var selectedTask workflowv3.RegisteredTask
+	var generation string
+	var releaseGeneration func()
 	for rows.Next() {
 		candidate, err := scanLeaseCandidate(rows)
 		if err != nil {
@@ -267,10 +271,20 @@ ORDER BY COALESCE(fairness.dispatch_count, 0), r.created_at, n.ordinal, n.run_id
 				continue
 			}
 		}
+		task, acquiredGeneration, release, err := registry.AcquireNode(candidate.node)
+		if err != nil {
+			continue
+		}
 		selected = &candidate
+		selectedTask = task
+		generation = acquiredGeneration
+		releaseGeneration = release
 		break
 	}
 	if err := rows.Err(); err != nil {
+		if releaseGeneration != nil {
+			releaseGeneration()
+		}
 		return nil, err
 	}
 	if selected == nil {
@@ -279,6 +293,12 @@ ORDER BY COALESCE(fairness.dispatch_count, 0), r.created_at, n.ordinal, n.run_id
 		}
 		return nil, nil
 	}
+	releaseOwned := true
+	defer func() {
+		if releaseOwned && releaseGeneration != nil {
+			releaseGeneration()
+		}
+	}()
 	attempt := selected.attemptCount + 1
 	token := uuid.NewString()
 	expires := now.Add(duration)
@@ -302,7 +322,7 @@ INSERT INTO v3_attempts(
   registry_generation, resource_class, started_at
 ) VALUES (?, ?, ?, 'running', ?, ?, ?, ?, ?)`,
 		selected.runID, selected.node.Key, attempt, token, selected.cancelEpoch,
-		registry.Generation(), selected.node.ResourceClass, formatTime(now),
+		generation, selected.node.ResourceClass, formatTime(now),
 	); err != nil {
 		return nil, fmt.Errorf("insert attempt: %w", err)
 	}
@@ -320,7 +340,7 @@ UPDATE v3_runs SET updated_at = ? WHERE run_id = ?`,
 		return nil, err
 	}
 	if err := insertEvent(ctx, tx, selected.runID, selected.node.Key, "attempt.started", map[string]any{
-		"attempt": attempt, "registryGeneration": registry.Generation(),
+		"attempt": attempt, "registryGeneration": generation,
 		"resourceClass": selected.node.ResourceClass,
 	}, now); err != nil {
 		return nil, err
@@ -328,10 +348,13 @@ UPDATE v3_runs SET updated_at = ? WHERE run_id = ?`,
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	releaseOwned = false
 	return &workflowv3.Lease{
 		RunID: selected.runID, NodeKey: selected.node.Key, Attempt: attempt,
-		Token: token, CancelEpoch: selected.cancelEpoch, ExpiresAt: expires,
-		PlanNode: selected.node, RegistryGeneration: registry.Generation(),
+		FailureCount: selected.failureCount,
+		Token:        token, CancelEpoch: selected.cancelEpoch, ExpiresAt: expires,
+		PlanNode: selected.node, RegisteredTask: selectedTask,
+		RegistryGeneration: generation, ReleaseGeneration: releaseGeneration,
 	}, nil
 }
 
@@ -500,14 +523,15 @@ WHERE run_id = ? AND node_key = ? AND attempt_no = ? AND status = 'running'`,
 		lease.RunID, lease.NodeKey, lease.Attempt); err != nil {
 		return err
 	}
-	retry := failure.Retryable && lease.Attempt < lease.PlanNode.Retry.MaxAttempts
+	failureCount := lease.FailureCount + 1
+	retry := failure.Retryable && failureCount < lease.PlanNode.Retry.MaxAttempts
 	if retry {
 		readyAt := now.Add(time.Duration(lease.PlanNode.Retry.BackoffMillis) * time.Millisecond)
 		if _, err := tx.ExecContext(ctx, `
-UPDATE v3_nodes SET status = 'pending', lease_token = NULL,
+UPDATE v3_nodes SET status = 'pending', failure_count = ?, lease_token = NULL,
   lease_cancel_epoch = NULL, lease_expires_at = NULL, ready_at = ?
 WHERE run_id = ? AND node_key = ? AND lease_token = ? AND status = 'running'`,
-			formatTime(readyAt), lease.RunID, lease.NodeKey, lease.Token); err != nil {
+			failureCount, formatTime(readyAt), lease.RunID, lease.NodeKey, lease.Token); err != nil {
 			return err
 		}
 		if err := insertEvent(ctx, tx, lease.RunID, lease.NodeKey, "node.retry_scheduled", map[string]any{
@@ -518,10 +542,10 @@ WHERE run_id = ? AND node_key = ? AND lease_token = ? AND status = 'running'`,
 		}
 	} else {
 		if _, err := tx.ExecContext(ctx, `
-UPDATE v3_nodes SET status = 'failed', lease_token = NULL,
+UPDATE v3_nodes SET status = 'failed', failure_count = ?, lease_token = NULL,
   lease_cancel_epoch = NULL, lease_expires_at = NULL
 WHERE run_id = ? AND node_key = ? AND lease_token = ? AND status = 'running'`,
-			lease.RunID, lease.NodeKey, lease.Token); err != nil {
+			failureCount, lease.RunID, lease.NodeKey, lease.Token); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `
@@ -563,6 +587,48 @@ WHERE run_id = ? AND status = 'running'`, stamp, lease.RunID); err != nil {
 		}, now); err != nil {
 			return err
 		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) InfrastructureFail(
+	ctx context.Context,
+	lease workflowv3.Lease,
+	failure workflowv3.Failure,
+	now time.Time,
+) error {
+	if err := workflowv3.ValidateFailure(failure); err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := checkFence(ctx, tx, lease); err != nil {
+		return err
+	}
+	stamp := formatTime(now)
+	if _, err := tx.ExecContext(ctx, `
+UPDATE v3_attempts
+SET status = 'failed', finished_at = ?, failure_class = ?, failure_code = ?,
+  failure_retryable = 1, failure_message = ?
+WHERE run_id = ? AND node_key = ? AND attempt_no = ? AND status = 'running'`,
+		stamp, failure.Class, failure.Code, failure.Message,
+		lease.RunID, lease.NodeKey, lease.Attempt); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE v3_nodes SET status = 'pending', lease_token = NULL,
+  lease_cancel_epoch = NULL, lease_expires_at = NULL, ready_at = NULL
+WHERE run_id = ? AND node_key = ? AND lease_token = ? AND status = 'running'`,
+		lease.RunID, lease.NodeKey, lease.Token); err != nil {
+		return err
+	}
+	if err := insertEvent(ctx, tx, lease.RunID, lease.NodeKey, "node.infrastructure_failure", map[string]any{
+		"attempt": lease.Attempt, "class": failure.Class, "code": failure.Code,
+	}, now); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
@@ -704,6 +770,7 @@ type leaseCandidate struct {
 	runID        workflowv3.RunID
 	node         workflowv3.PlanNode
 	attemptCount int
+	failureCount int
 	cancelEpoch  int64
 }
 
@@ -740,7 +807,7 @@ func scanLeaseCandidate(rows rowScanner) (leaseCandidate, error) {
 		&entrypoint, &abi, &bindings, &inputSchemas, &outputSchemas, &modules,
 		&candidate.node.ResourceClass, &candidate.node.Retry.MaxAttempts,
 		&candidate.node.Retry.BackoffMillis, &candidate.attemptCount,
-		&candidate.cancelEpoch,
+		&candidate.failureCount, &candidate.cancelEpoch,
 	); err != nil {
 		return candidate, err
 	}
@@ -932,7 +999,7 @@ func scanAttempt(row rowScanner, runID workflowv3.RunID) (workflowv3.Attempt, er
 	return attempt, nil
 }
 
-func migrateSliceThreeToFive(ctx context.Context, db *sql.DB) error {
+func migrateAdditiveColumns(ctx context.Context, db *sql.DB) error {
 	migrations := []struct {
 		table, column, definition string
 	}{
@@ -941,6 +1008,7 @@ func migrateSliceThreeToFive(ctx context.Context, db *sql.DB) error {
 		{"v3_nodes", "max_attempts", "INTEGER NOT NULL DEFAULT 1"},
 		{"v3_nodes", "retry_backoff_ms", "INTEGER NOT NULL DEFAULT 0"},
 		{"v3_nodes", "ready_at", "TEXT"},
+		{"v3_nodes", "failure_count", "INTEGER NOT NULL DEFAULT 0"},
 		{"v3_attempts", "resource_class", "TEXT NOT NULL DEFAULT 'cpu.default'"},
 	}
 	for _, migration := range migrations {
