@@ -1429,3 +1429,148 @@ proving the foundational privacy and reproducibility invariants now.
 - Real input rows: 12,000.
 - Runtime modules exposed per attempt: `workflow/task`, `fs:input`.
 - Completed ticket tasks: `9pis`, `eyzy`, `8cs8`.
+
+## Step 15: Harden typed failures, module admission, and lease races
+
+The first vertical slice now preserves stable typed JavaScript task failures
+through asynchronous Promise rejection and stores only a bounded host-generated
+message. Task runtimes expose exactly the module aliases declared by the pinned
+task spec; a linked provider or another bundle's privileges do not make an
+ambient module available.
+
+Concurrent SQLite lease contenders now have an explicit single-winner test,
+and store/runtime suites pass Go race detection. Bundle internals are private
+and returned manifests/files are cloned so registry generations cannot be
+mutated after sealing.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 10)
+
+**Assistant interpretation:** Close correctness and trust-boundary gaps exposed
+by the first end-to-end implementation before repository-wide validation.
+
+**Inferred user intent:** Ensure the minimal working slice already embodies the
+final typed-failure, exact-capability, immutability, and concurrency rules.
+
+**Commit (code):** f25f558 — "workflowv3: harden failure and lease boundaries"
+
+### What I did
+
+- Added a stable failure-class vocabulary and uppercase code validation.
+- Changed `task.failure(...)` to create a marked JavaScript failure object.
+- Added task-specific Promise waiting that recovers typed failures before Goja
+  exports away their identity.
+- Persisted task class/code/retryability with a bounded host-generated message,
+  never the arbitrary JavaScript message.
+- Added durable typed-failure integration coverage.
+- Added wrong-output-schema and unsupported-module-profile tests.
+- Changed task runtime construction to register only declared module aliases.
+- Made bundle manifest/files private and exposed defensive clones.
+- Added an eight-contender SQLite lease test proving one winner.
+- Ran store/runtime tests under `-race`.
+- Added explicit source/persistence byte ratio logging to the privacy test.
+
+### Why
+
+- Async JavaScript exceptions cross both Goja and Promise boundaries; losing
+  class/code there would force brittle string matching.
+- Bundle catalog module lists are security inputs and must control actual
+  runtime composition.
+- A sealed registry is not immutable if callers can mutate public manifest
+  slices or file maps through retained references.
+- Lease correctness must survive concurrent transactions, not only sequential
+  tests.
+
+### What worked
+
+- Focused core/runtime/store tests passed after the fixes.
+- `GOWORK=off go test -race ./pkg/workflowv3sqlite ./pkg/workflowv3runtime -count=1`
+  passed.
+- Typed duplicate-ID failure persists as class `validation`, code
+  `CUSTOMER_DUPLICATE_ID`, retryable `false`, with host message
+  `task reported CUSTOMER_DUPLICATE_ID`.
+- A runtime requesting undeclared `db:ambient` is rejected before execution.
+- Eight lease contenders produce exactly one non-nil lease.
+
+### What didn't work
+
+- Initial typed-failure tests showed that async rejections lost the Go-backed
+  failure object:
+
+  `expected: "validation"`
+
+  `actual  : "internal"`
+
+  and:
+
+  `Error: Should be true`
+
+  The generic promise waiter exported the rejection before classification. I
+  replaced it in the task runtime with a waiter that inspects the rejected
+  Goja value on the runtime owner thread.
+
+- The initial wrong-output test returned:
+
+  `await task: promise rejected: map[]`
+
+  The generic waiter also erased useful `TypeError` text. The task-specific
+  waiter now retains rejected-value string diagnostics while typed failures use
+  their marked object.
+
+- The first custom waiter then panicked on a rejected object without the marker:
+
+  `runtimeowner workflowv3.task.promise: runtime call panicked: runtime error: invalid memory address or nil pointer dereference`
+
+  `object.Get("__workflowTaskFailure")` can return nil. I added an explicit nil
+  guard before `ToBoolean()` and reran both focused and race suites.
+
+### What I learned
+
+- Go-backed object identity is not reliable after an async JavaScript throw;
+  an explicit private marker on a plain rejection object survives Promise state
+  transitions predictably.
+- Promise rejection inspection must happen on the owned runtime thread, just
+  like all other Goja value access.
+- Exact module policy needs enforcement both in the compiled task spec and in
+  runtime factory composition.
+
+### What was tricky to build
+
+- The task-specific waiter must distinguish pending, fulfilled, generic
+  rejected, and typed rejected states while honoring context cancellation and
+  never touching Goja values outside `runtime.Owner.Call`.
+- Durable messages must help operators without allowing arbitrary task/source
+  text into SQLite; class and code carry stable meaning while the stored message
+  is generated by Go.
+- Defensive bundle immutability required changing test helpers that previously
+  read public manifest fields.
+
+### What warrants a second pair of eyes
+
+- Review whether the failure class vocabulary is complete enough for the next
+  HTTP slice without being overly broad.
+- Review the five-millisecond Promise polling strategy inherited from the
+  existing runtime before high-throughput execution.
+- Stress multi-process rather than only multi-goroutine SQLite lease races in a
+  later dispatcher slice.
+
+### What should be done in the future
+
+- Run repository-wide tests, lint, build, generated checks, and JavaScript
+  syntax checks.
+- Document the implemented package/API status in the design and public docs.
+- Perform the explicit completion audit against every active-goal requirement.
+
+### Code review instructions
+
+- Review `taskFailureFromValue`, `waitForTaskPromise`, and Engine failure
+  persistence together.
+- Review runtime module construction against each task's `Modules` field.
+- Run focused tests and the race command above.
+
+### Technical details
+
+- Code commit: `f25f558`.
+- Supported first-slice task module profile: `fs:input`.
+- Concurrent lease contenders tested: 8.
