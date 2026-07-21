@@ -1,5 +1,5 @@
 {
-  "blockCount": 20,
+  "blockCount": 36,
   "checks": [
     {
       "error": null,
@@ -11,119 +11,215 @@
       "error": null,
       "index": 2,
       "ok": true,
-      "startLine": 307
+      "startLine": 310
     },
     {
       "error": null,
       "index": 3,
       "ok": true,
-      "startLine": 340
+      "startLine": 361
     },
     {
       "error": null,
       "index": 4,
       "ok": true,
-      "startLine": 373
+      "startLine": 394
     },
     {
       "error": null,
       "index": 5,
       "ok": true,
-      "startLine": 455
+      "startLine": 488
     },
     {
       "error": null,
       "index": 6,
       "ok": true,
-      "startLine": 526
+      "startLine": 563
     },
     {
       "error": null,
       "index": 7,
       "ok": true,
-      "startLine": 624
+      "startLine": 664
     },
     {
       "error": null,
       "index": 8,
       "ok": true,
-      "startLine": 691
+      "startLine": 734
     },
     {
       "error": null,
       "index": 9,
       "ok": true,
-      "startLine": 769
+      "startLine": 816
     },
     {
       "error": null,
       "index": 10,
       "ok": true,
-      "startLine": 842
+      "startLine": 892
     },
     {
       "error": null,
       "index": 11,
       "ok": true,
-      "startLine": 893
+      "startLine": 947
     },
     {
       "error": null,
       "index": 12,
       "ok": true,
-      "startLine": 950
+      "startLine": 1008
     },
     {
       "error": null,
       "index": 13,
       "ok": true,
-      "startLine": 1003
+      "startLine": 1065
     },
     {
       "error": null,
       "index": 14,
       "ok": true,
-      "startLine": 1063
+      "startLine": 1129
     },
     {
       "error": null,
       "index": 15,
       "ok": true,
-      "startLine": 1117
+      "startLine": 1187
     },
     {
       "error": null,
       "index": 16,
       "ok": true,
-      "startLine": 1166
+      "startLine": 1239
     },
     {
       "error": null,
       "index": 17,
       "ok": true,
-      "startLine": 1220
+      "startLine": 1297
     },
     {
       "error": null,
       "index": 18,
       "ok": true,
-      "startLine": 1281
+      "startLine": 1362
     },
     {
       "error": null,
       "index": 19,
       "ok": true,
-      "startLine": 1328
+      "startLine": 1412
     },
     {
       "error": null,
       "index": 20,
       "ok": true,
-      "startLine": 1700
+      "startLine": 1475
+    },
+    {
+      "error": null,
+      "index": 21,
+      "ok": true,
+      "startLine": 1509
+    },
+    {
+      "error": null,
+      "index": 22,
+      "ok": true,
+      "startLine": 1535
+    },
+    {
+      "error": null,
+      "index": 23,
+      "ok": true,
+      "startLine": 1559
+    },
+    {
+      "error": null,
+      "index": 24,
+      "ok": true,
+      "startLine": 1584
+    },
+    {
+      "error": null,
+      "index": 25,
+      "ok": true,
+      "startLine": 1603
+    },
+    {
+      "error": null,
+      "index": 26,
+      "ok": true,
+      "startLine": 1621
+    },
+    {
+      "error": null,
+      "index": 27,
+      "ok": true,
+      "startLine": 1637
+    },
+    {
+      "error": null,
+      "index": 28,
+      "ok": true,
+      "startLine": 1662
+    },
+    {
+      "error": null,
+      "index": 29,
+      "ok": true,
+      "startLine": 1679
+    },
+    {
+      "error": null,
+      "index": 30,
+      "ok": true,
+      "startLine": 1702
+    },
+    {
+      "error": null,
+      "index": 31,
+      "ok": true,
+      "startLine": 1721
+    },
+    {
+      "error": null,
+      "index": 32,
+      "ok": true,
+      "startLine": 1744
+    },
+    {
+      "error": null,
+      "index": 33,
+      "ok": true,
+      "startLine": 1763
+    },
+    {
+      "error": null,
+      "index": 34,
+      "ok": true,
+      "startLine": 1787
+    },
+    {
+      "error": null,
+      "index": 35,
+      "ok": true,
+      "startLine": 1804
+    },
+    {
+      "error": null,
+      "index": 36,
+      "ok": true,
+      "startLine": 2148
     }
   ],
   "document": "ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md",
   "failed": 0,
-  "passed": 20,
+  "passed": 36,
   "schemaVersion": "workflow-cookbook-js-check/v1"
 }
