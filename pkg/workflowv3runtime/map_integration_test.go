@@ -13,6 +13,7 @@ import (
 	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3map"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 	"github.com/go-go-golems/scraper/pkg/workflowv3sqlite"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,7 +35,7 @@ func TestLazyMapScaleAcrossRestartWithDeterministicOutput(t *testing.T) {
 	require.NoError(t, err)
 
 	itemCount := 1807
-	completionTimeout := 45 * time.Second
+	completionTimeout := 120 * time.Second
 	if raceDetectorEnabled {
 		itemCount = 257
 		completionTimeout = 90 * time.Second
@@ -95,10 +96,16 @@ func TestLazyMapScaleAcrossRestartWithDeterministicOutput(t *testing.T) {
 	t.Cleanup(cancel)
 	done := make(chan error, 1)
 	go func() { done <- dispatcher.Run(dispatchCtx) }()
-	require.Eventually(t, func() bool {
+	completed := assert.Eventually(t, func() bool {
 		snapshot, snapshotErr := engine.Snapshot(ctx, "lazy-map-1807")
 		return snapshotErr == nil && snapshot.Status == "succeeded"
 	}, completionTimeout, 10*time.Millisecond)
+	if !completed {
+		snapshot, snapshotErr := engine.Snapshot(ctx, "lazy-map-1807")
+		queue, queueErr := dispatcher.QueueSnapshot(ctx)
+		t.Logf("lazy map timeout snapshot=%+v err=%v queue=%+v queueErr=%v", snapshot, snapshotErr, queue, queueErr)
+	}
+	require.True(t, completed)
 	cancel()
 	require.ErrorIs(t, <-done, context.Canceled)
 

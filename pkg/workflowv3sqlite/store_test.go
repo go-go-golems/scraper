@@ -150,9 +150,12 @@ CREATE TABLE v3_attempts (
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	for table, columns := range map[string][]string{
-		"v3_runs":     {"dispatch_count"},
-		"v3_nodes":    {"resource_class", "max_attempts", "retry_backoff_ms", "ready_at"},
-		"v3_attempts": {"resource_class"},
+		"v3_runs":            {"dispatch_count"},
+		"v3_nodes":           {"resource_class", "max_attempts", "retry_backoff_ms", "ready_at"},
+		"v3_attempts":        {"resource_class"},
+		"v3_expansions":      {"page_size", "max_items", "max_materialized_ahead", "output_digest"},
+		"v3_expansion_pages": {"page_digest"},
+		"v3_map_items":       {"item_key", "input_digest"},
 	} {
 		for _, column := range columns {
 			exists, columnErr := columnExists(ctx, store.db, table, column)
