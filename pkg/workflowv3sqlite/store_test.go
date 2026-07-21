@@ -1,0 +1,187 @@
+package workflowv3sqlite
+
+import (
+	"context"
+	"errors"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/go-go-golems/scraper/pkg/workflowv3"
+	"github.com/stretchr/testify/require"
+)
+
+func storeFixture(t *testing.T, source string) (*workflowv3.SealedRegistry, workflowv3.WorkflowPlan) {
+	t.Helper()
+	bundle, err := workflowv3.NewBundle(workflowv3.BundleManifest{
+		Name: "fixture", Version: "1", ABI: workflowv3.TaskABI,
+		Tasks: []workflowv3.BundleTask{
+			{
+				TaskKey:    workflowv3.TaskKey{Kind: "linear.normalize", Version: "v1"},
+				Entrypoint: "tasks.cjs#normalize",
+				Inputs:     map[string]string{"source": "source/v1"},
+				Outputs:    map[string]string{"dataset": "dataset/v1"},
+			},
+			{
+				TaskKey:    workflowv3.TaskKey{Kind: "linear.validate", Version: "v1"},
+				Entrypoint: "tasks.cjs#validate",
+				Inputs:     map[string]string{"dataset": "dataset/v1"},
+				Outputs:    map[string]string{"validated": "validated/v1"},
+			},
+		},
+	}, map[string][]byte{"tasks.cjs": []byte(source)})
+	require.NoError(t, err)
+	builder := workflowv3.NewRegistryBuilder()
+	require.NoError(t, builder.AddBundle(bundle))
+	registry, err := builder.Seal()
+	require.NoError(t, err)
+	catalog, err := registry.Catalog()
+	require.NoError(t, err)
+	plan, err := workflowv3.Compile(workflowv3.WorkflowIR{
+		Schema: workflowv3.IRSchema,
+		Name:   "linear",
+		Inputs: []workflowv3.IRInput{{Name: "source", Schema: "source/v1"}},
+		Nodes: []workflowv3.IRNode{
+			{
+				Key:  "normalize",
+				Task: workflowv3.TaskKey{Kind: "linear.normalize", Version: "v1"},
+				Bindings: map[string]workflowv3.ValueRef{
+					"source": {Source: "input", Name: "source", Schema: "source/v1"},
+				},
+			},
+			{
+				Key:  "validate",
+				Task: workflowv3.TaskKey{Kind: "linear.validate", Version: "v1"},
+				Bindings: map[string]workflowv3.ValueRef{
+					"dataset": {
+						Source: "node-output", NodeKey: "normalize", Port: "dataset",
+						Schema: "dataset/v1",
+					},
+				},
+				DependsOn: []workflowv3.NodeKey{"normalize"},
+			},
+		},
+		Outputs: []workflowv3.IROutput{{
+			Name: "result",
+			Value: workflowv3.ValueRef{
+				Source: "node-output", NodeKey: "validate", Port: "validated",
+				Schema: "validated/v1",
+			},
+		}},
+	}, catalog)
+	require.NoError(t, err)
+	return registry, plan
+}
+
+func artifactRef(schema, seed string) workflowv3.ArtifactRef {
+	return workflowv3.ArtifactRef{
+		Schema:    schema,
+		Digest:    "sha256:" + seed + strings.Repeat("a", 64-len(seed)),
+		MediaType: "application/json",
+		Size:      1,
+		Locator:   "objects/" + seed,
+	}
+}
+
+func TestStorePersistsAppendOnlyAttemptsAndReopens(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := storeFixture(t, "first")
+	path := filepath.Join(t.TempDir(), "workflow.db")
+	store, err := Open(ctx, path)
+	require.NoError(t, err)
+	now := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, store.CreateRun(ctx, "run-1", plan, map[string]workflowv3.ArtifactRef{
+		"source": artifactRef("source/v1", "1"),
+	}, now))
+
+	first, err := store.LeaseNext(ctx, registry, now, time.Minute)
+	require.NoError(t, err)
+	require.Equal(t, workflowv3.NodeKey("normalize"), first.NodeKey)
+	inputs, err := store.ResolveInputs(ctx, *first)
+	require.NoError(t, err)
+	require.Equal(t, "source/v1", inputs["source"].Schema)
+	require.NoError(t, store.Complete(ctx, *first, map[string]workflowv3.ArtifactRef{
+		"dataset": artifactRef("dataset/v1", "2"),
+	}, now.Add(time.Second)))
+
+	second, err := store.LeaseNext(ctx, registry, now.Add(2*time.Second), time.Minute)
+	require.NoError(t, err)
+	require.Equal(t, workflowv3.NodeKey("validate"), second.NodeKey)
+	require.NoError(t, store.Complete(ctx, *second, map[string]workflowv3.ArtifactRef{
+		"validated": artifactRef("validated/v1", "3"),
+	}, now.Add(3*time.Second)))
+	require.NoError(t, store.Close())
+
+	reopened, err := Open(ctx, path)
+	require.NoError(t, err)
+	defer reopened.Close()
+	snapshot, err := reopened.Snapshot(ctx, "run-1")
+	require.NoError(t, err)
+	require.Equal(t, "succeeded", snapshot.Status)
+	require.Equal(t, artifactRef("validated/v1", "3"), snapshot.Outputs["result"])
+	require.Len(t, snapshot.Attempts, 2)
+	require.Equal(t, "succeeded", snapshot.Attempts[0].Status)
+	require.Equal(t, registry.Generation(), snapshot.Attempts[0].RegistryGeneration)
+}
+
+func TestStoreRejectsStaleCompletionAfterCancel(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := storeFixture(t, "first")
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+	require.NoError(t, err)
+	defer store.Close()
+	now := time.Now().UTC()
+	require.NoError(t, store.CreateRun(ctx, "run", plan, map[string]workflowv3.ArtifactRef{
+		"source": artifactRef("source/v1", "1"),
+	}, now))
+	lease, err := store.LeaseNext(ctx, registry, now, time.Minute)
+	require.NoError(t, err)
+	require.NoError(t, store.Cancel(ctx, "run", now.Add(time.Second)))
+	err = store.Complete(ctx, *lease, map[string]workflowv3.ArtifactRef{
+		"dataset": artifactRef("dataset/v1", "2"),
+	}, now.Add(2*time.Second))
+	require.True(t, errors.Is(err, ErrStaleCompletion))
+}
+
+func TestStoreReclaimsExpiredLeaseAsNewAttempt(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := storeFixture(t, "first")
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+	require.NoError(t, err)
+	defer store.Close()
+	now := time.Now().UTC()
+	require.NoError(t, store.CreateRun(ctx, "run", plan, map[string]workflowv3.ArtifactRef{
+		"source": artifactRef("source/v1", "1"),
+	}, now))
+	first, err := store.LeaseNext(ctx, registry, now, time.Second)
+	require.NoError(t, err)
+	second, err := store.LeaseNext(ctx, registry, now.Add(2*time.Second), time.Second)
+	require.NoError(t, err)
+	require.Equal(t, 2, second.Attempt)
+	require.NotEqual(t, first.Token, second.Token)
+	err = store.Complete(ctx, *first, map[string]workflowv3.ArtifactRef{
+		"dataset": artifactRef("dataset/v1", "2"),
+	}, now.Add(3*time.Second))
+	require.True(t, errors.Is(err, ErrStaleCompletion))
+	snapshot, err := store.Snapshot(ctx, "run")
+	require.NoError(t, err)
+	require.Equal(t, "lease_lost", snapshot.Attempts[0].Status)
+	require.Equal(t, "running", snapshot.Attempts[1].Status)
+}
+
+func TestStoreDoesNotLeaseImplementationFromDifferentBundle(t *testing.T) {
+	ctx := context.Background()
+	_, plan := storeFixture(t, "first")
+	wrongRegistry, _ := storeFixture(t, "different source")
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+	require.NoError(t, err)
+	defer store.Close()
+	now := time.Now().UTC()
+	require.NoError(t, store.CreateRun(ctx, "run", plan, map[string]workflowv3.ArtifactRef{
+		"source": artifactRef("source/v1", "1"),
+	}, now))
+	lease, err := store.LeaseNext(ctx, wrongRegistry, now, time.Minute)
+	require.NoError(t, err)
+	require.Nil(t, lease)
+}
