@@ -233,3 +233,11 @@ Step 27: added typed JavaScript set/map authoring, exact IR/plan/DTS goldens, an
 ### Related Files
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/gojamodules/workflow/authoring.go — Safe opaque set and map authoring surface
+
+## 2026-07-21
+
+Step 28: froze strict item manifests and opaque deterministic map child keys; hardened SHA-256 ref validation (commit e88f95d).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/manifest.go — Canonical lazy-map manifest and child identity
