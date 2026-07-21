@@ -38,6 +38,7 @@ func TestDatabaseSyncCrashAfterSideEffectIsIdempotentAcrossRestart(t *testing.T)
 	store, err := workflowv3sqlite.Open(ctx, workflowPath)
 	require.NoError(t, err)
 	engine, dispatcher := databaseEngine(t, store, registry, artifacts, target)
+	engine.LeaseDuration = 20 * time.Millisecond
 	require.NoError(t, engine.Submit(ctx, "database-restart", plan, map[string]workflowv3.ArtifactRef{
 		"dataset": input,
 	}))
@@ -45,15 +46,24 @@ func TestDatabaseSyncCrashAfterSideEffectIsIdempotentAcrossRestart(t *testing.T)
 	lease, err := dispatcher.DispatchOnce(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, lease)
-	err = engine.ExecuteLease(ctx, *lease)
-	var recorded *AttemptExecutionError
-	require.True(t, errors.As(err, &recorded))
-	require.ErrorContains(t, err, "DB_SYNC_POST_COMMIT")
+	registered, err := registry.ResolveNode(lease.PlanNode)
+	require.NoError(t, err)
+	inputs, err := store.ResolveInputs(ctx, *lease)
+	require.NoError(t, err)
+	_, err = RunTask(ctx, TaskRequest{
+		RunID: lease.RunID, NodeKey: lease.NodeKey, Attempt: lease.Attempt,
+		Task: registered, Inputs: inputs, Artifacts: artifacts,
+		Modules: engine.Modules,
+	})
+	var taskFailure *TaskFailureError
+	require.True(t, errors.As(err, &taskFailure))
+	require.Equal(t, "DB_SYNC_POST_COMMIT", taskFailure.Failure.Code)
+	require.True(t, taskFailure.Failure.Retryable)
 	require.Equal(t, 1, queryInt(t, target, "SELECT COUNT(*) FROM workflow_sync_audit"))
 	require.Equal(t, rowCount, queryInt(t, target, "SELECT COUNT(*) FROM workflow_sync_customers"))
 	require.NoError(t, store.Close())
 
-	time.Sleep(15 * time.Millisecond)
+	time.Sleep(30 * time.Millisecond)
 	reopened, err := workflowv3sqlite.Open(ctx, workflowPath)
 	require.NoError(t, err)
 	restarted, restartedDispatcher := databaseEngine(t, reopened, registry, artifacts, target)
@@ -61,12 +71,21 @@ func TestDatabaseSyncCrashAfterSideEffectIsIdempotentAcrossRestart(t *testing.T)
 		t, restartedDispatcher, restarted, "database-restart", "succeeded",
 	)
 	require.Len(t, snapshot.Attempts, 2)
-	require.Equal(t, "DB_SYNC_POST_COMMIT", snapshot.Attempts[0].Failure.Code)
+	require.Equal(t, "lease_lost", snapshot.Attempts[0].Status)
+	require.Nil(t, snapshot.Attempts[0].Failure)
 	require.Equal(t, "succeeded", snapshot.Attempts[1].Status)
 	require.Equal(t, workflowv3database.ResourceClass, snapshot.Attempts[1].ResourceClass)
 	require.Equal(t, 1, queryInt(t, target, "SELECT COUNT(*) FROM workflow_sync_audit"))
 	require.Equal(t, 1, queryInt(t, target, "SELECT COUNT(*) FROM workflow_sync_operations"))
 	require.Equal(t, rowCount, queryInt(t, target, "SELECT COUNT(*) FROM workflow_sync_customers"))
+	expectedOperationKey, err := workflowv3.Digest(struct {
+		RunID   workflowv3.RunID   `json:"runId"`
+		NodeKey workflowv3.NodeKey `json:"nodeKey"`
+	}{RunID: "database-restart", NodeKey: "synchronize"})
+	require.NoError(t, err)
+	require.Equal(t, expectedOperationKey, queryString(
+		t, target, "SELECT operation_key FROM workflow_sync_operations",
+	))
 
 	receipt, err := workflowv3.ReadArtifact(ctx, artifacts, snapshot.Outputs["receipt"])
 	require.NoError(t, err)
@@ -213,6 +232,13 @@ func databaseRows(canary string, count int) []map[string]any {
 		})
 	}
 	return rows
+}
+
+func queryString(t *testing.T, database *sql.DB, query string) string {
+	t.Helper()
+	var value string
+	require.NoError(t, database.QueryRow(query).Scan(&value))
+	return value
 }
 
 func queryInt(t *testing.T, database *sql.DB, query string) int {

@@ -175,7 +175,7 @@ LEFT JOIN v3_run_resource_dispatch fairness
   ON fairness.run_id = n.run_id
  AND fairness.resource_class = n.resource_class
 WHERE n.status = 'pending' AND r.status = 'running'
-  AND (n.ready_at IS NULL OR n.ready_at <= ?)
+  AND (n.ready_at IS NULL OR julianday(n.ready_at) <= julianday(?))
   AND NOT EXISTS (
     SELECT 1
     FROM v3_dependencies d
@@ -186,8 +186,8 @@ WHERE n.status = 'pending' AND r.status = 'running'
       AND d.node_key = n.node_key
       AND dependency.status != 'succeeded'
   )
-ORDER BY COALESCE(fairness.dispatch_count, 0), r.created_at, n.ordinal, n.run_id
-LIMIT 100`, formatTime(now))
+ORDER BY COALESCE(fairness.dispatch_count, 0), r.created_at, n.ordinal, n.run_id`,
+		formatTime(now))
 	if err != nil {
 		return nil, fmt.Errorf("query ready nodes: %w", err)
 	}
@@ -283,7 +283,8 @@ FROM v3_runs r JOIN v3_nodes n ON n.run_id = r.run_id
 WHERE r.run_id = ? AND n.node_key = ?
   AND r.status = 'running' AND r.cancel_epoch = ?
   AND n.status = 'running' AND n.lease_token = ?
-  AND n.lease_cancel_epoch = ? AND n.lease_expires_at >= ?`,
+  AND n.lease_cancel_epoch = ?
+  AND julianday(n.lease_expires_at) >= julianday(?)`,
 		lease.RunID,
 		lease.NodeKey,
 		lease.CancelEpoch,
@@ -606,14 +607,15 @@ WHERE status = 'running' AND EXISTS (
   SELECT 1 FROM v3_nodes n
   WHERE n.run_id = v3_attempts.run_id
     AND n.node_key = v3_attempts.node_key
-    AND n.lease_expires_at < ?
+    AND julianday(n.lease_expires_at) < julianday(?)
 )`, stamp, stamp); err != nil {
 		return err
 	}
 	_, err := tx.ExecContext(ctx, `
 UPDATE v3_nodes SET status = 'pending', lease_token = NULL,
   lease_cancel_epoch = NULL, lease_expires_at = NULL
-WHERE status = 'running' AND lease_expires_at < ?`, stamp)
+WHERE status = 'running'
+  AND julianday(lease_expires_at) < julianday(?)`, stamp)
 	return err
 }
 

@@ -25,7 +25,7 @@ func storeFixture(t *testing.T, source string) (*workflowv3.SealedRegistry, work
 				Inputs:     map[string]string{"source": "source/v1"},
 				Outputs:    map[string]string{"dataset": "dataset/v1"},
 				Retry: workflowv3.RetryPolicy{
-					MaxAttempts: 3, BackoffMillis: 1000,
+					MaxAttempts: 3, BackoffMillis: 500,
 				},
 			},
 			{
@@ -252,7 +252,7 @@ func TestStoreRetryBackoffSurvivesReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "workflow.db")
 	store, err := Open(ctx, path)
 	require.NoError(t, err)
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Second)
 	require.NoError(t, store.CreateRun(ctx, "retry", plan, map[string]workflowv3.ArtifactRef{
 		"source": artifactRef("source/v1", "retry"),
 	}, now))
@@ -287,6 +287,62 @@ func TestStoreRetryBackoffSurvivesReopen(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "failed", snapshot.Attempts[0].Status)
 	require.True(t, snapshot.Attempts[0].Failure.Retryable)
+}
+
+func TestStoreResourceCapacityIsDatabaseScopedAcrossConnections(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := storeFixture(t, "first")
+	path := filepath.Join(t.TempDir(), "workflow.db")
+	firstStore, err := Open(ctx, path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, firstStore.Close()) })
+	secondStore, err := Open(ctx, path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, secondStore.Close()) })
+	now := time.Now().UTC()
+	for _, runID := range []workflowv3.RunID{"connection-a", "connection-b"} {
+		require.NoError(t, firstStore.CreateRun(ctx, runID, plan, map[string]workflowv3.ArtifactRef{
+			"source": artifactRef("source/v1", string(runID)),
+		}, now))
+		now = now.Add(time.Millisecond)
+	}
+	capacities := map[string]int{workflowv3.ResourceCPUDefault: 1}
+	stores := []*Store{firstStore, secondStore}
+	leases := make(chan *workflowv3.Lease, len(stores))
+	errorsFound := make(chan error, len(stores))
+	var wait sync.WaitGroup
+	for _, store := range stores {
+		store := store
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			lease, leaseErr := store.LeaseNextWithResources(
+				ctx, registry, capacities, now, time.Minute,
+			)
+			if leaseErr != nil {
+				errorsFound <- leaseErr
+				return
+			}
+			leases <- lease
+		}()
+	}
+	wait.Wait()
+	close(leases)
+	close(errorsFound)
+	for leaseErr := range errorsFound {
+		require.NoError(t, leaseErr)
+	}
+	winners := 0
+	for lease := range leases {
+		if lease != nil {
+			winners++
+		}
+	}
+	require.Equal(t, 1, winners)
+	queue, err := secondStore.QueueSnapshot(ctx, registry, capacities, now)
+	require.NoError(t, err)
+	require.Equal(t, 1, queue.ActiveByResource[workflowv3.ResourceCPUDefault])
+	require.Equal(t, 1, queue.BlockedByReason["resource-capacity"])
 }
 
 func TestStoreConcurrentLeaseRaceHasSingleWinner(t *testing.T) {

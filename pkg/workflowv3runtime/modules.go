@@ -22,8 +22,9 @@ type TaskModuleContext struct {
 
 // TaskModuleFactory creates one exact alias for one fresh task runtime.
 type TaskModuleFactory struct {
-	Alias string
-	Build func(TaskModuleContext) (gggengine.RuntimeModuleRegistrar, error)
+	Alias    string
+	Validate func() error
+	Build    func(TaskModuleContext) (gggengine.RuntimeModuleRegistrar, error)
 }
 
 // TaskModuleRegistry is an immutable set of policy-selected module aliases.
@@ -39,6 +40,11 @@ func NewTaskModuleRegistry(factories ...TaskModuleFactory) (*TaskModuleRegistry,
 		alias := strings.TrimSpace(factory.Alias)
 		if alias == "" || factory.Build == nil {
 			return nil, fmt.Errorf("task module alias and factory are required")
+		}
+		if factory.Validate != nil {
+			if err := factory.Validate(); err != nil {
+				return nil, fmt.Errorf("task module %q: %w", alias, err)
+			}
 		}
 		if _, exists := registry.factories[alias]; exists {
 			return nil, fmt.Errorf("task module alias %q is already registered", alias)
@@ -94,11 +100,36 @@ func FSInputModule() TaskModuleFactory {
 func FetchModule(alias string, policy fetchmod.Policy, client *http.Client) TaskModuleFactory {
 	return TaskModuleFactory{
 		Alias: alias,
+		Validate: func() error {
+			if len(policy.AllowedOrigins) == 0 {
+				return fmt.Errorf("fetch policy requires allowed origins")
+			}
+			for _, origin := range policy.AllowedOrigins {
+				if strings.TrimSpace(origin) == "*" {
+					return fmt.Errorf("fetch policy cannot use a wildcard origin")
+				}
+			}
+			if policy.Timeout <= 0 || policy.MaxResponseBytes <= 0 {
+				return fmt.Errorf("fetch timeout and response limit must be positive")
+			}
+			if policy.Credentials.AllowEnv || policy.Credentials.AllowFiles ||
+				len(policy.Credentials.AllowedFiles) != 0 {
+				return fmt.Errorf("public fetch credential sources must be disabled")
+			}
+			return nil
+		},
 		Build: func(TaskModuleContext) (gggengine.RuntimeModuleRegistrar, error) {
 			guardedClient := &http.Client{}
 			if client != nil {
 				clone := *client
 				guardedClient = &clone
+			}
+			transport := guardedClient.Transport
+			if transport == nil {
+				transport = http.DefaultTransport
+			}
+			guardedClient.Transport = publicFetchTransport{
+				policy: policy, next: transport,
 			}
 			previousRedirect := guardedClient.CheckRedirect
 			guardedClient.CheckRedirect = func(request *http.Request, via []*http.Request) error {
@@ -126,15 +157,41 @@ func FetchModule(alias string, policy fetchmod.Policy, client *http.Client) Task
 	}
 }
 
+type publicFetchTransport struct {
+	policy fetchmod.Policy
+	next   http.RoundTripper
+}
+
+func (t publicFetchTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if request == nil || request.URL == nil {
+		return nil, fmt.Errorf("fetch request URL is required")
+	}
+	if _, err := t.policy.CheckURL(request.URL.String()); err != nil {
+		return nil, err
+	}
+	if request.URL.User != nil {
+		return nil, fmt.Errorf("fetch URL user information is not allowed")
+	}
+	for _, header := range []string{"Authorization", "Cookie", "Proxy-Authorization"} {
+		if request.Header.Get(header) != "" {
+			return nil, fmt.Errorf("fetch header %s is not allowed", header)
+		}
+	}
+	return t.next.RoundTrip(request)
+}
+
 // DatabaseModule creates an exact alias backed by a Go-preconfigured handle.
 // go-go-goja disables configure() when WithPreconfiguredDB is used.
 func DatabaseModule(alias string, handle database.QueryExecer) TaskModuleFactory {
 	return TaskModuleFactory{
 		Alias: alias,
-		Build: func(TaskModuleContext) (gggengine.RuntimeModuleRegistrar, error) {
+		Validate: func() error {
 			if handle == nil {
-				return nil, fmt.Errorf("database module %q requires a preconfigured handle", alias)
+				return fmt.Errorf("preconfigured database handle is required")
 			}
+			return nil
+		},
+		Build: func(TaskModuleContext) (gggengine.RuntimeModuleRegistrar, error) {
 			module := database.New(
 				database.WithName(alias),
 				database.WithPreconfiguredDB(handle),
