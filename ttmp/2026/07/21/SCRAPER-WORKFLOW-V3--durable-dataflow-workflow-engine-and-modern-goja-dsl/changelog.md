@@ -216,3 +216,12 @@ Recorded Slice 1-12 architecture guide and dedicated Slice 6-10 designs in commi
 ### Related Files
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/01-investigation-diary.md — Step 25 records design audit validation upload and commit evidence
+
+## 2026-07-21
+
+Step 26: froze canonical lazy-map set/template/policy contracts and validation (commit cfc8f6d).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/compiler.go — Authoritative map schema policy and binding validation
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/types.go — Canonical typed sets maps and exact plan template

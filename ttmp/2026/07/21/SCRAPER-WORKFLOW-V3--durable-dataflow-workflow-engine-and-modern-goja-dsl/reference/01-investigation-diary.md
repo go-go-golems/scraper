@@ -2816,3 +2816,106 @@ through ten"
 - Bundle destination:
   `/ai/2026/07/21/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 Slices 1 Through 12 Architecture Guide.pdf`.
 - Documentation commit: `84933ec`.
+
+## Step 26: Freeze the canonical lazy-map contract
+
+Slice 6 implementation started below the JavaScript surface by extending the
+canonical Go representation. Workflow IR and plans can now represent typed set
+inputs, deterministic map declarations, one symbolic item binding, bounded
+expansion policy, and named set outputs while leaving existing static workflow
+JSON unchanged when these fields are absent.
+
+Validation resolves set schemas and prior map outputs, pins the exact item-task
+implementation/policy in `PlanMap`, requires one item binding and one output,
+and rejects invalid limits, key collisions, wrong item ownership, forward map
+references, and output schema drift.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 25)
+
+**Assistant interpretation:** Begin Slice 6 from the validated dedicated design
+by freezing canonical identities and validation before persistence or runtime
+work.
+
+**Inferred user intent:** Build lazy maps on one deterministic Go-owned contract
+instead of adding ad hoc dynamic rows or JavaScript runtime callbacks.
+
+**Commit (code):** `cfc8f6d` — "workflowv3: freeze lazy map core contracts"
+
+### What I did
+
+- Added `SetRef`, `IRSetInput`, `IRSetOutput`, `MapPolicy`, `IRMap`, and
+  `PlanMap`.
+- Added `mapKey` to symbolic value refs for the authoring-time item binding.
+- Added the versioned `scraper-workflow-item-manifest/v1` identity.
+- Extended workflow IR/plan with omitted-when-empty set/map fields so completed
+  static workflow goldens retain their serialized shape.
+- Added strict map source, policy, task, binding, schema, key, and set-output
+  validation.
+- Compiled map templates to exact implementation, module, resource, retry,
+  schema, binding, and expansion policy facts.
+- Added deterministic compilation and negative contract tests.
+
+### Why
+
+- Expansion keys and persisted rows cannot be safe until map intent has one
+  canonical representation independent of runtime callbacks.
+- Omitting empty map fields preserves existing Slice 1–5 canonical bytes rather
+  than silently changing all historical plan digests.
+
+### What worked
+
+- `GOWORK=off go test ./pkg/workflowv3 -count=1` passed.
+- `GOWORK=off .bin/golangci-lint run ./pkg/workflowv3` reported `0 issues`.
+- `git diff --check` passed.
+- Existing compiler tests and the new deterministic map tests pass together.
+
+### What didn't work
+
+- N/A. The first formatted core implementation passed focused tests and lint.
+
+### What I learned
+
+- Map chaining can remain deterministic by permitting only references to prior
+  map outputs in canonical declaration order; a forward output is rejected.
+- A separate omitted `SetOutputs` collection preserves the existing value
+  output JSON contract while allowing typed dynamic results.
+
+### What was tricky to build
+
+- A mapped task may have additional static bindings, but exactly one binding
+  must be the symbolic item owned by that map. Validation therefore resolves
+  item schema from the set source and all other bindings through existing
+  value-ref rules.
+- The map output item schema comes from the task's sole declared output. The
+  first slice deliberately rejects multi-output item tasks until a port
+  selection contract is designed explicitly.
+
+### What warrants a second pair of eyes
+
+- Whether first-class map output port selection should be added now or retain
+  the simpler one-output contract through Slice 6.
+- Whether declaration-order map chaining is preferable to a separate map DAG
+  topological sort in the first release.
+- Exact child-key encoding before persistence code freezes it.
+
+### What should be done in the future
+
+- Add opaque `inputSet`, `map`, item, and set-output handles to the authoring
+  module with direct-Go/JavaScript equality and exact DTS goldens.
+- Implement manifest codec and deterministic child-key goldens before schema
+  migration.
+
+### Code review instructions
+
+- Start at `TestCompileMapPinsTemplateAndSetIdentity`, then review
+  `ValidateIR`, `setRefSchema`, and the new types.
+- Confirm existing static plan goldens remain unchanged.
+- Reproduce the focused test and lint commands above.
+
+### Technical details
+
+- Code commit: `cfc8f6d`.
+- New manifest schema: `scraper-workflow-item-manifest/v1`.
+- First map contract requires one `map-item` binding and one task output.
