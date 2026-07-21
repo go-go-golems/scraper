@@ -126,3 +126,12 @@ Hardened the first workflow-v3 slice with stable typed failure vocabulary across
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/task_runner.go — Async typed failure recovery and exact module admission
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/store_test.go — Concurrent lease and stale fencing evidence
+
+## 2026-07-21
+
+Completed the minimal workflow-v3 vertical slice: repository tests, race suites, Go lint, generated build, web tests/build, JS syntax, DTS golden, help smoke, doc validation, and 12,000-row privacy/storage evidence all pass; added public runtime docs and implementation status (commits dfbd061, 67d4776)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md — Public implemented API durability and validation guide
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/gojamodules/workflow/testdata/workflow.d.ts — Exact TypeScript declaration golden

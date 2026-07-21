@@ -1574,3 +1574,170 @@ final typed-failure, exact-capability, immutability, and concurrency rules.
 - Code commit: `f25f558`.
 - Supported first-slice task module profile: `fs:input`.
 - Concurrent lease contenders tested: 8.
+
+## Step 16: Validate, document, and audit the minimal runtime
+
+The implementation now has public help documentation, exact DTS evidence,
+generated logcopter package files, and current implementation status in both
+design documents. Repository-wide Go tests, the project validation target,
+Go lint under the required workspace isolation, race suites, JavaScript syntax,
+web tests/build, generated binary build, help rendering, frontmatter, and
+docmgr validation have been exercised.
+
+A validation pass exposed two repository-environment issues rather than hiding
+them: Go lint must run with `GOWORK=off`, and the web build lacked direct
+TypeScript dependencies that its source already imports. The dependencies were
+added explicitly and `make validate` now passes end to end.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 10)
+
+**Assistant interpretation:** Finish the implementation with fresh repository
+validation, public documentation, generated artifacts, and a requirement-by-
+requirement evidence audit.
+
+**Inferred user intent:** Leave a minimal workflow DSL that is demonstrably
+running and maintainable, not merely passing isolated package tests.
+
+**Commits:**
+
+- dfbd061 — "web: declare direct TypeScript build dependencies"
+- 67d4776 — "workflowv3: validate and document minimal runtime"
+
+### What I did
+
+- Added exact `workflow.d.ts` golden comparison.
+- Added package documentation for core, authoring, runtime, and SQLite.
+- Added a public Glazed help topic for the implemented minimal runtime.
+- Updated both design documents with implementation status and source mapping.
+- Ran `go generate`, producing required logcopter files for every new package.
+- Fixed all new Go lint findings rather than suppressing them.
+- Added the two missing direct web build dependencies already imported by
+  existing source: `@codemirror/state` and `@storybook/react`.
+- Ran repository-wide Go tests, race tests, Go lint, Go/web builds, web unit
+  tests, JavaScript syntax checks, help rendering, and the verbose privacy test.
+- Checked the final implementation/validation task and updated changelog and
+  file relations.
+
+### Why
+
+- Generated sources and public docs are part of the repository contract.
+- Exact DTS comparison prevents runtime/type surface drift.
+- A successful focused suite is insufficient if existing packages or the
+  actual release build regress.
+- pnpm's strict dependency model requires source imports to be direct
+  dependencies rather than accidental transitive availability.
+
+### What worked
+
+- `GOWORK=off go test ./... -count=1` passed.
+- `GOWORK=off .bin/golangci-lint run ./cmd/... ./pkg/...` passed with zero
+  issues after fixes.
+- `GOWORK=off go test -race ./pkg/workflowv3sqlite
+  ./pkg/workflowv3runtime -count=1` passed.
+- `make validate` passed, including Go tests/generation/build, web unit tests,
+  TypeScript, and Vite production build.
+- `node --check` passed for both workflow and task-bundle fixture sources.
+- `scraper help scraper-workflow-v3-minimal-runtime` rendered the embedded page.
+- Verbose privacy evidence reported:
+
+  `source=1656000 persistedSQLite=73728 ratio=0.0445`
+
+- The Vite build completed with only its existing large-chunk advisory.
+
+### What didn't work
+
+- Running `make lint` without workspace isolation failed in type checking due to
+  the parent workspace's local go-go-goja checkout and module-version mismatch:
+
+  `undefined: goja.IsNumber`
+
+  `undefined: goja.IsBigInt`
+
+  The design and goal already require `GOWORK=off`; rerunning the pinned linter
+  as
+
+  `GOWORK=off .bin/golangci-lint run ./cmd/... ./pkg/...`
+
+  reached the actual new-code findings.
+
+- The first isolated lint pass reported 16 visible issues: unchecked cleanup,
+  close, rollback, and row-close errors plus an incomplete Promise-state switch.
+  I replaced deferred cleanup calls with explicit checked/ignored closures,
+  checked test cleanup with `require.NoError`, and added the pending Promise
+  case. A final isolated lint pass reported `0 issues`.
+
+- The first web validation attempt failed before tests because `node_modules`
+  was absent:
+
+  `sh: 1: vitest: not found`
+
+  I ran `pnpm install --frozen-lockfile`; unit tests then passed.
+
+- The first web build then failed because existing source directly imports
+  packages absent from `package.json`:
+
+  `Cannot find module '@storybook/react'`
+
+  `Cannot find module '@codemirror/state'`
+
+  I added both as direct dependencies and reran web tests/build successfully.
+
+- A separate `pnpm lint` still reports broad pre-existing frontend lint debt:
+  old Storybook renderer imports, React effect/style rules, unused variables,
+  and generated `storybook-static` files. This command is not part of the
+  repository `make lint` or `make validate` targets, and none of the reported
+  source files were changed by workflow v3. The relevant repository targets,
+  TypeScript build, Vite build, and unit tests pass. The exact output is
+  preserved in this diary rather than misreported as a workflow-v3 failure.
+
+### What I learned
+
+- The repository's documented `GOWORK=off` requirement applies to lint as well
+  as tests and builds, even though the current Makefile `lint` recipe omits it.
+- `go generate ./...` correctly discovers new packages and emits logcopter
+  files, so generated-file cleanliness must be checked before final diff review.
+- The help-system smoke test is a useful validation of YAML frontmatter,
+  embedding, and actual CLI discoverability in one command.
+
+### What was tricky to build
+
+- Errcheck requires a deliberate policy for deferred cleanup. Production paths
+  use explicit best-effort cleanup closures where no return path exists, while
+  tests register cleanup functions that assert close success.
+- The inner Promise-state switch and outer waiter switch have different jobs;
+  both still need exhaustive enum handling.
+- Validation changed the web dependency lock despite no frontend feature work.
+  Keeping that in a separate focused commit makes the reason reviewable.
+
+### What warrants a second pair of eyes
+
+- Review whether the Makefile `lint` target should permanently set
+  `GOWORK=off`; this session used the correct explicit command without changing
+  unrelated build policy.
+- Review the direct `@storybook/react` dependency versus migrating all stories
+  to `@storybook/react-vite` in a dedicated frontend cleanup.
+- Inspect the 2 MB Vite chunk warning separately from workflow-v3 work.
+
+### What should be done in the future
+
+- Start Slice 3 with an allowlisted real HTTP snapshot after this minimal slice
+  is reviewed.
+- Address existing frontend lint debt in a dedicated ticket rather than mixing
+  it into durable workflow implementation.
+
+### Code review instructions
+
+- Run `make validate` and the isolated Go lint/race commands above.
+- Run the verbose privacy test and compare its byte ratio.
+- Open the new public help topic through `dist/scraper help`.
+- Review commits `dfbd061` and `67d4776` separately.
+
+### Technical details
+
+- Full validation target: passed.
+- Go lint: zero issues with `GOWORK=off`.
+- Web unit tests: 4/4 passed.
+- Minimal runtime help slug: `scraper-workflow-v3-minimal-runtime`.
+- Completed ticket task: `awrp`.
