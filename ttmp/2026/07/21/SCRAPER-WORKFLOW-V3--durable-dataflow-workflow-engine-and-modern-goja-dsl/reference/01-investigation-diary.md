@@ -422,3 +422,91 @@ Each example follows authored JavaScript through normalized IR, compiled jobs, d
 - Validation result: 17/17 JavaScript fences parsed successfully.
 - reMarkable path: `/ai/2026/07/21/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 JavaScript Cookbook.pdf`.
 - The examples remain target API documentation until native modules and compiler/runtime tests exist.
+
+## Step 5: Design reproducible domain-authored JavaScript task bundles
+
+The workflow design now supports domain developers supplying custom JavaScript task catalogs and implementations without adding every task to scraper core. The proposal keeps the ergonomic idea that a worker “loads JavaScript and registers tasks,” but confines registration to an explicit, atomic worker boot/reload phase rather than ambient process-global `require()` side effects.
+
+A task bundle pins schemas, entrypoints, dependencies, capabilities, provenance, and digest. Workers verify the exact artifact, evaluate its catalog in a registration-only runtime, seal a registry generation, advertise exact implementation identities, and run each leased attempt in a fresh capability-limited Goja runtime. Plans bind task kind/version plus bundle digest, entrypoint, and ABI, so a worker cannot silently substitute changed code.
+
+### Prompt Context
+
+**User prompt (verbatim):** "one thing, I see that there are many \"custom\" tasks in data.tasks, and I think it would be useful for a certain domain developer to be able to submit custom JS tasks so that we can have flexibility to process those. Can we make some setup where like, loading some JS registers a set of tasks, and that way each worker could populate and provide these tasks in a reproducible and robust manner?"
+
+**Assistant interpretation:** Extend workflow v3 with a safe, reproducible mechanism for domain-owned JavaScript bundles to register multiple task implementations on workers and make those exact implementations available to compiled workflows.
+
+**Inferred user intent:** Avoid hard-coding every cookbook domain operation in scraper while preserving durable execution, schemas, worker consistency, reproducibility, and operational safety.
+
+**Commit (code/docs):** 0e2e1d7 — "docs: design reproducible JavaScript task bundles"
+
+### What I did
+
+- Added `design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md`.
+- Documented source/built bundle layouts, strict manifests, explicit JavaScript catalog registration, task implementation context, authoring descriptor modules, deterministic builds, dependency locks, signatures, and provenance.
+- Designed immutable worker registry generations, exact capability advertisements, compiler binding, lease matching, fresh attempt runtimes, atomic reload, version coexistence, quarantine, and process isolation for untrusted bundles.
+- Added seven focused decision records, phased implementation, store sketches, tests, and acceptance criteria.
+- Updated the primary architecture, cookbook, ticket index, and evidence catalogue to treat custom domain tasks as bundle-provided rather than scraper built-ins.
+- Added `scripts/05-js-task-bundle-registration-probe.mjs` and a two-task fixture bundle.
+- Generated `scripts/output/js-task-bundle-registration-probe.json`.
+
+### Why
+
+- A generic engine cannot require a scraper release for every customer-specific transform or domain rule.
+- Persisting arbitrary callbacks in workflow plans would sacrifice exact code identity, schema validation, capability planning, and secure worker matching.
+- Task kind/version alone is insufficient for restart and rolling deployment because different code can claim the same key.
+
+### What worked
+
+- The fixture loads a JavaScript catalog that registers `acme.customer.normalize@v1` and `acme.customer.validate@v1`.
+- It validates that each bundle-local entrypoint export exists before sealing the registry.
+- Repeated probe execution produced the same bundle and registry digests.
+- Exact task/version/bundle/entrypoint/ABI requirements matched successfully.
+- Wrong bundle, task version, and entrypoint requirements were all rejected.
+- Frontmatter validation and docmgr doctor passed.
+
+### What didn't work
+
+- N/A. The design validation, JavaScript syntax checks, deterministic probe comparison, and exact-matching assertions passed on the first run.
+
+### What I learned
+
+- The existing per-operation Goja runtime is a useful execution baseline, but current script-path metadata must become an immutable bundle/entrypoint identity.
+- The current string-keyed runner registry needs task version, implementation digest, registry generation, and worker advertisement before it can support reproducible custom tasks.
+- Registration, authoring, and execution require distinct runtime module sets.
+- Goja module allowlists are not sufficient for hostile code; mutually untrusted bundles need process/container isolation.
+
+### What was tricky to build
+
+- “Loading JS registers tasks” is convenient but ambient registration is order-dependent and unsafe. The design preserves the phrase only for an explicit loader transaction: evaluate catalog → validate candidate → self-test → seal → advertise.
+- Rolling upgrades must not change code beneath active runs. Plans therefore pin exact implementation digests, and workers may advertise old/new registry generations while runs drain.
+- Domain flexibility could reopen arbitrary payloads. The host still validates input/config/output schemas and compact references outside JavaScript.
+
+### What warrants a second pair of eyes
+
+- Review whether task contract versions and bundle implementation versions are modeled at the correct separate layers.
+- Review trust/signature policy and the boundary between trusted in-process and sandboxed subprocess workers.
+- Benchmark fresh Goja runtime creation before considering immutable compiled-program caches or runtime pooling.
+- Review worker capability storage/indexing for multi-process SQLite and a future PostgreSQL store.
+
+### What should be done in the future
+
+- Implement Phase 1 catalog/bundle types and upgrade the v3 runner registry identity.
+- Build one production-quality pure transform bundle before adding network/database host capabilities.
+- Add a sandbox worker class before accepting untrusted bundle publishers.
+- Convert cookbook placeholders to namespaced bundle-provided authoring modules.
+
+### Code review instructions
+
+- Start with the executive answer and security statement in the new design.
+- Review catalog/entrypoint, worker boot, compiler binding, registry generation, and lease execution sections in order.
+- Run:
+
+  `node ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/05-js-task-bundle-registration-probe.mjs`
+
+- Compare `pkg/engine/runner/runner.go` and `pkg/js/runtime/executor.go` to the documented v3 gaps.
+
+### Technical details
+
+- Probe bundle digest: `sha256:b349df43ce6f637dde813d2f611dff9fcef43063840709333c7d513c7688eb28`.
+- Probe registry digest: `sha256:cc2cff85c297bd3f90b3d8ac87ab45ad0534b298caef24a299dacba5f957aedd`.
+- Custom task bundles remain proposed architecture; no production runner/store behavior changed.

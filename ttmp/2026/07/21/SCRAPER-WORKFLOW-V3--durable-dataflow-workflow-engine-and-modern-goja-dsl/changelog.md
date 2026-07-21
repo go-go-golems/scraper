@@ -52,3 +52,12 @@ Added and published the non-RAG workflow-v3 JavaScript cookbook with fifteen wor
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md — Cookbook and execution atlas
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/04-check-cookbook-js.py — Reproducible JavaScript fence syntax checker
+
+## 2026-07-21
+
+Designed reproducible domain-authored JavaScript task bundles with explicit catalog registration immutable registry generations exact implementation matching fresh lease-scoped runtimes and untrusted-code isolation; added deterministic two-task registration probe (commit 0e2e1d7)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md — Focused custom JavaScript task bundle architecture
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/05-js-task-bundle-registration-probe.mjs — Deterministic catalog registration and exact matching experiment
