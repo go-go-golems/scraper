@@ -163,6 +163,73 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		}
 	}
 
+	reductionOutputs := make(map[string]string, len(ir.Reductions))
+	for _, reduced := range ir.Reductions {
+		if strings.TrimSpace(reduced.Key) == "" {
+			return fmt.Errorf("reduction key is required")
+		}
+		if _, exists := nodeSpecs[NodeKey(reduced.Key)]; exists {
+			return fmt.Errorf("reduction key %q conflicts with a node key", reduced.Key)
+		}
+		if _, exists := mapOutputs[reduced.Key]; exists {
+			return fmt.Errorf("reduction key %q conflicts with a map key", reduced.Key)
+		}
+		if _, exists := reductionOutputs[reduced.Key]; exists {
+			return fmt.Errorf("duplicate reduction key %q", reduced.Key)
+		}
+		source, err := setRefSchema(reduced.Source, setInputs, mapOutputs)
+		if err != nil {
+			return fmt.Errorf("reduction %q source: %w", reduced.Key, err)
+		}
+		if reduced.Policy.FanIn < 2 || reduced.Policy.MaxLevels < 1 {
+			return fmt.Errorf("reduction %q has invalid reduction policy", reduced.Key)
+		}
+		spec, ok := catalog.Lookup(reduced.PartitionTask)
+		if !ok {
+			return fmt.Errorf("reduction %q references unknown task %s@%s", reduced.Key, reduced.PartitionTask.Kind, reduced.PartitionTask.Version)
+		}
+		if len(spec.Outputs) != 1 {
+			return fmt.Errorf("reduction %q partition task must declare exactly one output", reduced.Key)
+		}
+		if len(reduced.Bindings) != len(spec.Inputs) {
+			return fmt.Errorf("reduction %q has %d bindings, task requires %d", reduced.Key, len(reduced.Bindings), len(spec.Inputs))
+		}
+		partitionBindings := 0
+		for port, expectedSchema := range spec.Inputs {
+			binding, ok := reduced.Bindings[port]
+			if !ok {
+				return fmt.Errorf("reduction %q is missing binding %q", reduced.Key, port)
+			}
+			var actualSchema string
+			if binding.Source == "reduction-partition" {
+				if binding.ReduceKey != reduced.Key {
+					return fmt.Errorf("reduction %q binding %q has wrong partition owner %q", reduced.Key, port, binding.ReduceKey)
+				}
+				actualSchema = ReductionPartitionSchemaV1
+				partitionBindings++
+			} else {
+				actualSchema, err = refSchema(binding, inputSchemas, nodeSpecs)
+				if err != nil {
+					return fmt.Errorf("reduction %q binding %q: %w", reduced.Key, port, err)
+				}
+			}
+			if actualSchema != expectedSchema || binding.Schema != expectedSchema {
+				return fmt.Errorf("reduction %q binding %q schema %q does not match %q", reduced.Key, port, actualSchema, expectedSchema)
+			}
+		}
+		if partitionBindings != 1 {
+			return fmt.Errorf("reduction %q task requires exactly one partition binding", reduced.Key)
+		}
+		outputSchema := ""
+		for _, schema := range spec.Outputs {
+			outputSchema = schema
+		}
+		if outputSchema != source.ItemSchema {
+			return fmt.Errorf("reduction %q output schema %q must equal source item schema %q", reduced.Key, outputSchema, source.ItemSchema)
+		}
+		reductionOutputs[reduced.Key] = outputSchema
+	}
+
 	outputNames := map[string]struct{}{}
 	for _, output := range ir.Outputs {
 		if strings.TrimSpace(output.Name) == "" {
@@ -172,9 +239,19 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 			return fmt.Errorf("duplicate workflow output %q", output.Name)
 		}
 		outputNames[output.Name] = struct{}{}
-		actual, err := refSchema(output.Value, inputSchemas, nodeSpecs)
-		if err != nil {
-			return fmt.Errorf("workflow output %q: %w", output.Name, err)
+		var actual string
+		var err error
+		if output.Value.Source == "reduction-output" {
+			schema, exists := reductionOutputs[output.Value.ReduceKey]
+			if !exists {
+				return fmt.Errorf("workflow output %q: unknown reduction %q", output.Name, output.Value.ReduceKey)
+			}
+			actual = schema
+		} else {
+			actual, err = refSchema(output.Value, inputSchemas, nodeSpecs)
+			if err != nil {
+				return fmt.Errorf("workflow output %q: %w", output.Name, err)
+			}
 		}
 		if actual != output.Value.Schema {
 			return fmt.Errorf("workflow output %q schema mismatch", output.Name)
@@ -248,6 +325,16 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 			InputSchemas: cloneStringMap(spec.Inputs), OutputSchemas: cloneStringMap(spec.Outputs),
 			Modules: append([]string(nil), spec.Modules...), ResourceClass: spec.ResourceClass,
 			Retry: spec.Retry, Policy: mapped.Policy,
+		})
+	}
+	for _, reduced := range ir.Reductions {
+		spec, _ := catalog.Lookup(reduced.PartitionTask)
+		plan.Reductions = append(plan.Reductions, PlanReduce{
+			Key: reduced.Key, Source: reduced.Source, Implementation: spec.Identity,
+			Bindings:     cloneBindings(reduced.Bindings),
+			InputSchemas: cloneStringMap(spec.Inputs), OutputSchemas: cloneStringMap(spec.Outputs),
+			Modules: append([]string(nil), spec.Modules...), ResourceClass: spec.ResourceClass,
+			Retry: spec.Retry, Policy: reduced.Policy,
 		})
 	}
 	withoutDigest := plan
