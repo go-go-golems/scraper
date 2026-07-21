@@ -69,6 +69,20 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	for {
 		started := false
 		for {
+			expanded, err := d.Engine.ExpandOne(ctx)
+			if err != nil {
+				return fmt.Errorf("expand workflow map: %w", err)
+			}
+			if expanded {
+				started = true
+			}
+			finalized, err := d.Engine.FinalizeOneMap(ctx)
+			if err != nil {
+				return fmt.Errorf("finalize workflow map: %w", err)
+			}
+			if finalized {
+				started = true
+			}
 			lease, err := d.DispatchOnce(ctx)
 			if err != nil {
 				if contextErr := ctx.Err(); contextErr != nil {

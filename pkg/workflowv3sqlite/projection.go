@@ -40,6 +40,40 @@ WHERE status = 'running' GROUP BY resource_class`)
 	}
 
 	rows, err = s.db.QueryContext(ctx, `
+SELECT e.run_id, e.map_key, e.status, e.total_items, e.next_index,
+  e.materialized_items, e.terminal_items, e.max_materialized_ahead
+FROM v3_expansions e JOIN v3_runs r ON r.run_id = e.run_id
+WHERE r.status = 'running'
+ORDER BY e.run_id, e.map_key`)
+	if err != nil {
+		return snapshot, err
+	}
+	for rows.Next() {
+		var progress workflowv3.MapProgress
+		var maxAhead int
+		if err := rows.Scan(
+			&progress.RunID, &progress.MapKey, &progress.Status,
+			&progress.TotalItems, &progress.NextIndex, &progress.MaterializedItems,
+			&progress.TerminalItems, &maxAhead,
+		); err != nil {
+			_ = rows.Close()
+			return snapshot, err
+		}
+		if progress.TotalItems >= 0 {
+			progress.BacklogToMaterialize = progress.TotalItems - progress.NextIndex
+		}
+		progress.BacklogToExecute = progress.MaterializedItems - progress.TerminalItems
+		if (progress.Status == "pending" || progress.Status == "expanding") &&
+			progress.BacklogToMaterialize > 0 && progress.BacklogToExecute >= maxAhead {
+			snapshot.BlockedByReason["map-backpressure"]++
+		}
+		snapshot.Maps = append(snapshot.Maps, progress)
+	}
+	if err := rows.Close(); err != nil {
+		return snapshot, err
+	}
+
+	rows, err = s.db.QueryContext(ctx, `
 SELECT n.task_kind, n.task_version, n.bundle_digest, n.entrypoint,
   n.task_abi, n.modules_json, n.resource_class, n.max_attempts,
   n.retry_backoff_ms, n.ready_at,

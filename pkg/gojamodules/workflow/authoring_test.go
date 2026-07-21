@@ -10,6 +10,7 @@ import (
 	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3database"
 	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3http"
 	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3linear"
+	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3map"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 	"github.com/stretchr/testify/require"
 )
@@ -184,6 +185,22 @@ module.exports = workflow.compile(definition);`
 	}, result.IR.Maps[0].Policy)
 	assertGolden(t, "lazy-map.ir.json", result.IR)
 	assertGolden(t, "lazy-map.plan.json", result.Plan)
+}
+
+func TestAuthorCompilesRealLazyMapFixtureToGoldens(t *testing.T) {
+	registry, err := workflowv3map.Registry()
+	require.NoError(t, err)
+	catalog, err := registry.Catalog()
+	require.NoError(t, err)
+	result, err := workflowmodule.Author(
+		context.Background(), workflowv3map.WorkflowSource(), catalog,
+		workflowv3map.DescriptorModule(),
+	)
+	require.NoError(t, err)
+	assertGolden(t, "lazy-map-transform.ir.json", result.IR)
+	assertGolden(t, "lazy-map-transform.plan.json", result.Plan)
+	require.Len(t, result.Plan.Maps, 1)
+	require.Equal(t, workflowv3map.ResourceClass, result.Plan.Maps[0].ResourceClass)
 }
 
 func TestAuthorRejectsInvalidLazyMapHandles(t *testing.T) {

@@ -26,13 +26,81 @@ func (e *Engine) Submit(ctx context.Context, runID workflowv3.RunID, plan workfl
 	return e.Store.CreateRun(ctx, runID, plan, inputs, e.now())
 }
 
+func (e *Engine) ExpandOne(ctx context.Context) (bool, error) {
+	if err := e.validate(); err != nil {
+		return false, err
+	}
+	candidates, err := e.Store.ExpansionCandidates(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, candidate := range candidates {
+		body, err := workflowv3.ReadArtifact(ctx, e.Artifacts, candidate.Source)
+		if err != nil {
+			return false, fmt.Errorf("read map manifest %s/%s: %w", candidate.RunID, candidate.MapKey, err)
+		}
+		manifest, err := workflowv3.DecodeItemManifest(body)
+		if err != nil {
+			return false, fmt.Errorf("decode map manifest %s/%s: %w", candidate.RunID, candidate.MapKey, err)
+		}
+		page, err := e.Store.ExpandNextPage(
+			ctx, candidate.RunID, candidate.MapKey, candidate.Source, manifest, e.now(),
+		)
+		if err != nil {
+			return false, err
+		}
+		if page != nil {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (e *Engine) FinalizeOneMap(ctx context.Context) (bool, error) {
+	if err := e.validate(); err != nil {
+		return false, err
+	}
+	candidates, err := e.Store.ExpansionFinalizationCandidates(ctx)
+	if err != nil {
+		return false, err
+	}
+	if len(candidates) == 0 {
+		return false, nil
+	}
+	candidate := candidates[0]
+	manifest, err := e.Store.MapOutputManifest(ctx, candidate.RunID, candidate.MapKey)
+	if err != nil {
+		return false, err
+	}
+	body, err := workflowv3.EncodeItemManifest(manifest)
+	if err != nil {
+		return false, err
+	}
+	ref, err := e.Artifacts.Put(ctx, workflowv3.ItemManifestSchemaV1, "application/json", body)
+	if err != nil {
+		return false, fmt.Errorf("publish map output artifact: %w", err)
+	}
+	if err := e.Store.PublishMapOutput(ctx, candidate.RunID, candidate.MapKey, ref, e.now()); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (e *Engine) RunOne(ctx context.Context) (bool, error) {
 	if err := e.validate(); err != nil {
 		return false, err
 	}
+	expanded, err := e.ExpandOne(ctx)
+	if err != nil {
+		return false, err
+	}
+	finalized, err := e.FinalizeOneMap(ctx)
+	if err != nil {
+		return false, err
+	}
 	lease, err := e.Store.LeaseNext(ctx, e.Registry, e.now(), e.leaseDuration())
 	if err != nil || lease == nil {
-		return false, err
+		return expanded || finalized, err
 	}
 	return true, e.ExecuteLease(ctx, *lease)
 }

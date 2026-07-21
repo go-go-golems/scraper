@@ -196,8 +196,21 @@ type RunSnapshot struct {
 	Attempts   []Attempt              `json:"attempts"`
 }
 
+type MapProgress struct {
+	RunID                RunID  `json:"runId"`
+	MapKey               string `json:"mapKey"`
+	Status               string `json:"status"`
+	TotalItems           int    `json:"totalItems"`
+	NextIndex            int    `json:"nextIndex"`
+	MaterializedItems    int    `json:"materializedItems"`
+	TerminalItems        int    `json:"terminalItems"`
+	BacklogToMaterialize int    `json:"backlogToMaterialize"`
+	BacklogToExecute     int    `json:"backlogToExecute"`
+}
+
 type QueueSnapshot struct {
 	Ready            int            `json:"ready"`
 	ActiveByResource map[string]int `json:"activeByResource"`
 	BlockedByReason  map[string]int `json:"blockedByReason"`
+	Maps             []MapProgress  `json:"maps,omitempty"`
 }

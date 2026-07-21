@@ -102,6 +102,13 @@ func TestExpansionPagesBackpressureReopenAndResolveItems(t *testing.T) {
 	blocked, err := store.ExpandNextPage(ctx, "map-run", "normalize", manifestRef, manifest, now.Add(time.Millisecond))
 	require.NoError(t, err)
 	require.Nil(t, blocked)
+	queue, err := store.QueueSnapshot(ctx, registry, map[string]int{"cpu.map": 2}, now)
+	require.NoError(t, err)
+	require.Len(t, queue.Maps, 1)
+	require.Equal(t, 5, queue.Maps[0].TotalItems)
+	require.Equal(t, 3, queue.Maps[0].BacklogToMaterialize)
+	require.Equal(t, 2, queue.Maps[0].BacklogToExecute)
+	require.Equal(t, 1, queue.BlockedByReason["map-backpressure"])
 
 	for index := 0; index < 2; index++ {
 		lease, err := store.LeaseNext(ctx, registry, now.Add(time.Duration(index+1)*time.Second), time.Minute)
@@ -185,13 +192,79 @@ func TestEmptyExpansionCompletesWithoutLease(t *testing.T) {
 	require.NoError(t, store.CreateRun(ctx, "empty-map", plan, map[string]workflowv3.ArtifactRef{"items": ref}, now))
 	page, err := store.ExpandNextPage(ctx, "empty-map", "normalize", ref, manifest, now)
 	require.NoError(t, err)
-	require.Nil(t, page)
+	require.NotNil(t, page)
+	require.True(t, page.Expanded)
+	require.Zero(t, page.ItemCount)
 	lease, err := store.LeaseNext(ctx, registry, now, time.Minute)
 	require.NoError(t, err)
 	require.Nil(t, lease)
+	outputManifest, err := store.MapOutputManifest(ctx, "empty-map", "normalize")
+	require.NoError(t, err)
+	body, err := workflowv3.EncodeItemManifest(outputManifest)
+	require.NoError(t, err)
+	digest, err := workflowv3.Digest(outputManifest)
+	require.NoError(t, err)
+	outputRef := workflowv3.ArtifactRef{
+		Schema: workflowv3.ItemManifestSchemaV1, Digest: digest,
+		MediaType: "application/json", Size: int64(len(body)), Locator: "cas://empty-output",
+	}
+	require.NoError(t, store.PublishMapOutput(ctx, "empty-map", "normalize", outputRef, now))
+	require.NoError(t, store.PublishMapOutput(ctx, "empty-map", "normalize", outputRef, now))
 	snapshot, err := store.Snapshot(ctx, "empty-map")
 	require.NoError(t, err)
 	require.Equal(t, "succeeded", snapshot.Status)
+	require.Equal(t, outputRef, snapshot.Outputs["results"])
+}
+
+func TestExpansionCancellationAndTerminalFailureStopScaleOut(t *testing.T) {
+	ctx := context.Background()
+	for _, test := range []struct {
+		name string
+		stop func(*Store, *workflowv3.SealedRegistry, time.Time) error
+		want string
+	}{
+		{
+			name: "cancel",
+			stop: func(store *Store, _ *workflowv3.SealedRegistry, now time.Time) error {
+				return store.Cancel(ctx, "map-run", now)
+			},
+			want: "canceled",
+		},
+		{
+			name: "terminal child failure",
+			stop: func(store *Store, registry *workflowv3.SealedRegistry, now time.Time) error {
+				lease, err := store.LeaseNext(ctx, registry, now, time.Minute)
+				if err != nil {
+					return err
+				}
+				return store.Fail(ctx, *lease, workflowv3.Failure{
+					Class: "validation", Code: "MAP_ITEM_INVALID", Retryable: false,
+					Message: "task reported MAP_ITEM_INVALID",
+				}, now)
+			},
+			want: "failed",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+			require.NoError(t, err)
+			defer func() { require.NoError(t, store.Close()) }()
+			registry, plan := mapStoreFixture(t, workflowv3.MapPolicy{PageSize: 2, MaxItems: 4, MaxMaterializedAhead: 2})
+			manifest, ref := mapManifest(t, 4)
+			now := time.Now().UTC()
+			require.NoError(t, store.CreateRun(ctx, "map-run", plan, map[string]workflowv3.ArtifactRef{"items": ref}, now))
+			page, err := store.ExpandNextPage(ctx, "map-run", "normalize", ref, manifest, now)
+			require.NoError(t, err)
+			require.NotNil(t, page)
+			require.NoError(t, test.stop(store, registry, now.Add(time.Second)))
+			candidates, err := store.ExpansionCandidates(ctx)
+			require.NoError(t, err)
+			require.Empty(t, candidates)
+			var status string
+			require.NoError(t, store.db.QueryRow(`SELECT status FROM v3_expansions WHERE run_id = 'map-run'`).Scan(&status))
+			require.Equal(t, test.want, status)
+		})
+	}
 }
 
 func TestExpansionRejectsManifestIdentityAndCardinalityDrift(t *testing.T) {

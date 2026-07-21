@@ -10,6 +10,17 @@ import (
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 )
 
+type ExpansionCandidate struct {
+	RunID  workflowv3.RunID
+	MapKey string
+	Source workflowv3.ArtifactRef
+}
+
+type ExpansionFinalizationCandidate struct {
+	RunID  workflowv3.RunID
+	MapKey string
+}
+
 type ExpansionPage struct {
 	RunID      workflowv3.RunID
 	MapKey     string
@@ -22,8 +33,56 @@ type ExpansionPage struct {
 	PageDigest string
 }
 
+func (s *Store) ExpansionCandidates(ctx context.Context) ([]ExpansionCandidate, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT e.run_id, e.map_key, e.source_schema, e.source_digest,
+  e.source_media_type, e.source_size_bytes, e.source_locator
+FROM v3_expansions e JOIN v3_runs r ON r.run_id = e.run_id
+WHERE r.status = 'running' AND e.status IN ('pending','expanding')
+  AND e.source_digest IS NOT NULL
+ORDER BY r.created_at, e.map_key`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var candidates []ExpansionCandidate
+	for rows.Next() {
+		var candidate ExpansionCandidate
+		if err := rows.Scan(
+			&candidate.RunID, &candidate.MapKey, &candidate.Source.Schema,
+			&candidate.Source.Digest, &candidate.Source.MediaType,
+			&candidate.Source.Size, &candidate.Source.Locator,
+		); err != nil {
+			return nil, err
+		}
+		candidates = append(candidates, candidate)
+	}
+	return candidates, rows.Err()
+}
+
+func (s *Store) ExpansionFinalizationCandidates(ctx context.Context) ([]ExpansionFinalizationCandidate, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT e.run_id, e.map_key
+FROM v3_expansions e JOIN v3_runs r ON r.run_id = e.run_id
+WHERE r.status = 'running' AND e.status = 'succeeded'
+ORDER BY r.created_at, e.map_key`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var candidates []ExpansionFinalizationCandidate
+	for rows.Next() {
+		var candidate ExpansionFinalizationCandidate
+		if err := rows.Scan(&candidate.RunID, &candidate.MapKey); err != nil {
+			return nil, err
+		}
+		candidates = append(candidates, candidate)
+	}
+	return candidates, rows.Err()
+}
+
 // ExpandNextPage materializes at most one deterministic bounded map page. A nil
-// page means expansion is complete or intentionally backpressured.
+// page means expansion is intentionally backpressured.
 func (s *Store) ExpandNextPage(
 	ctx context.Context,
 	runID workflowv3.RunID,
@@ -113,20 +172,14 @@ WHERE run_id = ? AND map_key = ? AND next_index = ?`,
 				return nil, err
 			}
 		}
-		if terminalStatus == "succeeded" {
-			if _, err := tx.ExecContext(ctx, `
-UPDATE v3_runs SET status = 'succeeded', updated_at = ?
-WHERE run_id = ? AND status = 'running'
-  AND NOT EXISTS (SELECT 1 FROM v3_nodes WHERE run_id = ? AND status != 'succeeded')
-  AND NOT EXISTS (SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'succeeded')`,
-				formatTime(now), runID, runID, runID); err != nil {
-				return nil, err
-			}
-		}
 		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
-		return nil, nil
+		return &ExpansionPage{
+			RunID: runID, MapKey: mapKey, Page: nextIndex / mapped.Policy.PageSize,
+			FirstIndex: nextIndex, ItemCount: 0, NextIndex: nextIndex,
+			TotalItems: totalItems, Expanded: true,
+		}, nil
 	}
 
 	count := mapped.Policy.PageSize
@@ -251,6 +304,137 @@ WHERE run_id = ? AND map_key = ? AND next_index = ? AND status IN ('pending','ex
 		ItemCount: count, NextIndex: newNext, TotalItems: totalItems,
 		Expanded: newStatus == "expanded", PageDigest: pageDigest,
 	}, nil
+}
+
+func (s *Store) MapOutputManifest(ctx context.Context, runID workflowv3.RunID, mapKey string) (workflowv3.ItemManifest, error) {
+	_, mapped, _, err := s.loadPlanMap(ctx, runID, mapKey)
+	if err != nil {
+		return workflowv3.ItemManifest{}, err
+	}
+	if len(mapped.OutputSchemas) != 1 {
+		return workflowv3.ItemManifest{}, fmt.Errorf("map %q must have one output", mapKey)
+	}
+	var outputPort, outputSchema string
+	for port, schema := range mapped.OutputSchemas {
+		outputPort, outputSchema = port, schema
+	}
+	var status string
+	var totalItems, terminalItems int
+	if err := s.db.QueryRowContext(ctx, `
+SELECT status, total_items, terminal_items FROM v3_expansions
+WHERE run_id = ? AND map_key = ?`, runID, mapKey).Scan(&status, &totalItems, &terminalItems); err != nil {
+		return workflowv3.ItemManifest{}, err
+	}
+	if status != "succeeded" || totalItems != terminalItems {
+		return workflowv3.ItemManifest{}, fmt.Errorf("map %s/%s is not ready for publication", runID, mapKey)
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT item.item_key, output.schema_id, output.digest, output.media_type,
+  output.size_bytes, output.locator
+FROM v3_map_items item
+JOIN v3_nodes node
+  ON node.run_id = item.run_id AND node.node_key = item.node_key
+JOIN v3_node_outputs output
+  ON output.run_id = item.run_id AND output.node_key = item.node_key
+WHERE item.run_id = ? AND item.map_key = ? AND node.status = 'succeeded'
+  AND output.port = ?
+ORDER BY item.item_index`, runID, mapKey, outputPort)
+	if err != nil {
+		return workflowv3.ItemManifest{}, err
+	}
+	defer func() { _ = rows.Close() }()
+	items := make([]workflowv3.ManifestItem, 0, totalItems)
+	for rows.Next() {
+		var item workflowv3.ManifestItem
+		if err := rows.Scan(
+			&item.Key, &item.Value.Schema, &item.Value.Digest, &item.Value.MediaType,
+			&item.Value.Size, &item.Value.Locator,
+		); err != nil {
+			return workflowv3.ItemManifest{}, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return workflowv3.ItemManifest{}, err
+	}
+	if len(items) != totalItems {
+		return workflowv3.ItemManifest{}, fmt.Errorf("map %q output cardinality %d does not match %d", mapKey, len(items), totalItems)
+	}
+	return workflowv3.NewItemManifest(outputSchema, items)
+}
+
+func (s *Store) PublishMapOutput(
+	ctx context.Context,
+	runID workflowv3.RunID,
+	mapKey string,
+	output workflowv3.ArtifactRef,
+	now time.Time,
+) error {
+	if err := workflowv3.ValidateArtifactRef(output); err != nil {
+		return err
+	}
+	if output.Schema != workflowv3.ItemManifestSchemaV1 {
+		return fmt.Errorf("map output must use schema %q", workflowv3.ItemManifestSchemaV1)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var status string
+	var existing workflowv3.ArtifactRef
+	var schema, digest, mediaType, locator sql.NullString
+	var size sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `
+SELECT status, output_schema, output_digest, output_media_type,
+  output_size_bytes, output_locator
+FROM v3_expansions WHERE run_id = ? AND map_key = ?`, runID, mapKey).Scan(
+		&status, &schema, &digest, &mediaType, &size, &locator,
+	); err != nil {
+		return err
+	}
+	if status == "published" {
+		if schema.Valid && digest.Valid && mediaType.Valid && size.Valid && locator.Valid {
+			existing = workflowv3.ArtifactRef{
+				Schema: schema.String, Digest: digest.String, MediaType: mediaType.String,
+				Size: size.Int64, Locator: locator.String,
+			}
+		}
+		if existing == output {
+			return tx.Commit()
+		}
+		return fmt.Errorf("map %s/%s is already published with another output", runID, mapKey)
+	}
+	if status != "succeeded" {
+		return fmt.Errorf("map %s/%s is not ready for publication", runID, mapKey)
+	}
+	result, err := tx.ExecContext(ctx, `
+UPDATE v3_expansions SET status = 'published', output_schema = ?,
+  output_digest = ?, output_media_type = ?, output_size_bytes = ?,
+  output_locator = ?, updated_at = ?
+WHERE run_id = ? AND map_key = ? AND status = 'succeeded'`,
+		output.Schema, output.Digest, output.MediaType, output.Size, output.Locator,
+		formatTime(now), runID, mapKey)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("map publication state changed")
+	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE v3_runs SET status = 'succeeded', updated_at = ?
+WHERE run_id = ? AND status = 'running'
+  AND NOT EXISTS (SELECT 1 FROM v3_nodes WHERE run_id = ? AND status != 'succeeded')
+  AND NOT EXISTS (SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'published')`,
+		formatTime(now), runID, runID, runID); err != nil {
+		return err
+	}
+	if err := insertEvent(ctx, tx, runID, "", "map.published", map[string]any{
+		"mapKey": mapKey, "digest": output.Digest,
+	}, now); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) loadPlanMap(ctx context.Context, runID workflowv3.RunID, mapKey string) (workflowv3.WorkflowPlan, workflowv3.PlanMap, int, error) {
