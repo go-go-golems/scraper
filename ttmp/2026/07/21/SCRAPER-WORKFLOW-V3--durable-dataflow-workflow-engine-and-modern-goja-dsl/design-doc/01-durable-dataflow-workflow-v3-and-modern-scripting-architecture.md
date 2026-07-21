@@ -1506,8 +1506,8 @@ the already-running file, HTTP, database, and reduction workloads.
 
 #### Slice 10 — lease-free gates
 
-Implement durable waiting, authenticated operator events, expiry/cancellation,
-and continuation without holding a worker lease or resource slot.
+Durable waiting, authenticated operator events, expiry/cancellation, and typed
+continuation now execute without holding a worker lease or resource slot.
 
 #### Slice 11 — stronger process isolation
 
@@ -1669,9 +1669,9 @@ Exit criteria: exact-profile TTC preflight proves compact persistence, malformed
 - remove v2 scheduler after all supported runs finish;
 - publish migration and operational recovery documentation.
 
-## Implemented vertical slices 1–9
+## Implemented vertical slices 1–10
 
-Slices 1–9 are now executable rather than design-only. The exact identity,
+Slices 1–10 are now executable rather than design-only. The exact identity,
 compact-reference, attempt, fencing, privacy, and reopen contracts from the
 minimal tranche remain unchanged while HTTP, resources, retries, and database
 side effects use the same durable path.
@@ -1692,9 +1692,10 @@ side effects use the same durable path.
 | Bounded reductions | `pkg/testfixtures/workflowv3reduce`, typed reduce authoring, immutable bounded partitions, lease-local member rehydration, multi-level recovery, deterministic root publication, failure isolation, and 257-item evidence |
 | Rolling registries | `pkg/workflowv3runtime/registry_manager.go`, atomic activation, exact generation acquisition before lease persistence, draining, reference-safe removal, quarantine, restart reconstruction, and A/B executable-byte evidence |
 | Transactional budgets | `pkg/workflowv3sqlite/budget.go` and `operational.go`, integer claims, lease-atomic reservation, actual/conservative/zero settlement, recovery reconciliation, exhaustion, CAS increase, coherent snapshots, and real JavaScript usage evidence |
+| Durable approval gates | `pkg/workflowv3/gate.go`, `pkg/workflowv3sqlite/gate.go`, and `pkg/testfixtures/workflowv3gate`: exact authoring, lease-free waiting, versioned decisions, durable expiry, cancellation/races, typed continuation, budget escalation, pagination, restart, authority denial, and privacy evidence |
 
 The implemented DSL surface includes `define`, typed `input` and `inputSet`,
-descriptor-backed `task`, `map`, `reduce`, `after`, `output` and `outputSet`, `toIR`,
+descriptor-backed `task`, `map`, `reduce`, typed `gate`, `after`, `output` and `outputSet`, `toIR`,
 `validate`, `digest`, and `compile`. Goja objects are opaque handles backed by
 Go-owned runtime maps; JavaScript properties do not constitute identity.
 
@@ -1742,7 +1743,7 @@ GOWORK=off go test -race \
 
 The public implementation overview is
 `pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md`. Its historical slug is
-stable, while its title and content now cover Slices 1–9.
+stable, while its title and content now cover Slices 1–10.
 
 ## Testing strategy
 

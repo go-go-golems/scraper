@@ -342,9 +342,9 @@ node materialization.
 filters. It includes status counts, retries, lease losses, parsed ages, explicit
 60/300-second terminal windows, resources, blocked reasons, maps, reductions,
 budgets, and an event high-water mark. Bounded `EventsAfter` continuation and
-runtime registry augmentation complete the local operator view. Slice 10 adds
-the gate section and converts the existing lease-free `require-approval` bridge
-into durable decisions.
+runtime registry augmentation complete the local operator view. Slice 10 now
+adds bounded gate details and converts lease-free `require-approval` exhaustion
+into a durable decision paired with an authenticated account increase.
 
 No cross-run account scope, invoice reconciliation, exchange rates, or remote
 worker heartbeat was added; those remain outside the documented Slice 9 scope.

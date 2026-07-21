@@ -3981,3 +3981,141 @@ Lint also found an ineffectual initialized failure value and one unused clone he
 - Focused verbose budget/store evidence passed in 0.523 seconds and real JavaScript budget runtime evidence in 0.136 seconds.
 - All fixture JavaScript parsed; exact authoring/task DTS compiled; help rendered the Slices 1–9 budget section; docmgr doctor/frontmatter and `git diff --check` passed.
 - `go generate ./...` produced the expected new `pkg/testfixtures/workflowv3budget/logcopter.go` package registration.
+
+## Step 37: Implement durable lease-free approval gates
+
+Slice 10 now has a complete implementation candidate across canonical authoring,
+SQLite control state, dispatcher maintenance, operator decisions, budget
+activation, projections, and a real JavaScript restart fixture. Final repository
+validation and publication remain before the slice is checked complete.
+
+### Prompt Context
+
+**User prompt (verbatim):** `Continue working toward the active thread goal.`
+
+**Assistant interpretation:** Continue directly from validated Slice 9 into
+production-quality Slice 10 and do not stop at a design-only gate abstraction.
+
+**Inferred user intent:** Prove that long-lived external decisions survive
+restart and races without spending attempts, leases, runtime, resource, or
+budget capacity, while preserving all prior slices.
+
+### What I did
+
+- Added canonical `GatePolicy`, `IRGate`, `PlanGate`, typed gate-output refs,
+  policy digests, dependency/cycle validation, unsupported-branch rejection,
+  and budget-activation relationships.
+- Added `plan.gate(...)`, `GateBuilder.after(...)`, TypeScript declarations,
+  and exact JavaScript IR/plan goldens. Authoring can declare gates but neither
+  authoring nor task runtimes receive operator authority.
+- Added additive `v3_gates`, `v3_gate_dependencies`, and
+  `v3_gate_consumers` tables plus the node budget-approval relation. Gates are
+  independent control rows and never executable `v3_nodes` or attempts.
+- Added pending-to-waiting maintenance, durable deadline expiry, versioned
+  approve/reject CAS, strict role/schema/code/actor/artifact validation,
+  identical-command idempotency, run cancellation, exact downstream decision
+  refs, terminal run behavior, and bounded gate pagination/projections/events.
+- Integrated gates into static submission, dynamic map/reduction insertion,
+  lease eligibility, run completion, snapshots, dispatcher maintenance, and
+  Slice 9 `require-approval` claims.
+- Added independent-connection races for waiting, approve/reject,
+  approve/expiry, and approve/cancel; stale versions and unauthorized roles
+  cannot mutate or revive a gate.
+- Added a real JavaScript fixture whose gate waits while an unrelated run uses
+  the only resource slot, survives store/dispatcher restart, consumes an
+  external typed decision artifact, and publishes exactly once without source
+  or decision-body canaries entering SQLite/WAL/events/projections.
+- Added budget evidence where exhaustion activates a lease-free gate, an
+  authenticated account increase plus approval admits exactly one attempt, and
+  a sufficient account leaves its unused activation gate pending without
+  blocking run success.
+
+### Failures found and fixed
+
+The first budget regression failed with
+`task budget.call@v1 budget maximum: budget claim "provider" requires an approval gate`.
+A catalog maximum is a host cap, not an exhaustion action. The fixture now keeps
+its catalog maximum on `block`, while the authored effective claim selects the
+compiled approval gate.
+
+The first full runtime regression exposed cancellation during gate maintenance:
+
+```text
+maintain workflow gates: sql: transaction has already been committed or rolled back
+```
+
+An existing lazy-map test canceled the dispatcher while SQLite was beginning a
+gate-maintenance transaction. `DispatchOnce` already normalized this boundary
+to `context.Canceled`, but the bounded maintenance actions did not. Dispatcher
+maintenance now returns the parent context error when cancellation races any
+SQLite action. The formerly failing map test passed three consecutive runs
+(16.20s, 18.53s, 18.67s), and the complete runtime package then passed.
+
+The first operator-authority test expected the rejected module alias in the
+error text. goja-nodejs intentionally returned only `Invalid module`; the test
+now proves the sealed registry does not advertise `workflow/operator` and that
+execution fails with that closed-loader error without depending on sensitive
+error formatting.
+
+### Evidence so far
+
+- Focused core/authoring/SQLite/runtime suites pass.
+- Full runtime package passes in 64.299 seconds after cancellation normalization.
+- Focused gate/budget SQLite race suite passes in 1.397 seconds.
+- Focused gate runtime race suite passes in 1.251 seconds.
+- Gate JavaScript sources pass `node --check`.
+- `git diff --check` is clean.
+
+### Next steps
+
+- Run generation, complete repository validation, full runtime/store race and
+  lint, TypeScript declarations, help smoke, migration/golden/privacy checks,
+  and docmgr validation.
+- Update changelog/task relations, check `ks62`, commit and push Slice 10.
+- Audit every Slice 6–10 requirement, publish the updated documentation bundle,
+  check `gjfd`, and only then consider the active goal complete.
+
+### Slice 10 completion evidence
+
+The final audit found and closed three additional control-plane edge cases:
+
+- An idempotent decision retry now rechecks the required authorized role before
+  returning the existing result; a caller cannot replay another role's command.
+- Budget activation gates are dedicated to one compiled claim, cannot be used
+  as ordinary data outputs/consumers, and participate in cycle detection so a
+  gate cannot wait on the node whose exhausted claim activates it.
+- Global gate detail projection reads at most 1,001 records, exposes the first
+  1,000 plus `gatesTruncated`, and offers deterministic per-run `GatePage`
+  keyset pagination. Expiry maintenance is bounded to 64 records per action.
+
+The first fresh `make validate` after this audit hit two unrelated host-load
+fixture deadlines: the existing v2 heartbeat test lost its 100ms lease and the
+1,807-item map exceeded its 20-second assertion. The heartbeat passed ten
+immediate isolated repetitions and the map passed isolated in 15.13 seconds;
+no product change was justified. A fresh complete `make validate` then passed:
+all isolated Go packages, web unit tests, generation, tagged Go build,
+TypeScript build, and Vite build. Runtime completed in 48.741 seconds. The only
+build advisory was the existing non-failing Vite chunk-size warning.
+
+Fresh post-audit validation:
+
+- `GOWORK=off go test -race ./pkg/workflowv3runtime -count=1` passed in 12.598s.
+- `GOWORK=off go test -race ./pkg/workflowv3sqlite -count=1` passed in 1.544s.
+- isolated golangci-lint returned `0 issues.`
+- all fixture `.js`/`.cjs` files passed `node --check`.
+- authoring and task TypeScript declarations passed standalone `tsc --noEmit`.
+- exact gate IR/plan goldens, migration, 1,001-gate projection bound, gate/store
+  races, budget continuation, and real runtime fixture passed in the full run.
+- embedded help rendered `Workflow V3 Runtime Slices 1–10` and the durable gate
+  section.
+- docmgr doctor passed; every managed index/design/reference frontmatter file
+  validated; `git diff --check` passed.
+
+The implementation-ready document audit now has dedicated complete designs for
+Slices 6, 7, 8, 9, and 10. The Slice 10 design records actual schema/API/state,
+restart/cancellation/privacy/migration behavior, test evidence, deliberate
+branch-cancellation rejection, externally verified decision-artifact boundary,
+and acceptance criteria. Public help and the all-slice intern guide now identify
+Slices 1–10 as implemented and Slices 11–12 as future contracts.
+
+**Slice 10 implementation commit:** `00f36b3` — `workflowv3: add durable approval gates`.
