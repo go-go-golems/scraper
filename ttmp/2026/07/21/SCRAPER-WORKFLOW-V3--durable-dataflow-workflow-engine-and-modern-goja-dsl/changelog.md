@@ -61,3 +61,12 @@ Designed reproducible domain-authored JavaScript task bundles with explicit cata
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md — Focused custom JavaScript task bundle architecture
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/05-js-task-bundle-registration-probe.mjs — Deterministic catalog registration and exact matching experiment
+
+## 2026-07-21
+
+Aligned all fifteen cookbook workflows with namespaced descriptor-only custom task bundles exact bundle/entrypoint/ABI worker binding and sealed registry fixtures; 20/20 JavaScript blocks pass and updated cookbook published to reMarkable (commit e971ff3)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md — Updated bundle-aware cookbook
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/output/workflow-cookbook-js-check.json — 20-block syntax validation result

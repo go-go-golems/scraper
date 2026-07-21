@@ -510,3 +510,87 @@ A task bundle pins schemas, entrypoints, dependencies, capabilities, provenance,
 - Probe bundle digest: `sha256:b349df43ce6f637dde813d2f611dff9fcef43063840709333c7d513c7688eb28`.
 - Probe registry digest: `sha256:cc2cff85c297bd3f90b3d8ac87ab45ad0534b298caef24a299dacba5f957aedd`.
 - Custom task bundles remain proposed architecture; no production runner/store behavior changed.
+
+## Step 6: Align the workflow cookbook with custom task bundles
+
+The cookbook now consistently treats every hypothetical domain module as a descriptor-only authoring module generated from a domain-owned JavaScript task bundle. All fifteen workflow scripts import namespaced bundle modules such as `acme-data-tasks`, `acme-web-tasks`, `studio-media-tasks`, and `company-security-tasks` rather than implying that generic `data`, `web`, or `security` modules are built into scraper.
+
+A new cookbook chapter follows one custom data task from bundle source through catalog registration, execution entrypoint, generated authoring module, worker bundle lock, deterministic build, compiler binding, registry advertisement, exact dispatch matching, lease-scoped execution, and host-side output validation.
+
+### Prompt Context
+
+**User prompt (verbatim):** "can you update the cookbook accordingly, in case you haven't already?"
+
+**Assistant interpretation:** Update the existing JavaScript examples cookbook comprehensively so it reflects the newly designed custom task-bundle and exact worker registration model.
+
+**Inferred user intent:** Ensure the teaching material no longer suggests that cookbook domain tasks are scraper built-ins and demonstrates how domain developers actually package, register, author with, and execute custom JavaScript tasks.
+
+**Commit (code/docs):** e971ff3 — "docs: align cookbook with JavaScript task bundles"
+
+### What I did
+
+- Replaced generic cookbook imports with namespaced bundle authoring modules across all fifteen examples.
+- Reworked the common task-module table into a bundle/import/namespace/worker-authority matrix.
+- Added catalog, execution entrypoint, descriptor-only authoring module, bundle lock, and complete binding-chain examples.
+- Added a scraper-core versus domain-bundle responsibility table.
+- Updated normalized IR and compiled-plan examples to use namespaced task keys and exact bundle/entrypoint/ABI implementation identity.
+- Expanded pressure-test findings, test matrix, fixture layout, author checklist, and operator checklist for bundle registration, sealed worker registries, wrong-digest rejection, and rolling versions.
+- Re-ran the cookbook JavaScript fence validator.
+- Dry-ran and uploaded a new, non-destructive reMarkable PDF name rather than overwriting the previously published cookbook.
+
+### Why
+
+- The earlier cookbook had only a short note about bundles while its scripts still imported generic names such as `require("data")`.
+- Examples must model the intended extension mechanism or implementers may accidentally recreate a hard-coded domain-module monolith.
+- Separate authoring and worker runtime phases need to be visible in the primary teaching document.
+
+### What worked
+
+- All fifteen workflow scripts now use namespaced descriptor-only bundle imports.
+- All 20 JavaScript fences passed syntax validation.
+- The deep website atlas pins `acme.web.fetch@v1` to an explicit JavaScript bundle digest, entrypoint, and task ABI.
+- Frontmatter validation and docmgr doctor passed.
+- The updated PDF uploaded successfully:
+
+  `OK: uploaded SCRAPER WORKFLOW V3 JavaScript Cookbook Task Bundles.pdf -> /ai/2026/07/21/SCRAPER-WORKFLOW-V3`
+
+### What didn't work
+
+- N/A. Documentation edits, JavaScript syntax validation, dry-run, rendering, and upload succeeded.
+
+### What I learned
+
+- A single short caveat was insufficient; module names in executable examples strongly imply ownership and packaging.
+- The cookbook needs two fixture/runtime layers for every domain task: descriptor-only authoring modules and exact worker execution bundles.
+- Bundle/registry identity belongs in fixture goldens alongside workflow IR and compiled plans.
+
+### What was tricky to build
+
+- The examples need readable local variables such as `data` and `web` while exposing real ownership. The scripts keep those concise variables but import explicit namespaced bundles.
+- Adding task-bundle code blocks changed validation line mappings, so the deterministic syntax output had to be regenerated after docmgr updated frontmatter relations.
+- The existing reMarkable PDF may contain annotations, so the updated cookbook used a new document name instead of `--force` overwrite.
+
+### What warrants a second pair of eyes
+
+- Review the example bundle/module names and namespace conventions before they become public API guidance.
+- Verify whether the generated authoring module should always come from the execution bundle or may be published as a separately signed artifact sharing one catalog digest.
+- Review the fixture layout for enough coverage of old/new implementation generations and capability-blocked nodes.
+
+### What should be done in the future
+
+- Turn the cookbook bundle snippets into actual Goja/xgoja integration fixtures.
+- Generate real descriptor modules and DTS from one catalog source.
+- Add sealed-registry and exact-dispatch goldens to every example family.
+
+### Code review instructions
+
+- Review the cookbook sections `Custom task bundles used below` and `How a custom bundle supplies a cookbook task` first.
+- Confirm every workflow example imports an explicitly namespaced `*-tasks` module.
+- Run the cookbook checker and confirm `20/20` blocks pass.
+- Compare the website snapshot's IR/compiled-plan walkthrough to the focused task-bundle design.
+
+### Technical details
+
+- Updated cookbook size: approximately 1,900 lines and 77 KiB.
+- Validation output: `scripts/output/workflow-cookbook-js-check.json`.
+- Updated reMarkable path: `/ai/2026/07/21/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 JavaScript Cookbook Task Bundles.pdf`.
