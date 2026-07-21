@@ -1,4 +1,4 @@
-package workflowmodule
+package workflowmodule_test
 
 import (
 	"context"
@@ -6,74 +6,37 @@ import (
 	"path/filepath"
 	"testing"
 
+	workflowmodule "github.com/go-go-golems/scraper/pkg/gojamodules/workflow"
+	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3linear"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 	"github.com/stretchr/testify/require"
 )
 
-const bundleDigest = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-
 func linearCatalog(t *testing.T) *workflowv3.Catalog {
 	t.Helper()
-	catalog, err := workflowv3.NewCatalog(
-		workflowv3.TaskSpec{
-			Identity: workflowv3.ImplementationIdentity{
-				TaskKey: workflowv3.TaskKey{
-					Kind: "cookbook.linear.normalize-customers", Version: "v1",
-				},
-				BundleDigest: bundleDigest,
-				Entrypoint:   "./execution/tasks.cjs#normalizeCustomers",
-				ABI:          workflowv3.TaskABI,
-			},
-			Inputs:  map[string]string{"source": "customer-jsonl-ref/v1"},
-			Outputs: map[string]string{"dataset": "normalized-customers-ref/v1"},
-			Modules: []string{"fs:input"},
-		},
-		workflowv3.TaskSpec{
-			Identity: workflowv3.ImplementationIdentity{
-				TaskKey: workflowv3.TaskKey{
-					Kind: "cookbook.linear.validate-dataset", Version: "v1",
-				},
-				BundleDigest: bundleDigest,
-				Entrypoint:   "./execution/tasks.cjs#validateDataset",
-				ABI:          workflowv3.TaskABI,
-			},
-			Inputs:  map[string]string{"dataset": "normalized-customers-ref/v1"},
-			Outputs: map[string]string{"validatedDataset": "validated-customers-ref/v1"},
-			Modules: []string{"fs:input"},
-		},
-	)
+	registry, err := workflowv3linear.Registry()
+	require.NoError(t, err)
+	catalog, err := registry.Catalog()
 	require.NoError(t, err)
 	return catalog
 }
 
-func linearDescriptorModule() DescriptorModule {
-	return DescriptorModule{
-		Name: "cookbook-linear-transform-tasks",
-		Factories: map[string]workflowv3.TaskKey{
-			"normalizeCustomers": {
-				Kind: "cookbook.linear.normalize-customers", Version: "v1",
-			},
-			"validateDataset": {
-				Kind: "cookbook.linear.validate-dataset", Version: "v1",
-			},
-		},
-	}
-}
-
 func TestAuthorCompilesMinimalWorkflowToGoldens(t *testing.T) {
-	source, err := os.ReadFile("testdata/linear-transform.js")
-	require.NoError(t, err)
-
-	result, err := Author(
-		context.Background(), string(source), linearCatalog(t), linearDescriptorModule(),
+	result, err := workflowmodule.Author(
+		context.Background(),
+		workflowv3linear.WorkflowSource(),
+		linearCatalog(t),
+		workflowv3linear.DescriptorModule(),
 	)
 	require.NoError(t, err)
 
+	bundle, err := workflowv3linear.Bundle()
+	require.NoError(t, err)
 	require.Equal(t, directLinearIR(), result.IR)
 	assertGolden(t, "linear-transform.ir.json", result.IR)
 	assertGolden(t, "linear-transform.plan.json", result.Plan)
 	require.Len(t, result.Plan.Nodes, 2)
-	require.Equal(t, bundleDigest, result.Plan.Nodes[0].Implementation.BundleDigest)
+	require.Equal(t, bundle.Digest(), result.Plan.Nodes[0].Implementation.BundleDigest)
 	require.Equal(t, []workflowv3.NodeKey{"normalize"}, result.Plan.Nodes[1].DependsOn)
 }
 
@@ -129,12 +92,14 @@ module.exports = workflow.compile(workflow.define("bad", p => {
   const node = p.task("normalize", tasks.normalizeCustomers({source, extra: source}));
   p.output("dataset", node.output("dataset"));
 }));`
-	_, err := Author(context.Background(), source, linearCatalog(t), linearDescriptorModule())
+	_, err := workflowmodule.Author(
+		context.Background(), source, linearCatalog(t), workflowv3linear.DescriptorModule(),
+	)
 	require.ErrorContains(t, err, "unknown input extra")
 }
 
 func TestTypeScriptDeclaresMinimalSurface(t *testing.T) {
-	declaration := TypeScript()
+	declaration := workflowmodule.TypeScript()
 	for _, expected := range []string{
 		"declare module \"workflow\"", "function define", "function compile",
 		"input(name: string", "task(", "output(name: string",
