@@ -101,6 +101,8 @@ github.com/go-go-golems/glazed v1.3.6 h1:33jWLP0nE9cDapB8oG/Z6UeqdNszI/OB3OogkhA
 github.com/go-go-golems/glazed v1.3.6/go.mod h1:Q+GuLpSK6OHfDJBbrA4RFOkpYPw++2jj5FAquem8w8g=
 github.com/go-go-golems/go-go-goja v0.8.3 h1:VRx5WzDau2TO+14anbC5QUJu0oCI/hHaxXBSrZlcRxU=
 github.com/go-go-golems/go-go-goja v0.8.3/go.mod h1:nBJcgJrQ660gf88vyffcAKpBgXghGMn8KSMuErRt2jg=
+github.com/go-go-golems/go-go-goja v0.10.6 h1:Y58s/AqzKmKKZjrFibPrtu8eV2zAjpcVVZE44AIdK70=
+github.com/go-go-golems/go-go-goja v0.10.6/go.mod h1:SfkEfsu4kMckh9OjK9hX09GAWJ8SI+5KHKF4dO/S0hU=
 github.com/go-go-golems/logcopter v0.1.0 h1:CGBxAGudhoQOncJ6GEWDJ6c1g5LrU59/ewGlPFKBmdk=
 github.com/go-go-golems/logcopter v0.1.0/go.mod h1:HNCeqsUqxu+Jm5h05YlbN5+KFtK84D5ZnOimvVLyWH4=
 github.com/go-go-golems/sessionstream v0.0.6 h1:jbwH/q58DXE4ulUlCZwPzpHPeGCjdMDJBeF+qU+7vDM=

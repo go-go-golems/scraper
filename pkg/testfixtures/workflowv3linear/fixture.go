@@ -45,6 +45,9 @@ func Registry() (*workflowv3.SealedRegistry, error) {
 		return nil, err
 	}
 	builder := workflowv3.NewRegistryBuilder()
+	if err := builder.AdvertiseModules("fs:input"); err != nil {
+		return nil, err
+	}
 	if err := builder.AddBundle(bundle); err != nil {
 		return nil, err
 	}

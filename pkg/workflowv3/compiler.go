@@ -132,6 +132,8 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 			InputSchemas:   cloneStringMap(spec.Inputs),
 			OutputSchemas:  cloneStringMap(spec.Outputs),
 			Modules:        append([]string(nil), spec.Modules...),
+			ResourceClass:  spec.ResourceClass,
+			Retry:          spec.Retry,
 		})
 	}
 	withoutDigest := plan

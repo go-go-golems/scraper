@@ -11,10 +11,12 @@ import (
 
 type BundleTask struct {
 	TaskKey
-	Entrypoint string            `json:"entrypoint"`
-	Inputs     map[string]string `json:"inputs"`
-	Outputs    map[string]string `json:"outputs"`
-	Modules    []string          `json:"modules,omitempty"`
+	Entrypoint    string            `json:"entrypoint"`
+	Inputs        map[string]string `json:"inputs"`
+	Outputs       map[string]string `json:"outputs"`
+	Modules       []string          `json:"modules,omitempty"`
+	ResourceClass string            `json:"resourceClass"`
+	Retry         RetryPolicy       `json:"retry"`
 }
 
 type BundleManifest struct {
@@ -63,6 +65,14 @@ func NewBundle(manifest BundleManifest, files map[string][]byte) (*Bundle, error
 		clonedFiles[name] = append([]byte(nil), body...)
 	}
 	manifest = cloneManifest(manifest)
+	for i := range manifest.Tasks {
+		normalized := normalizeTaskSpec(TaskSpec{
+			ResourceClass: manifest.Tasks[i].ResourceClass,
+			Retry:         manifest.Tasks[i].Retry,
+		})
+		manifest.Tasks[i].ResourceClass = normalized.ResourceClass
+		manifest.Tasks[i].Retry = normalized.Retry
+	}
 	seenTasks := map[TaskKey]struct{}{}
 	for _, task := range manifest.Tasks {
 		if _, exists := seenTasks[task.TaskKey]; exists {
@@ -85,6 +95,7 @@ func NewBundle(manifest BundleManifest, files map[string][]byte) (*Bundle, error
 				Entrypoint: task.Entrypoint, ABI: manifest.ABI,
 			},
 			Inputs: task.Inputs, Outputs: task.Outputs, Modules: task.Modules,
+			ResourceClass: task.ResourceClass, Retry: task.Retry,
 		}
 		if err := validateTaskSpec(probe); err != nil {
 			return nil, err
@@ -132,7 +143,8 @@ func (b *Bundle) TaskSpecs() []TaskSpec {
 				Entrypoint: task.Entrypoint, ABI: b.manifest.ABI,
 			},
 			Inputs: cloneStringMap(task.Inputs), Outputs: cloneStringMap(task.Outputs),
-			Modules: append([]string(nil), task.Modules...),
+			Modules:       append([]string(nil), task.Modules...),
+			ResourceClass: task.ResourceClass, Retry: task.Retry,
 		})
 	}
 	sort.Slice(ret, func(i, j int) bool {

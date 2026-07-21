@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	workflowmodule "github.com/go-go-golems/scraper/pkg/gojamodules/workflow"
+	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3database"
+	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3http"
 	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3linear"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 	"github.com/stretchr/testify/require"
@@ -80,6 +82,54 @@ func directLinearIR() workflowv3.WorkflowIR {
 				Schema: "validated-customers-ref/v1",
 			},
 		}},
+	}
+}
+
+func TestAuthorCompilesHTTPAndDatabaseSlicesToGoldens(t *testing.T) {
+	tests := []struct {
+		name        string
+		source      string
+		module      workflowmodule.DescriptorModule
+		registry    func() (*workflowv3.SealedRegistry, error)
+		planGolden  string
+		irGolden    string
+		resource    string
+		modules     []string
+		maxAttempts int
+	}{
+		{
+			name: "http", source: workflowv3http.WorkflowSource(),
+			module: workflowv3http.DescriptorModule(), registry: workflowv3http.Registry,
+			planGolden: "http-snapshot.plan.json", irGolden: "http-snapshot.ir.json",
+			resource: workflowv3http.ResourceClass,
+			modules:  []string{"fetch:public", "fs:input"}, maxAttempts: 3,
+		},
+		{
+			name: "database", source: workflowv3database.WorkflowSource(),
+			module: workflowv3database.DescriptorModule(), registry: workflowv3database.Registry,
+			planGolden: "database-sync.plan.json", irGolden: "database-sync.ir.json",
+			resource: workflowv3database.ResourceClass,
+			modules:  []string{"db:sync", "fs:input"}, maxAttempts: 3,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			registry, err := test.registry()
+			require.NoError(t, err)
+			catalog, err := registry.Catalog()
+			require.NoError(t, err)
+			result, err := workflowmodule.Author(
+				context.Background(), test.source, catalog, test.module,
+			)
+			require.NoError(t, err)
+			assertGolden(t, test.irGolden, result.IR)
+			assertGolden(t, test.planGolden, result.Plan)
+			require.Len(t, result.Plan.Nodes, 1)
+			node := result.Plan.Nodes[0]
+			require.Equal(t, test.resource, node.ResourceClass)
+			require.Equal(t, test.modules, node.Modules)
+			require.Equal(t, test.maxAttempts, node.Retry.MaxAttempts)
+		})
 	}
 }
 

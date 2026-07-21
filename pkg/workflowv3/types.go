@@ -3,9 +3,10 @@ package workflowv3
 import "time"
 
 const (
-	IRSchema   = "scraper-workflow-ir/v3"
-	PlanSchema = "scraper-workflow-plan/v3"
-	TaskABI    = "scraper-js-task/v1"
+	IRSchema           = "scraper-workflow-ir/v3"
+	PlanSchema         = "scraper-workflow-plan/v3"
+	TaskABI            = "scraper-js-task/v1"
+	ResourceCPUDefault = "cpu.default"
 )
 
 type RunID string
@@ -31,11 +32,18 @@ type ImplementationIdentity struct {
 	ABI          string `json:"abi"`
 }
 
+type RetryPolicy struct {
+	MaxAttempts   int   `json:"maxAttempts"`
+	BackoffMillis int64 `json:"backoffMillis"`
+}
+
 type TaskSpec struct {
-	Identity ImplementationIdentity `json:"identity"`
-	Inputs   map[string]string      `json:"inputs"`
-	Outputs  map[string]string      `json:"outputs"`
-	Modules  []string               `json:"modules,omitempty"`
+	Identity      ImplementationIdentity `json:"identity"`
+	Inputs        map[string]string      `json:"inputs"`
+	Outputs       map[string]string      `json:"outputs"`
+	Modules       []string               `json:"modules,omitempty"`
+	ResourceClass string                 `json:"resourceClass"`
+	Retry         RetryPolicy            `json:"retry"`
 }
 
 type ValueRef struct {
@@ -79,6 +87,8 @@ type PlanNode struct {
 	InputSchemas   map[string]string      `json:"inputSchemas"`
 	OutputSchemas  map[string]string      `json:"outputSchemas"`
 	Modules        []string               `json:"modules,omitempty"`
+	ResourceClass  string                 `json:"resourceClass"`
+	Retry          RetryPolicy            `json:"retry"`
 }
 
 type WorkflowPlan struct {
@@ -107,6 +117,7 @@ type Attempt struct {
 	LeaseToken         string    `json:"-"`
 	CancelEpoch        int64     `json:"cancelEpoch"`
 	RegistryGeneration string    `json:"registryGeneration"`
+	ResourceClass      string    `json:"resourceClass"`
 	StartedAt          time.Time `json:"startedAt"`
 	FinishedAt         time.Time `json:"finishedAt,omitempty"`
 	Failure            *Failure  `json:"failure,omitempty"`
@@ -129,4 +140,10 @@ type RunSnapshot struct {
 	PlanDigest string                 `json:"planDigest"`
 	Outputs    map[string]ArtifactRef `json:"outputs"`
 	Attempts   []Attempt              `json:"attempts"`
+}
+
+type QueueSnapshot struct {
+	Ready            int            `json:"ready"`
+	ActiveByResource map[string]int `json:"activeByResource"`
+	BlockedByReason  map[string]int `json:"blockedByReason"`
 }
