@@ -122,22 +122,26 @@ INSERT INTO v3_budget_accounts(
 		outputSchemas, _ := workflowv3.CanonicalJSON(node.OutputSchemas)
 		modules, _ := workflowv3.CanonicalJSON(node.Modules)
 		identity := node.Implementation
-		var budgetAccount, budgetOnExhausted any
+		var budgetAccount, budgetOnExhausted, budgetApprovalGate any
 		if node.Budget != nil {
 			budgetAccount, budgetOnExhausted = node.Budget.Account, node.Budget.OnExhausted
+			if node.Budget.ApprovalGate != "" {
+				budgetApprovalGate = node.Budget.ApprovalGate
+			}
 		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO v3_nodes(
   run_id, node_key, ordinal, task_kind, task_version, bundle_digest,
   entrypoint, task_abi, bindings_json, input_schemas_json,
   output_schemas_json, modules_json, resource_class, max_attempts,
-  retry_backoff_ms, budget_account, budget_on_exhausted, status
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+  retry_backoff_ms, budget_account, budget_on_exhausted,
+  budget_approval_gate, status
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
 			runID, node.Key, ordinal, identity.Kind, identity.Version,
 			identity.BundleDigest, identity.Entrypoint, identity.ABI,
 			bindings, inputSchemas, outputSchemas, modules,
 			node.ResourceClass, node.Retry.MaxAttempts, node.Retry.BackoffMillis,
-			budgetAccount, budgetOnExhausted,
+			budgetAccount, budgetOnExhausted, budgetApprovalGate,
 		); err != nil {
 			return fmt.Errorf("insert node %s: %w", node.Key, err)
 		}
@@ -151,6 +155,37 @@ INSERT INTO v3_nodes(
 INSERT INTO v3_dependencies(run_id, node_key, dependency_key)
 VALUES (?, ?, ?)`, runID, node.Key, dependency); err != nil {
 				return fmt.Errorf("insert dependency %s -> %s: %w", node.Key, dependency, err)
+			}
+		}
+	}
+	for _, gate := range plan.Gates {
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO v3_gates(
+  run_id, gate_key, status, policy_digest, decision_schema,
+  required_role, on_reject, on_expire, timeout_ms, budget_activation
+) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
+			runID, gate.Key, gate.PolicyDigest, gate.Policy.DecisionSchema,
+			gate.Policy.RequiredRole, gate.Policy.OnReject, gate.Policy.OnExpire,
+			gate.Policy.TimeoutMillis, gate.BudgetActivation); err != nil {
+			return fmt.Errorf("insert gate %s: %w", gate.Key, err)
+		}
+		for _, dependency := range gate.DependsOn {
+			if _, err := tx.ExecContext(ctx, `
+INSERT INTO v3_gate_dependencies(run_id, gate_key, dependency_key)
+VALUES (?, ?, ?)`, runID, gate.Key, dependency); err != nil {
+				return fmt.Errorf("insert gate dependency %s -> %s: %w", gate.Key, dependency, err)
+			}
+		}
+	}
+	for _, node := range plan.Nodes {
+		for _, binding := range node.Bindings {
+			if binding.Source != "gate-output" {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `
+INSERT OR IGNORE INTO v3_gate_consumers(run_id, node_key, gate_key)
+VALUES (?, ?, ?)`, runID, node.Key, binding.GateKey); err != nil {
+				return fmt.Errorf("insert gate consumer %s -> %s: %w", node.Key, binding.GateKey, err)
 			}
 		}
 	}
@@ -255,7 +290,8 @@ SELECT
   n.entrypoint, n.task_abi, n.bindings_json, n.input_schemas_json,
   n.output_schemas_json, n.modules_json, n.resource_class,
   n.max_attempts, n.retry_backoff_ms, n.attempt_count, n.failure_count,
-  n.budget_account, n.budget_on_exhausted, r.cancel_epoch
+  n.budget_account, n.budget_on_exhausted, n.budget_approval_gate,
+  r.cancel_epoch
 FROM v3_nodes n
 JOIN v3_runs r ON r.run_id = n.run_id
 LEFT JOIN v3_run_resource_dispatch fairness
@@ -272,6 +308,13 @@ WHERE n.status = 'pending' AND r.status = 'running'
     WHERE d.run_id = n.run_id
       AND d.node_key = n.node_key
       AND dependency.status != 'succeeded'
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM v3_gate_consumers consumer
+    JOIN v3_gates gate
+      ON gate.run_id = consumer.run_id AND gate.gate_key = consumer.gate_key
+    WHERE consumer.run_id = n.run_id AND consumer.node_key = n.node_key
+      AND gate.status != 'approved'
   )
   AND NOT EXISTS (
     SELECT 1
@@ -340,7 +383,8 @@ ORDER BY COALESCE(fairness.dispatch_count, 0), r.created_at, n.ordinal, n.run_id
 		return nil, err
 	}
 	budget, err := loadNodeBudget(ctx, tx, selected.runID, selected.node.Key,
-		selected.budgetAccount, selected.budgetOnExhausted)
+		selected.budgetAccount, selected.budgetOnExhausted,
+		selected.budgetApprovalGate)
 	if err != nil {
 		return nil, err
 	}
@@ -437,6 +481,12 @@ func (s *Store) ResolveInputs(ctx context.Context, lease workflowv3.Lease) (map[
 			row = s.db.QueryRowContext(ctx, `
 SELECT schema_id, digest, media_type, size_bytes, locator
 FROM v3_run_inputs WHERE run_id = ? AND name = ?`, lease.RunID, binding.Name)
+		case "gate-output":
+			row = s.db.QueryRowContext(ctx, `
+SELECT decision_ref_schema, decision_ref_digest, decision_ref_media_type,
+  decision_ref_size_bytes, decision_ref_locator
+FROM v3_gates WHERE run_id = ? AND gate_key = ? AND status = 'approved'`,
+				lease.RunID, binding.GateKey)
 		case "node-output":
 			row = s.db.QueryRowContext(ctx, `
 SELECT schema_id, digest, media_type, size_bytes, locator
@@ -558,7 +608,13 @@ WHERE run_id = ? AND status = 'running'
   )
   AND NOT EXISTS (
     SELECT 1 FROM v3_reductions WHERE run_id = ? AND status != 'published'
-  )`, stamp, lease.RunID, lease.RunID, lease.RunID, lease.RunID); err != nil {
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM v3_gates WHERE run_id = ? AND (
+      (budget_activation = 0 AND status != 'approved') OR
+      (budget_activation = 1 AND status IN ('waiting','rejected','expired','canceled'))
+    )
+  )`, stamp, lease.RunID, lease.RunID, lease.RunID, lease.RunID, lease.RunID); err != nil {
 		return err
 	}
 	if err := insertEvent(ctx, tx, lease.RunID, lease.NodeKey, "node.succeeded", map[string]any{
@@ -777,6 +833,40 @@ UPDATE v3_reduction_partitions SET status = 'canceled'
 WHERE run_id = ? AND status IN ('pending','running')`, runID); err != nil {
 		return err
 	}
+	gateRows, err := tx.QueryContext(ctx, `
+SELECT gate_key, version FROM v3_gates
+WHERE run_id = ? AND status IN ('pending','waiting')`, runID)
+	if err != nil {
+		return err
+	}
+	type canceledGate struct {
+		key     workflowv3.NodeKey
+		version int64
+	}
+	var canceledGates []canceledGate
+	for gateRows.Next() {
+		var gate canceledGate
+		if err := gateRows.Scan(&gate.key, &gate.version); err != nil {
+			_ = gateRows.Close()
+			return err
+		}
+		canceledGates = append(canceledGates, gate)
+	}
+	if err := gateRows.Close(); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE v3_gates SET status = 'canceled', version = version + 1, decided_at = ?
+WHERE run_id = ? AND status IN ('pending','waiting')`, stamp, runID); err != nil {
+		return err
+	}
+	for _, gate := range canceledGates {
+		if err := insertEvent(ctx, tx, runID, gate.key, "gate.canceled", map[string]any{
+			"version": gate.version + 1, "cause": "run.canceled",
+		}, now); err != nil {
+			return err
+		}
+	}
 	if err := insertEvent(ctx, tx, runID, "", "run.canceled", map[string]any{}, now); err != nil {
 		return err
 	}
@@ -809,6 +899,12 @@ FROM v3_run_inputs WHERE run_id = ? AND name = ?`, runID, output.Value.Name)
 SELECT schema_id, digest, media_type, size_bytes, locator
 FROM v3_node_outputs WHERE run_id = ? AND node_key = ? AND port = ?`,
 				runID, output.Value.NodeKey, output.Value.Port)
+		case "gate-output":
+			row = s.db.QueryRowContext(ctx, `
+SELECT decision_ref_schema, decision_ref_digest, decision_ref_media_type,
+  decision_ref_size_bytes, decision_ref_locator
+FROM v3_gates WHERE run_id = ? AND gate_key = ? AND status = 'approved'`,
+				runID, output.Value.GateKey)
 		case "reduction-output":
 			row = s.db.QueryRowContext(ctx, `
 SELECT root_schema, root_digest, root_media_type, root_size_bytes, root_locator
@@ -869,13 +965,14 @@ func (s *Store) Checkpoint(ctx context.Context) error {
 }
 
 type leaseCandidate struct {
-	runID             workflowv3.RunID
-	node              workflowv3.PlanNode
-	attemptCount      int
-	failureCount      int
-	budgetAccount     sql.NullString
-	budgetOnExhausted sql.NullString
-	cancelEpoch       int64
+	runID              workflowv3.RunID
+	node               workflowv3.PlanNode
+	attemptCount       int
+	failureCount       int
+	budgetAccount      sql.NullString
+	budgetOnExhausted  sql.NullString
+	budgetApprovalGate sql.NullString
+	cancelEpoch        int64
 }
 
 type rowScanner interface {
@@ -912,7 +1009,8 @@ func scanLeaseCandidate(rows rowScanner) (leaseCandidate, error) {
 		&candidate.node.ResourceClass, &candidate.node.Retry.MaxAttempts,
 		&candidate.node.Retry.BackoffMillis, &candidate.attemptCount,
 		&candidate.failureCount, &candidate.budgetAccount,
-		&candidate.budgetOnExhausted, &candidate.cancelEpoch,
+		&candidate.budgetOnExhausted, &candidate.budgetApprovalGate,
+		&candidate.cancelEpoch,
 	); err != nil {
 		return candidate, err
 	}
@@ -1124,6 +1222,7 @@ func migrateAdditiveColumns(ctx context.Context, db *sql.DB) error {
 		{"v3_nodes", "failure_count", "INTEGER NOT NULL DEFAULT 0"},
 		{"v3_nodes", "budget_account", "TEXT"},
 		{"v3_nodes", "budget_on_exhausted", "TEXT"},
+		{"v3_nodes", "budget_approval_gate", "TEXT"},
 		{"v3_attempts", "resource_class", "TEXT NOT NULL DEFAULT 'cpu.default'"},
 	}
 	for _, migration := range migrations {

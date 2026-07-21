@@ -13,6 +13,10 @@ declare module "workflow" {
     account: string;
     reserve: BudgetAmounts;
     onExhausted: "fail-run" | "block" | "require-approval";
+    approvalGate?: string;
+  }
+  export interface GateBuilder {
+    after(job: JobRef): GateBuilder;
   }
   export interface JobBuilder {
     after(job: JobRef): JobBuilder;
@@ -34,6 +38,17 @@ declare module "workflow" {
       account: string,
       options: {limits: BudgetAmounts; policyDigest: string},
     ): PlanBuilder;
+    gate<TDecision = unknown>(
+      name: string,
+      options: {
+        schema: string;
+        timeoutMs?: number;
+        requiredRole: string;
+        onReject?: "fail-run" | "cancel-branch";
+        onExpire?: "fail-run" | "cancel-branch";
+      },
+      configure?: (gate: GateBuilder) => void,
+    ): ValueRef<TDecision>;
     input<T = unknown>(
       name: string,
       options: {schema: string},

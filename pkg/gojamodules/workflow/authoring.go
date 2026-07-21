@@ -266,6 +266,58 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 			Source: "set-input", Name: name, ItemSchema: itemSchema, ManifestSchema: manifestSchema,
 		})
 	})
+	mustSet(vm, object, "gate", func(call goja.FunctionCall) goja.Value {
+		b.ensureOpen(vm)
+		key := workflowv3.NodeKey(strings.TrimSpace(call.Argument(0).String()))
+		options := call.Argument(1).ToObject(vm)
+		policy := workflowv3.GatePolicy{
+			DecisionSchema: strings.TrimSpace(options.Get("schema").String()),
+			RequiredRole:   strings.TrimSpace(options.Get("requiredRole").String()),
+			OnReject:       workflowv3.GateFailRun, OnExpire: workflowv3.GateFailRun,
+		}
+		if value := options.Get("timeoutMs"); value != nil && !goja.IsUndefined(value) && !goja.IsNull(value) {
+			policy.TimeoutMillis = value.ToInteger()
+		}
+		if value := options.Get("onReject"); value != nil && !goja.IsUndefined(value) && !goja.IsNull(value) {
+			policy.OnReject = strings.TrimSpace(value.String())
+		}
+		if value := options.Get("onExpire"); value != nil && !goja.IsUndefined(value) && !goja.IsNull(value) {
+			policy.OnExpire = strings.TrimSpace(value.String())
+		}
+		if err := workflowv3.ValidateGatePolicy(policy); err != nil {
+			panic(vm.NewTypeError("invalid gate policy: %s", err))
+		}
+		for _, node := range b.ir.Nodes {
+			if node.Key == key {
+				panic(vm.NewTypeError("gate key %s conflicts with a node", key))
+			}
+		}
+		for _, gate := range b.ir.Gates {
+			if gate.Key == key {
+				panic(vm.NewTypeError("gate %s is already defined", key))
+			}
+		}
+		gate := workflowv3.IRGate{Key: key, Policy: policy}
+		b.ir.Gates = append(b.ir.Gates, gate)
+		index := len(b.ir.Gates) - 1
+		if configure, ok := goja.AssertFunction(call.Argument(2)); ok {
+			gateBuilder := vm.NewObject()
+			mustSet(vm, gateBuilder, "after", func(afterCall goja.FunctionCall) goja.Value {
+				dependency, ok := b.state.jobs[afterCall.Argument(0).ToObject(vm)]
+				if !ok {
+					panic(vm.NewTypeError("gate after requires a job from this workflow"))
+				}
+				b.ir.Gates[index].DependsOn = appendUniqueNode(b.ir.Gates[index].DependsOn, dependency)
+				return gateBuilder
+			})
+			if _, err := configure(goja.Undefined(), gateBuilder); err != nil {
+				panic(err)
+			}
+		}
+		return b.newRef(vm, workflowv3.ValueRef{
+			Source: "gate-output", GateKey: key, Schema: policy.DecisionSchema,
+		})
+	})
 	mustSet(vm, object, "task", func(call goja.FunctionCall) goja.Value {
 		b.ensureOpen(vm)
 		key := workflowv3.NodeKey(strings.TrimSpace(call.Argument(0).String()))
@@ -540,6 +592,10 @@ func budgetClaimFromValue(vm *goja.Runtime, value goja.Value) *workflowv3.Budget
 		Reserve:     budgetAmountsFromValue(vm, object.Get("reserve")),
 		OnExhausted: strings.TrimSpace(object.Get("onExhausted").String()),
 	}
+	if approval := object.Get("approvalGate"); approval != nil &&
+		!goja.IsUndefined(approval) && !goja.IsNull(approval) {
+		claim.ApprovalGate = workflowv3.NodeKey(strings.TrimSpace(approval.String()))
+	}
 	if err := workflowv3.ValidateBudgetClaim(*claim); err != nil {
 		panic(vm.NewTypeError("invalid budget claim: %s", err))
 	}
@@ -607,6 +663,10 @@ func TypeScript() string {
     account: string;
     reserve: BudgetAmounts;
     onExhausted: "fail-run" | "block" | "require-approval";
+    approvalGate?: string;
+  }
+  export interface GateBuilder {
+    after(job: JobRef): GateBuilder;
   }
   export interface JobBuilder {
     after(job: JobRef): JobBuilder;
@@ -628,6 +688,17 @@ func TypeScript() string {
       account: string,
       options: {limits: BudgetAmounts; policyDigest: string},
     ): PlanBuilder;
+    gate<TDecision = unknown>(
+      name: string,
+      options: {
+        schema: string;
+        timeoutMs?: number;
+        requiredRole: string;
+        onReject?: "fail-run" | "cancel-branch";
+        onExpire?: "fail-run" | "cancel-branch";
+      },
+      configure?: (gate: GateBuilder) => void,
+    ): ValueRef<TDecision>;
     input<T = unknown>(
       name: string,
       options: {schema: string},

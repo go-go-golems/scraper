@@ -151,7 +151,7 @@ CREATE TABLE v3_attempts (
 	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	for table, columns := range map[string][]string{
 		"v3_runs":                 {"dispatch_count"},
-		"v3_nodes":                {"resource_class", "max_attempts", "retry_backoff_ms", "ready_at", "failure_count", "budget_account", "budget_on_exhausted"},
+		"v3_nodes":                {"resource_class", "max_attempts", "retry_backoff_ms", "ready_at", "failure_count", "budget_account", "budget_on_exhausted", "budget_approval_gate"},
 		"v3_attempts":             {"resource_class"},
 		"v3_expansions":           {"page_size", "max_items", "max_materialized_ahead", "output_digest"},
 		"v3_expansion_pages":      {"page_digest"},
@@ -167,6 +167,7 @@ CREATE TABLE v3_attempts (
 	}
 	for _, table := range []string{
 		"v3_budget_accounts", "v3_node_budget_claims", "v3_budget_reservations",
+		"v3_gates", "v3_gate_dependencies", "v3_gate_consumers",
 	} {
 		var count int
 		require.NoError(t, store.db.QueryRowContext(ctx, `

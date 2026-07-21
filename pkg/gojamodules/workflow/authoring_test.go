@@ -356,6 +356,48 @@ module.exports = workflow.compile(workflow.define("budgeted", p => {
 	assertGolden(t, "budget.plan.json", result.Plan)
 }
 
+func TestAuthorCompilesDurableGate(t *testing.T) {
+	source := `
+const workflow = require("workflow");
+const tasks = require("cookbook-linear-transform-tasks");
+module.exports = workflow.compile(workflow.define("approval", p => {
+  const source = p.input("source", {schema: "customer-jsonl-ref/v1"});
+  const normalize = p.task("normalize", tasks.normalizeCustomers({source}));
+  const decision = p.gate("review", {
+    schema: "approval-decision/v1",
+    timeoutMs: 60000,
+    requiredRole: "reviewer.primary",
+    onReject: "fail-run",
+    onExpire: "fail-run",
+  }, gate => gate.after(normalize));
+  p.output("decision", decision);
+}));`
+	result, err := workflowmodule.Author(
+		context.Background(), source, linearCatalog(t), workflowv3linear.DescriptorModule(),
+	)
+	require.NoError(t, err)
+	require.Len(t, result.IR.Gates, 1)
+	require.Equal(t, workflowv3.NodeKey("normalize"), result.IR.Gates[0].DependsOn[0])
+	require.Equal(t, "gate-output", result.IR.Outputs[0].Value.Source)
+	assertGolden(t, "gate.ir.json", result.IR)
+	assertGolden(t, "gate.plan.json", result.Plan)
+}
+
+func TestAuthorRejectsUnsupportedGateBranchPolicy(t *testing.T) {
+	source := `
+const workflow = require("workflow");
+module.exports = workflow.compile(workflow.define("bad-gate", p => {
+  const decision = p.gate("review", {
+    schema: "approval-decision/v1",
+    requiredRole: "reviewer.primary",
+    onReject: "cancel-branch",
+  });
+  p.output("decision", decision);
+}));`
+	_, err := workflowmodule.Author(context.Background(), source, linearCatalog(t))
+	require.ErrorContains(t, err, "branch cancellation is not supported")
+}
+
 func TestTypeScriptDeclaresMinimalSurface(t *testing.T) {
 	declaration := workflowmodule.TypeScript()
 	expectedDeclaration, err := os.ReadFile("testdata/workflow.d.ts")
@@ -365,7 +407,7 @@ func TestTypeScriptDeclaresMinimalSurface(t *testing.T) {
 		"declare module \"workflow\"", "function define", "function compile",
 		"input<T = unknown>", "inputSet<T = unknown>", "map<I, O>(", "reduce<I, O>(",
 		"outputSet(name: string", "task(", "output(name: string",
-		"BudgetClaim", "budget(claim: BudgetClaim)",
+		"BudgetClaim", "budget(claim: BudgetClaim)", "gate<TDecision",
 	} {
 		require.Contains(t, declaration, expected)
 	}
