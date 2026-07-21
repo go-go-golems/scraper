@@ -1347,6 +1347,40 @@ Implemented evidence includes:
 - source/private canaries remain outside SQLite main/WAL/SHM;
 - a restart between tasks resumes and reopens the same root output.
 
+## Implemented trusted HTTP and database profiles
+
+Slices 3–5 extend the same bundle and registry contracts without introducing an
+ambient module registry:
+
+- `RegistryBuilder.AdvertiseModules` explicitly adds exact aliases during the
+  worker boot transaction;
+- the sealed generation digest covers implementation identities and sorted
+  aliases;
+- `ResolveNode` requires exact implementation, modules, resource class, and
+  retry policy;
+- `TaskModuleRegistry` constructs one policy-selected module instance for each
+  fresh lease runtime;
+- engine startup fails when sealed aliases and configured module factories do
+  not match exactly.
+
+The public HTTP bundle requests only `fs:input` and `fetch:public`. The host
+injects allowed origins, timeout, maximum response bytes, disabled credential
+sources, redirect checks, and `http.Client`; none of those policy values or
+headers enter the manifest or plan. Typed JavaScript failures expose stable
+codes while the host persists only redacted messages.
+
+The database bundle requests only `fs:input` and `db:sync`. The host injects a
+Go-preconfigured `QueryExecer`; go-go-goja's `configure()` path is disabled.
+The trusted bundle uses a target transaction and stable run/node operation key
+to couple writes with an idempotency marker. A test commits 500 rows, simulates
+a crash before workflow completion, restarts the workflow store, and proves the
+second attempt creates no second operation or audit row.
+
+Canonical bundle specs now include resource class and bounded fixed retry
+policy. This changes the bundle/catalog/plan digest intentionally and is
+covered by regenerated direct-Go/JavaScript goldens. Resource/policy mismatch
+is an admission error, not a runtime fallback.
+
 Hot reload, signatures/provenance verification, old/new generation draining,
 and untrusted subprocess isolation remain later architecture slices. They do not
 alter the exact identity or fresh-runtime contracts exercised here.

@@ -151,3 +151,26 @@ Final completion audit reran make validate, full isolated Go lint, store/runtime
 ### Related Files
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/engine_integration_test.go — Final end-to-end completion evidence
+
+## 2026-07-21
+
+Started implementation of workflow-v3 Slices 3–5: allowlisted HTTP snapshot, work-conserving resource dispatch, and idempotent preconfigured database synchronization; created active completion goal dafed540-d78f-4507-968d-e24ef5fc2a20
+
+## 2026-07-21
+
+Implemented Slices 3–5 core: exact resource/retry plan metadata, explicit module advertisements, allowlisted bounded fetch with guarded redirects/cancellation/redacted typed retries, store-backed fair resource admission and completion-driven dispatcher, blocked projections, and idempotent preconfigured database sync with crash-after-commit recovery
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/database_integration_test.go — Slice 5 idempotency privacy restart cardinality and failure isolation evidence
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/dispatcher.go — Work-conserving multi-resource dispatcher
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/http_integration_test.go — Slice 3 policy retry redaction limit cancellation and reopen evidence
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/modules.go — Exact trusted fetch filesystem and database aliases
+
+## 2026-07-21
+
+Documented implemented Slices 3–5 in the public Glazed topic and both architecture/bundle designs; focused implementation checkpoint committed as b05e5a0
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md — Public Slices 1-5 runtime operations and validation guide

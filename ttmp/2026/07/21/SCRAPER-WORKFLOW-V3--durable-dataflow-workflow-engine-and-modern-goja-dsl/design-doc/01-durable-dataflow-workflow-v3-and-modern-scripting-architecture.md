@@ -27,14 +27,22 @@ RelatedFiles:
       Note: Current execution-time mutable ctx surface and raw operation decoder
     - Path: repo://pkg/sites/submitverbs/runtime.go
       Note: Current independent submission ctx and raw operation decoder
+    - Path: repo://pkg/testfixtures/workflowv3database
+      Note: Reproducible Slice 5 authored workflow and bundle
+    - Path: repo://pkg/testfixtures/workflowv3http
+      Note: Reproducible Slice 3 authored workflow and bundle
     - Path: repo://pkg/workflow/context.go
       Note: Current typed Go step context and raw input/emission persistence boundary
     - Path: repo://pkg/workflowv3
       Note: Implemented canonical model compiler bundles registry failures and artifacts
     - Path: repo://pkg/workflowv3runtime
       Note: Implemented fresh Goja runtime engine and end-to-end privacy/restart evidence
+    - Path: repo://pkg/workflowv3runtime/dispatcher.go
+      Note: Implemented Slice 4 continuous work-conserving dispatch
     - Path: repo://pkg/workflowv3sqlite
       Note: Implemented compact append-only fenced SQLite persistence
+    - Path: repo://pkg/workflowv3sqlite/projection.go
+      Note: Derived active ready and blocked scheduler projection
 ExternalSources:
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/scraper
     - https://parc.yolo.scapegoat.dev/note/research/kb/projects/go-go-goja
@@ -44,6 +52,7 @@ LastUpdated: 2026-07-21T22:30:00Z
 WhatFor: Implement scraper workflow v3 without repeating the source-bearing payload, fixed-cycle scheduling, untyped scripting, and observability defects found during the real-provider TTC preparation run.
 WhenToUse: Read before changing scraper persistence, scheduling, workflow APIs, Goja/xgoja integration, or adapting researchctl and RAG to durable workflow execution.
 ---
+
 
 
 
@@ -1660,10 +1669,12 @@ Exit criteria: exact-profile TTC preflight proves compact persistence, malformed
 - remove v2 scheduler after all supported runs finish;
 - publish migration and operational recovery documentation.
 
-## Implemented minimal vertical slice
+## Implemented vertical slices 1–5
 
-As of the first implementation tranche, Slices 1 and 2 are executable rather
-than design-only.
+Slices 1–5 are now executable rather than design-only. The exact identity,
+compact-reference, attempt, fencing, privacy, and reopen contracts from the
+minimal tranche remain unchanged while HTTP, resources, retries, and database
+side effects use the same durable path.
 
 | Boundary | Implementation evidence |
 |---|---|
@@ -1674,6 +1685,9 @@ than design-only.
 | Durable execution | `pkg/workflowv3runtime/engine.go` and `pkg/workflowv3sqlite` compact schema/store |
 | Restart/privacy proof | `TestEngineRunsAuthoredWorkflowAcrossRestartWithoutPersistingSource` over 12,000 JSONL rows |
 | Fencing/identity proof | cancellation, expired lease, concurrent lease, and wrong bundle/entrypoint/ABI tests |
+| Allowlisted HTTP | `pkg/testfixtures/workflowv3http`, exact `fetch:public`, typed retry, response limit, redirect denial, cancellation, redaction, and reopen tests |
+| Work-conserving dispatch | `pkg/workflowv3runtime/dispatcher.go`, transactional resource admission, per-resource fairness, blocked projections, and mixed-resource timeline test |
+| Database synchronization | `pkg/testfixtures/workflowv3database`, exact preconfigured `db:sync`, denied `configure()`, transaction marker, post-commit crash/restart, and failure-isolation tests |
 
 The implemented DSL surface is deliberately the smallest complete path:
 `define`, typed `input`, descriptor-backed `task`, `after`, `output`, `toIR`,
@@ -1686,11 +1700,24 @@ bytes enter the content-addressed artifact store before their refs are
 transactionally committed, so a crash may leave an unreferenced immutable
 object but cannot publish an invalid partial output.
 
-The first executor is deterministic and sequential. This is an intentional
-walking-skeleton scheduling policy, not a v3 compatibility shim: plans, nodes,
-attempts, registry identities, refs, and fence transactions already use the
-final v3 control-plane contracts. Slice 4 will replace only admission/refill
-policy with the work-conserving dispatcher.
+`Engine.RunOne` remains the deterministic one-action hook. Production-style v3
+execution now uses a long-lived completion-driven `Dispatcher`: it leases until
+all compatible resource capacities are full and refills immediately after each
+completion. SQLite admission counts active nodes by resource class, while
+fairness counters are keyed by `(run_id, resource_class)`. No fixed worker batch
+or `WaitGroup` barrier remains in the v3 dispatch path.
+
+Task bundles canonically pin resource class and fixed bounded retry policy.
+Retryable failures finish one immutable attempt, set a durable `ready_at`, and
+later lease a new attempt. Queue projections derive active resources, ready
+count, and bounded blocked reasons without creating a second mutable queue.
+
+Host policy values remain outside plans. `fetch:public` receives origins,
+timeout, response bound, redirect checking, and disabled credential sources
+from Go. `db:sync` receives a Go-preconfigured target handle and rejects
+JavaScript `configure()`. The database task's logical operation key derives
+from run/node identity, so a post-commit crash can retry without duplicating the
+write.
 
 Focused validation:
 
@@ -1706,7 +1733,8 @@ GOWORK=off go test -race \
 ```
 
 The public implementation overview is
-`pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md`.
+`pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md`. Its historical slug is
+stable, while its title and content now cover Slices 1–5.
 
 ## Testing strategy
 
