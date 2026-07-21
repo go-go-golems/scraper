@@ -99,11 +99,59 @@ func TestEngineRunsAuthoredWorkflowAcrossRestartWithoutPersistingSource(t *testi
 	require.NotContains(t, string(persisted), privateCanary)
 	require.NotContains(t, string(persisted), secretToken)
 	require.Less(t, persistedBytes, int64(len(sourceBody))/2)
+	t.Logf(
+		"privacy/storage evidence: source=%d persistedSQLite=%d ratio=%.4f",
+		len(sourceBody),
+		persistedBytes,
+		float64(persistedBytes)/float64(len(sourceBody)),
+	)
 
 	sourceArtifact, err := workflowv3.ReadArtifact(ctx, artifacts, sourceRef)
 	require.NoError(t, err)
 	require.Contains(t, string(sourceArtifact), privateCanary)
 	require.Contains(t, string(sourceArtifact), secretToken)
+}
+
+func TestEnginePersistsTypedTaskFailureWithoutTaskMessage(t *testing.T) {
+	ctx := context.Background()
+	registry, err := workflowv3linear.Registry()
+	require.NoError(t, err)
+	catalog, err := registry.Catalog()
+	require.NoError(t, err)
+	authored, err := workflowmodule.Author(
+		ctx,
+		workflowv3linear.WorkflowSource(),
+		catalog,
+		workflowv3linear.DescriptorModule(),
+	)
+	require.NoError(t, err)
+	artifacts, err := workflowv3.NewFileArtifactStore(t.TempDir(), 1<<20)
+	require.NoError(t, err)
+	source, err := artifacts.Put(
+		ctx,
+		"customer-jsonl-ref/v1",
+		"application/x-ndjson",
+		[]byte("{\"id\":\"1\",\"email\":\"a@example.com\"}\n"+
+			"{\"id\":\"1\",\"email\":\"b@example.com\"}\n"),
+	)
+	require.NoError(t, err)
+	store, err := workflowv3sqlite.Open(ctx, filepath.Join(t.TempDir(), "failure.db"))
+	require.NoError(t, err)
+	defer store.Close()
+	engine := &Engine{Store: store, Registry: registry, Artifacts: artifacts}
+	require.NoError(t, engine.Submit(ctx, "duplicate", authored.Plan, map[string]workflowv3.ArtifactRef{
+		"source": source,
+	}))
+	err = engine.RunUntilIdle(ctx)
+	require.ErrorContains(t, err, "CUSTOMER_DUPLICATE_ID")
+	snapshot, err := engine.Snapshot(ctx, "duplicate")
+	require.NoError(t, err)
+	require.Equal(t, "failed", snapshot.Status)
+	require.Len(t, snapshot.Attempts, 2)
+	failure := snapshot.Attempts[1].Failure
+	require.Equal(t, "validation", failure.Class)
+	require.Equal(t, "CUSTOMER_DUPLICATE_ID", failure.Code)
+	require.Equal(t, "task reported CUSTOMER_DUPLICATE_ID", failure.Message)
 }
 
 func largeCustomerSource(canary, secret string, count int) []byte {

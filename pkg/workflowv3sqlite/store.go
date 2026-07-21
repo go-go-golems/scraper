@@ -312,8 +312,8 @@ WHERE run_id = ? AND status = 'running'
 }
 
 func (s *Store) Fail(ctx context.Context, lease workflowv3.Lease, failure workflowv3.Failure, now time.Time) error {
-	if strings.TrimSpace(failure.Class) == "" || strings.TrimSpace(failure.Code) == "" {
-		return fmt.Errorf("failure class and code are required")
+	if err := workflowv3.ValidateFailure(failure); err != nil {
+		return err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

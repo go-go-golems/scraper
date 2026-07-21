@@ -25,8 +25,8 @@ type BundleManifest struct {
 }
 
 type Bundle struct {
-	Manifest BundleManifest
-	Files    map[string][]byte
+	manifest BundleManifest
+	files    map[string][]byte
 	digest   string
 }
 
@@ -103,7 +103,7 @@ func NewBundle(manifest BundleManifest, files map[string][]byte) (*Bundle, error
 	if err != nil {
 		return nil, err
 	}
-	return &Bundle{Manifest: manifest, Files: clonedFiles, digest: digest}, nil
+	return &Bundle{manifest: manifest, files: clonedFiles, digest: digest}, nil
 }
 
 func (b *Bundle) Digest() string {
@@ -113,16 +113,23 @@ func (b *Bundle) Digest() string {
 	return b.digest
 }
 
+func (b *Bundle) Manifest() BundleManifest {
+	if b == nil {
+		return BundleManifest{}
+	}
+	return cloneManifest(b.manifest)
+}
+
 func (b *Bundle) TaskSpecs() []TaskSpec {
 	if b == nil {
 		return nil
 	}
-	ret := make([]TaskSpec, 0, len(b.Manifest.Tasks))
-	for _, task := range b.Manifest.Tasks {
+	ret := make([]TaskSpec, 0, len(b.manifest.Tasks))
+	for _, task := range b.manifest.Tasks {
 		ret = append(ret, TaskSpec{
 			Identity: ImplementationIdentity{
 				TaskKey: task.TaskKey, BundleDigest: b.digest,
-				Entrypoint: task.Entrypoint, ABI: b.Manifest.ABI,
+				Entrypoint: task.Entrypoint, ABI: b.manifest.ABI,
 			},
 			Inputs: cloneStringMap(task.Inputs), Outputs: cloneStringMap(task.Outputs),
 			Modules: append([]string(nil), task.Modules...),
@@ -141,7 +148,7 @@ func (b *Bundle) File(name string) ([]byte, bool) {
 	if b == nil {
 		return nil, false
 	}
-	body, ok := b.Files[name]
+	body, ok := b.files[name]
 	return append([]byte(nil), body...), ok
 }
 

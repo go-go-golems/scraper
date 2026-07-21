@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -168,6 +169,48 @@ func TestStoreReclaimsExpiredLeaseAsNewAttempt(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "lease_lost", snapshot.Attempts[0].Status)
 	require.Equal(t, "running", snapshot.Attempts[1].Status)
+}
+
+func TestStoreConcurrentLeaseRaceHasSingleWinner(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := storeFixture(t, "first")
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+	require.NoError(t, err)
+	defer store.Close()
+	now := time.Now().UTC()
+	require.NoError(t, store.CreateRun(ctx, "run", plan, map[string]workflowv3.ArtifactRef{
+		"source": artifactRef("source/v1", "1"),
+	}, now))
+
+	const contenders = 8
+	var wait sync.WaitGroup
+	leases := make(chan *workflowv3.Lease, contenders)
+	errorsFound := make(chan error, contenders)
+	for i := 0; i < contenders; i++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			lease, err := store.LeaseNext(ctx, registry, now, time.Minute)
+			if err != nil {
+				errorsFound <- err
+				return
+			}
+			leases <- lease
+		}()
+	}
+	wait.Wait()
+	close(leases)
+	close(errorsFound)
+	for err := range errorsFound {
+		require.NoError(t, err)
+	}
+	winners := 0
+	for lease := range leases {
+		if lease != nil {
+			winners++
+		}
+	}
+	require.Equal(t, 1, winners)
 }
 
 func TestStoreDoesNotLeaseImplementationFromDifferentBundle(t *testing.T) {

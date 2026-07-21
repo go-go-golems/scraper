@@ -2,6 +2,7 @@ package workflowv3runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -55,6 +56,11 @@ func (e *Engine) RunOne(ctx context.Context) (bool, error) {
 		failure := workflowv3.Failure{
 			Class: "internal", Code: "WORKFLOW_TASK_EXECUTION",
 			Retryable: false, Message: "task execution failed",
+		}
+		var taskFailure *TaskFailureError
+		if errors.As(err, &taskFailure) {
+			failure = taskFailure.Failure
+			failure.Message = "task reported " + failure.Code
 		}
 		if persistErr := e.Store.Fail(ctx, *lease, failure, e.now()); persistErr != nil {
 			return true, fmt.Errorf("execute task: %v; persist failure: %w", err, persistErr)
