@@ -1669,9 +1669,9 @@ Exit criteria: exact-profile TTC preflight proves compact persistence, malformed
 - remove v2 scheduler after all supported runs finish;
 - publish migration and operational recovery documentation.
 
-## Implemented vertical slices 1–7
+## Implemented vertical slices 1–8
 
-Slices 1–7 are now executable rather than design-only. The exact identity,
+Slices 1–8 are now executable rather than design-only. The exact identity,
 compact-reference, attempt, fencing, privacy, and reopen contracts from the
 minimal tranche remain unchanged while HTTP, resources, retries, and database
 side effects use the same durable path.
@@ -1690,6 +1690,7 @@ side effects use the same durable path.
 | Database synchronization | `pkg/testfixtures/workflowv3database`, exact preconfigured `db:sync`, denied `configure()`, transaction marker, post-commit crash/restart, and failure-isolation tests |
 | Lazy maps | `pkg/testfixtures/workflowv3map`, typed set/map authoring, strict manifests, deterministic child keys, paged expansion, backpressure, ordinary dynamic attempts, ordered publication, and 1,807-item restart/privacy evidence |
 | Bounded reductions | `pkg/testfixtures/workflowv3reduce`, typed reduce authoring, immutable bounded partitions, lease-local member rehydration, multi-level recovery, deterministic root publication, failure isolation, and 257-item evidence |
+| Rolling registries | `pkg/workflowv3runtime/registry_manager.go`, atomic activation, exact generation acquisition before lease persistence, draining, reference-safe removal, quarantine, restart reconstruction, and A/B executable-byte evidence |
 
 The implemented DSL surface includes `define`, typed `input` and `inputSet`,
 descriptor-backed `task`, `map`, `reduce`, `after`, `output` and `outputSet`, `toIR`,
@@ -1740,7 +1741,7 @@ GOWORK=off go test -race \
 
 The public implementation overview is
 `pkg/doc/topics/scraper-workflow-v3-minimal-runtime.md`. Its historical slug is
-stable, while its title and content now cover Slices 1–7.
+stable, while its title and content now cover Slices 1–8.
 
 ## Testing strategy
 

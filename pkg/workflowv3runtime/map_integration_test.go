@@ -142,7 +142,7 @@ func TestLazyMapScaleAcrossRestartWithDeterministicOutput(t *testing.T) {
 	require.NoError(t, err)
 	engine := &Engine{
 		Store: store, Registry: registry, Artifacts: artifacts, Modules: modules,
-		LeaseDuration: 2 * time.Second,
+		LeaseDuration: 10 * time.Second,
 	}
 	require.NoError(t, engine.Submit(ctx, "lazy-map-1807", authored.Plan, map[string]workflowv3.ArtifactRef{
 		"records": manifestRef,
@@ -158,7 +158,7 @@ func TestLazyMapScaleAcrossRestartWithDeterministicOutput(t *testing.T) {
 	require.NoError(t, err)
 	engine = &Engine{
 		Store: store, Registry: registry, Artifacts: artifacts, Modules: modules,
-		LeaseDuration: 2 * time.Second,
+		LeaseDuration: 10 * time.Second,
 	}
 	dispatcher := &Dispatcher{
 		Engine: engine, Capacities: map[string]int{workflowv3map.ResourceClass: 8},

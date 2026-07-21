@@ -112,6 +112,11 @@ func TestRegistryManagerPinsDurableAttemptsAcrossActivation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, registryA.Generation(), leaseA.RegistryGeneration)
 	require.NoError(t, manager.Activate(registryB, nil))
+	require.NoError(t, engine.Submit(ctx, "run-a-pending", planA, map[string]workflowv3.ArtifactRef{"input": input}))
+	pendingA, err := store.LeaseNext(ctx, manager, now.Add(time.Second), time.Minute)
+	require.NoError(t, err)
+	require.Equal(t, registryA.Generation(), pendingA.RegistryGeneration)
+	require.NoError(t, engine.ExecuteLease(ctx, *pendingA))
 	require.NoError(t, engine.ExecuteLease(ctx, *leaseA))
 	require.NoError(t, engine.Submit(ctx, "run-b", planB, map[string]workflowv3.ArtifactRef{"input": input}))
 	leaseB, err := store.LeaseNext(ctx, manager, now.Add(time.Second), time.Minute)
@@ -131,6 +136,13 @@ func TestRegistryManagerPinsDurableAttemptsAcrossActivation(t *testing.T) {
 	require.JSONEq(t, `{"version":"A"}`, string(bodyA))
 	require.JSONEq(t, `{"version":"B"}`, string(bodyB))
 	require.NoError(t, manager.RemoveDrained(registryA.Generation()))
+	require.NoError(t, store.CreateRun(
+		ctx, "run-a-unavailable", planA,
+		map[string]workflowv3.ArtifactRef{"input": input}, now.Add(2*time.Second),
+	))
+	queue, err := store.QueueSnapshot(ctx, manager, nil, now.Add(2*time.Second))
+	require.NoError(t, err)
+	require.Equal(t, 1, queue.BlockedByReason["implementation-unavailable"])
 	restarted, err := NewRegistryManager(registryB)
 	require.NoError(t, err)
 	_, err = restarted.ResolveNode(planB.Nodes[0])

@@ -982,7 +982,7 @@ Two configured bundles cannot register the same `TaskKey` with different impleme
 
 ### Runtime construction failure
 
-If a worker advertised an implementation but cannot create its runtime, the attempt fails `internal/TASK_RUNTIME_CONSTRUCTION`. Repeated failures should quarantine that implementation/worker generation and withdraw advertisement rather than burn all task retries.
+If a worker advertised an implementation but cannot create its runtime, the attempt fails `configuration/TASK_RUNTIME_CONSTRUCTION`. Repeated failures quarantine that worker generation and withdraw exact admission without consuming semantic task retries.
 
 ### Output validation failure
 
@@ -1383,9 +1383,11 @@ policy. This changes the bundle/catalog/plan digest intentionally and is
 covered by regenerated direct-Go/JavaScript goldens. Resource/policy mismatch
 is an admission error, not a runtime fallback.
 
-Hot reload, signatures/provenance verification, old/new generation draining,
-and untrusted subprocess isolation remain later architecture slices. They do not
-alter the exact identity or fresh-runtime contracts exercised here.
+Atomic activation, old/new generation draining, exact attempt acquisition,
+reference-safe cleanup, and construction-failure quarantine are implemented in
+Slice 8. Signatures/provenance verification and untrusted subprocess isolation
+remain later architecture slices. They do not alter the exact identity or
+fresh-runtime contracts exercised here.
 
 ## Intern checklist
 

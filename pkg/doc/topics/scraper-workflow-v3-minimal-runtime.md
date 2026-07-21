@@ -1,7 +1,7 @@
 ---
-Title: Workflow V3 Runtime Slices 1–7
+Title: Workflow V3 Runtime Slices 1–8
 Slug: scraper-workflow-v3-minimal-runtime
-Short: "Explains executable workflow-v3 file, HTTP, dispatcher, database, lazy-map, and reduction slices with exact capabilities and durable privacy boundaries."
+Short: "Explains executable workflow-v3 file, HTTP, dispatcher, database, map, reduction, and rolling-registry slices with exact capabilities and durable privacy boundaries."
 Topics:
 - scraper
 - runtime
@@ -17,12 +17,12 @@ ShowPerDefault: true
 SectionType: GeneralTopic
 ---
 
-Workflow v3 has seven executable vertical slices for trusted first-party
+Workflow v3 has eight executable vertical slices for trusted first-party
 JavaScript tasks: linear file processing, typed authoring, allowlisted HTTP,
 work-conserving resource dispatch, idempotent database synchronization,
-deterministic lazy maps, and bounded reduction trees. It remains intentionally
-separate from the existing v2 site and submission runtime while later
-upgrade/budget capabilities are added.
+deterministic lazy maps, bounded reduction trees, and immutable rolling
+registry generations. It remains intentionally separate from the existing v2
+site and submission runtime while later budget/gate capabilities are added.
 
 ## What runs today
 
@@ -144,6 +144,21 @@ succeeds, and finishes with 296 total attempts. Capacity 1 and capacity 4
 produce the same root digest. Malformed-shard failure remains isolated from an
 unrelated successful run.
 
+## Rolling registry behavior
+
+A worker may atomically activate a fully validated sealed registry generation.
+The prior generation becomes draining, and each lease retains the exact
+registered task and generation acquired before its attempt is persisted. Old
+A bytes can therefore finish after B activates while newly admitted B-pinned
+plans execute B bytes. Attempt records expose the exact generation.
+
+Candidate self-test failure leaves the active generation unchanged. Repeated
+module/factory/runtime construction failure creates append-only infrastructure
+attempts without consuming semantic task retry debt, quarantines the broken
+generation, and projects affected work as `implementation-unavailable`.
+Dispatcher projections include active, draining, and quarantined generations.
+Removal is denied while a generation has acquired references.
+
 ## HTTP and database behavior
 
 The HTTP fixture snapshots at most eight explicitly supplied article URLs.
@@ -183,8 +198,9 @@ cd web && pnpm exec tsc --noEmit --skipLibCheck \
 
 The focused tests cover the 12,000-row file workflow, real local HTTP and
 SQLite target servers, a 1,807-item JavaScript lazy map, and a 257-item
-multi-level JavaScript reduction. They prove typed
-retry, allowlist and redirect denial,
+multi-level JavaScript reduction, and exact A/B registry generations. They
+prove typed retry, atomic activation, draining, quarantine without domain retry
+debt, allowlist and redirect denial,
 response limits, in-flight cancellation, independent resource refill,
 per-resource fairness, blocked projections, database reconfiguration denial,
 post-commit crash recovery, deterministic paged expansion, backpressure,
@@ -213,5 +229,5 @@ control persistence and the published output manifest.
 - `pkg/testfixtures/workflowv3reduce` — real bounded word-count map/reduction
   workflow and trusted JavaScript bundle.
 
-Later slices add rolling registry generations, budgets, gates, and stronger
-process isolation. V3 does not translate or silently accept v2 raw operations.
+Later slices add transactional budgets, approval gates, and stronger process
+isolation. V3 does not translate or silently accept v2 raw operations.

@@ -24,7 +24,7 @@
 - [x] Validate document audit and publish evidence for workflow v3 Slices 3 through 5 <!-- t:v8h8 -->
 - [x] Design and implement Slice 6 deterministic restart-safe lazy maps <!-- t:r9t3 -->
 - [x] Design and implement Slice 7 bounded deterministic reductions <!-- t:w450 -->
-- [ ] Design and implement Slice 8 rolling immutable registry generations <!-- t:x8rm -->
+- [x] Design and implement Slice 8 rolling immutable registry generations <!-- t:x8rm -->
 - [ ] Design and implement Slice 9 transactional budgets and authoritative projections <!-- t:gkai -->
 - [ ] Design and implement Slice 10 durable lease-free approval gates <!-- t:ks62 -->
 - [ ] Validate document audit and publish evidence for workflow v3 Slices 6 through 10 <!-- t:gjfd -->
