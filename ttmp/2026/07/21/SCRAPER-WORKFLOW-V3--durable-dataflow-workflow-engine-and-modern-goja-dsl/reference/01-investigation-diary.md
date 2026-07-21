@@ -2518,3 +2518,137 @@ that an HTTP credential cannot be echoed into a durable result accidentally.
 
 - Task DTS: `pkg/workflowv3runtime/testdata/workflow-task.d.ts`.
 - HTTP snapshot identity field: zero-based stable `index`.
+
+## Step 24: Audit Slices 3–5 against the active completion contract
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 19)
+
+**Assistant interpretation:** Mark the three slices complete only after every
+outcome, constraint, and verification clause maps to fresh evidence.
+
+**Inferred user intent:** Receive a reproducible handoff with no narrowed or
+implicitly deferred requirement.
+
+### Outcome audit
+
+| Goal requirement | Fresh evidence |
+|---|---|
+| Real allowlisted HTTP snapshot | Authored `workflow.js`, exact bundle, IR/plan goldens, and successful local HTTP integration in `pkg/testfixtures/workflowv3http` |
+| Exact `fetch:*` without ambient network | Explicit sealed `fetch:public`; empty/wildcard profile and missing alias rejected; denied origins, redirects, URL credentials, credential sources, and sensitive headers blocked |
+| Typed HTTP failures/retry/limits/cancellation/redaction | 503 retry then success, 429 bounded retries, terminal 404, transport denial, 64-byte response bound, lease-watched cancellation, stable code/message assertions, SQLite/output canary scans |
+| HTTP resource class | Canonical plan and attempts pin `network.http.public`; dispatcher capacity is one in integration |
+| Work-conserving immediate refill | Timeline holds HTTP-1 and unrelated slow task, releases only HTTP-1, and observes HTTP-2 start before slow completion |
+| Independent durable capacities | Mixed resource projection and two independent SQLite connections prove one database-scoped winner per class |
+| Dependency/fairness/determinism | Existing dependency tests plus per-resource run fairness, stable tie ordering, exact plan goldens, and deterministic single-action `DispatchOnce` |
+| Append-only attempts/retries/fencing | Retry/backoff/reopen, lease-loss, concurrent lease, stale completion, cancellation epoch, and immutable attempt snapshots |
+| Blocked projections | Tests cover dependency, retry-backoff, resource-capacity, and implementation-unavailable reasons |
+| Real preconfigured database synchronization | Authored fixture and exact `db:sync` alias execute 500 target writes through a Go-provided `*sql.DB` |
+| Script reconfiguration denied | Every database attempt calls `configure()` and receipt proves `configureDenied=true`; nil host handle fails registry construction |
+| Transactions and idempotency | Side effects, operation marker, and audit commit in one target transaction; operation key equals SHA-256 of exact run/node identity |
+| Crash after side effect | Attempt one commits, its result is discarded, store closes while lease is running, restart reclaims it as `lease_lost`, and attempt two adds zero writes |
+| Schema/cardinality/failure isolation | Ref schema/output tests, duplicate/cardinality failures, one bad database run terminally fails while another succeeds |
+| Compact privacy and reopen | 499,554 source bytes versus 90,112 workflow SQLite bytes (18.04%); source/SQL/URL/body canaries absent; final refs and plan digest reopen identically |
+| Go remains authoritative | Go owns normalization, resource/retry policy, digest, compile, module admission, leases, capacity, attempts, schemas, outputs, and persistence |
+| Existing behavior preserved | Minimal-v3 schema migration passes; full v2/v3 repository tests and build pass after the reviewed jsverbs API adaptation |
+| Documentation and continuous diary | Public help, two design docs, tasks, changelog, relations, and Steps 19–24 updated in focused commits |
+
+### Privacy audit
+
+- Workflow SQLite/WAL/SHM contains no HTTP query/password canary, response-body
+  canary, database source canary, source SQL text, or target rows.
+- HTTP output does not copy request URLs; stable indexes prevent query-token
+  echo. Public response bytes exist only in the external content-addressed
+  snapshot artifact.
+- Target database intentionally contains domain rows and the compact operation
+  key; workflow SQLite contains only its receipt ref.
+- HTTP/database task errors are converted to stable typed failures before they
+  cross the runtime boundary. Persisted messages contain only
+  `task reported <CODE>`.
+- Source review confirms the fetch module does not log request/response bodies;
+  database debug logging emits fixed trusted query text but not parameter values.
+  No workflow report includes source, credentials, headers, bodies, or rows.
+
+### Verification audit
+
+Fresh final commands and results:
+
+- `make validate` — passed all Go tests, web unit tests, generation, Go binary
+  build, TypeScript application build, and Vite production build.
+- `GOWORK=off .bin/golangci-lint run ./cmd/... ./pkg/...` — `0 issues`.
+- `GOWORK=off go test -race ./pkg/workflowv3runtime
+  ./pkg/workflowv3sqlite -count=1` — passed.
+- Four new JavaScript sources pass `node --check`.
+- Authoring and task DTS goldens pass and both declarations compile with `tsc`.
+- HTTP/database/linear IR and plan goldens pass.
+- Verbose HTTP, dispatcher, database crash/privacy, old-schema migration,
+  retry/reopen, cross-connection resource, and fairness suites pass.
+- Public help smoke renders `Workflow V3 Runtime Slices 1–5`.
+- `rg` finds no TODO/FIXME/HACK in new packages/fixtures.
+- `git diff --check` passes; generated outputs introduced no uncommitted files.
+- `docmgr doctor` and relevant frontmatter validation pass.
+
+The only build advisory is the repository's previously documented Vite chunk
+size warning; it is not a failed check or workflow-v3 requirement and no source
+from that frontend bundle changed in this tranche.
+
+### What I did
+
+- Repeated every completion-critical command after the final privacy/type
+  changes.
+- Ran key evidence tests verbosely and preserved byte ratios in output.
+- Checked final tasks, placeholder scan, generated tree, help rendering, and
+  working-tree state.
+- Mapped each active-goal clause to specific code and test evidence above.
+
+### What worked
+
+- Every required command and negative/positive artifact check passed.
+- All four Slice 3–5 docmgr tasks are checked.
+- No required capability is deferred to a later slice.
+
+### What didn't work
+
+- N/A in the final audit rerun. All earlier failures and fixes are preserved in
+  Steps 20–21.
+
+### What I learned
+
+- Slices 3–5 form one coherent contract: resource policy belongs in canonical
+  task identity; sensitive host policy stays outside plans; exact aliases join
+  them at worker admission.
+
+### What was tricky to build
+
+- The audit had to distinguish future capabilities (lazy maps, reductions,
+  budgets, gates, rolling generations, untrusted isolation) from requirements
+  of these three slices. None is used as an excuse to weaken current HTTP,
+  dispatch, or database invariants.
+
+### What warrants a second pair of eyes
+
+- Transaction ordering in resource lease/fairness updates.
+- Lease watcher polling and cancellation during SQLite contention.
+- Public fetch transport composition with custom clients.
+- Target transaction/idempotency marker behavior on non-SQLite databases.
+
+### What should be done in the future
+
+- Proceed to Slice 6 lazy maps only after review of this checkpoint.
+- Benchmark full ready-queue scanning before adding starvation-safe pagination.
+
+### Code review instructions
+
+- Review commits `b05e5a0`, `c1e0023`, and `c4c670b` first, then their paired
+  documentation commits.
+- Reproduce the verification commands and verbose tests listed above.
+- Inspect workflow SQLite bytes separately from the intentional target database
+  and external artifact store.
+
+### Technical details
+
+- Active goal: `dafed540-d78f-4507-968d-e24ef5fc2a20`.
+- Final implementation commits: `b05e5a0`, `7df9f59`, `c1e0023`, `c4c670b`.
+- Final documentation commits through the preceding step: `d35709e`,
+  `3115402`.

@@ -188,3 +188,7 @@ Hardened Slices 3–5 after audit: fail-closed public fetch profiles and credent
 ## 2026-07-21
 
 Finalized typed privacy contracts: completed failure vocabulary, exact workflow/task DTS plus TypeScript compile check, snapshot index output that cannot echo URL credentials, and implementation-unavailable projection evidence (commit c4c670b)
+
+## 2026-07-21
+
+Completed Slices 3–5 audit: make validate, full isolated lint, race suites, TypeScript DTS compile, JavaScript syntax, help smoke, migration/retry/resource/fairness/crash/reopen/privacy verbose evidence, generated output review, and placeholder scan all pass
