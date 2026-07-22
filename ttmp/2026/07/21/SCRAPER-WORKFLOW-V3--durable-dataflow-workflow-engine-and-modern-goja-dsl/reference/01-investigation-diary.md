@@ -4343,3 +4343,19 @@ than a product regression. I made no test or product change. A complete fresh
 `make validate` retry then passed all Go packages, web unit tests, generated
 outputs, all three Go builds, TypeScript, and the Vite production build. The
 runtime package including real isolation completed in 86.548s.
+
+## Step 41: Slice 12 exposed chained lazy-map activation gap
+
+The first RAG-owned Workflow V3 preparation graph uses generation and embedding
+maps in sequence. A 65-item fast integration run proved all generation children
+and the malformed-output retry succeeded, but the embedding expansion remained
+`pending` after generation publication. The generic store initialized only
+set-input expansion refs at submission and never atomically transferred a
+published map manifest to downstream map expansions.
+
+`PublishMapOutput` now decodes the already-validated immutable run plan in its
+publication transaction and activates every exact `map-output` consumer by
+copying only the published compact manifest ref into a still-pending expansion.
+It remains idempotent and performs no artifact-body persistence. Focused SQLite
+and runtime map suites passed. This is a generic chained-map correctness fix,
+not RAG behavior in scraper.
