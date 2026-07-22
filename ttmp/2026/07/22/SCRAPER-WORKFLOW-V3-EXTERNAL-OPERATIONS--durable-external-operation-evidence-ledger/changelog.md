@@ -135,3 +135,8 @@ Step 16: completed end-to-end RAG sweep operation custody staging and researchct
 
 Step 17: added reopen-safe external operation completion and idempotency regression
 
+
+## 2026-07-22
+
+Step 18: passed byte-level privacy canary over the fixture custody and researchctl export bundle
+
