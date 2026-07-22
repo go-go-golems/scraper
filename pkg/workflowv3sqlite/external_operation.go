@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
@@ -142,6 +143,9 @@ func (s *Store) BeginExternalOperation(ctx context.Context, lease workflowv3.Lea
 	if err := checkFence(ctx, tx, lease); err != nil {
 		return workflowv3.ExternalOperationTicket{}, err
 	}
+	if err := checkExternalOperationAllocation(ctx, tx, lease, spec.Reservation); err != nil {
+		return workflowv3.ExternalOperationTicket{}, err
+	}
 	var admitted int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM v3_external_operations WHERE run_id=? AND node_key=? AND attempt_no=? AND descriptor_digest=?`, lease.RunID, lease.NodeKey, lease.Attempt, descriptor.Digest).Scan(&admitted); err != nil {
 		return workflowv3.ExternalOperationTicket{}, err
@@ -211,6 +215,9 @@ func (s *Store) FinishExternalOperation(ctx context.Context, ticket workflowv3.E
 	if subtle.ConstantTimeCompare([]byte(completionKeyDigest), []byte(digestCompletionKey(ticket.CompletionKey))) != 1 {
 		return fmt.Errorf("external operation completion ticket is invalid")
 	}
+	if err := validateCompletionAllocation(ctx, tx, ticket.OperationID, completion); err != nil {
+		return err
+	}
 	var existingDigest string
 	err = tx.QueryRowContext(ctx, `SELECT completion_digest FROM v3_external_operation_completions WHERE operation_id=?`, ticket.OperationID).Scan(&existingDigest)
 	switch {
@@ -246,6 +253,100 @@ VALUES(?,?,?,?,?,?,?,?,?)`, ticket.OperationID, formatTime(completion.ProviderSt
 		return err
 	}
 	return tx.Commit()
+}
+
+func validateCompletionAllocation(ctx context.Context, tx *sql.Tx, operationID string, completion workflowv3.ExternalOperationCompletion) error {
+	rows, err := tx.QueryContext(ctx, `SELECT dimension,units FROM v3_external_operation_allocations WHERE operation_id=?`, operationID)
+	if err != nil {
+		return err
+	}
+	allocations := map[string]int64{}
+	for rows.Next() {
+		var dimension string
+		var units int64
+		if err := rows.Scan(&dimension, &units); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		allocations[dimension] = units
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if len(allocations) == 0 {
+		return nil
+	}
+	switch completion.AccountingMode {
+	case workflowv3.ExternalOperationAccountingConservative:
+		return nil
+	case workflowv3.ExternalOperationAccountingNone:
+		return fmt.Errorf("external operation with reservations cannot use no accounting")
+	case workflowv3.ExternalOperationAccountingActual:
+		observed := map[string]int64{}
+		for _, counter := range completion.Counters {
+			observed[counter.Name] = counter.Units
+		}
+		for dimension, allocated := range allocations {
+			units, ok := observed[dimension]
+			if !ok || units > allocated {
+				return fmt.Errorf("external operation actual usage %q exceeds or omits reservation", dimension)
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("external operation accounting mode is invalid")
+	}
+}
+
+func checkExternalOperationAllocation(ctx context.Context, tx *sql.Tx, lease workflowv3.Lease, requested []workflowv3.ExternalOperationCounter) error {
+	if len(requested) == 0 {
+		return nil
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT dimension,reserved_units FROM v3_budget_reservations WHERE run_id=? AND node_key=? AND attempt_no=? AND status='reserved'`, lease.RunID, lease.NodeKey, lease.Attempt)
+	if err != nil {
+		return err
+	}
+	reserved := map[string]int64{}
+	for rows.Next() {
+		var dimension string
+		var units int64
+		if err := rows.Scan(&dimension, &units); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		reserved[dimension] = units
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	allocatedRows, err := tx.QueryContext(ctx, `SELECT allocation.dimension,COALESCE(SUM(allocation.units),0) FROM v3_external_operation_allocations allocation JOIN v3_external_operations operation ON operation.operation_id=allocation.operation_id WHERE operation.run_id=? AND operation.node_key=? AND operation.attempt_no=? GROUP BY allocation.dimension`, lease.RunID, lease.NodeKey, lease.Attempt)
+	if err != nil {
+		return err
+	}
+	allocated := map[string]int64{}
+	for allocatedRows.Next() {
+		var dimension string
+		var units int64
+		if err := allocatedRows.Scan(&dimension, &units); err != nil {
+			_ = allocatedRows.Close()
+			return err
+		}
+		allocated[dimension] = units
+	}
+	if err := allocatedRows.Close(); err != nil {
+		return err
+	}
+	for _, counter := range requested {
+		limit, ok := reserved[counter.Name]
+		if !ok {
+			return fmt.Errorf("external operation reservation %q is not reserved by attempt", counter.Name)
+		}
+		used := allocated[counter.Name]
+		if used < 0 || counter.Units > math.MaxInt64-used || used+counter.Units > limit {
+			return fmt.Errorf("external operation reservation %q exceeds attempt reservation", counter.Name)
+		}
+	}
+	return nil
 }
 
 func newCompletionKey() (string, error) {
