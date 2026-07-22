@@ -130,3 +130,8 @@ Step 15: added RAG-owned strict researchctl operation-custody run-export builder
 
 Step 16: completed end-to-end RAG sweep operation custody staging and researchctl atomic import
 
+
+## 2026-07-22
+
+Step 17: added reopen-safe external operation completion and idempotency regression
+
