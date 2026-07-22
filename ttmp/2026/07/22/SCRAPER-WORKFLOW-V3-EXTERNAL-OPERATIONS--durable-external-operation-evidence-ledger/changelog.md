@@ -150,3 +150,8 @@ Step 19: added race-validated lease-loss fence and prior-ticket completion regre
 
 Step 20: recorded full lifecycle-suite audit and the unchanged runtime restart baseline failure
 
+
+## 2026-07-22
+
+Step 21: repaired durable schema privacy fixture baseline; full normal/race lifecycle suites now pass
+

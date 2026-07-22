@@ -918,3 +918,9 @@ Error: "299008" is not less than "249777"
 ```
 
 It occurs under the existing FULL-synchronous configuration and is outside the external-operation change set; no threshold was weakened. Because this unresolved runtime baseline failure prevents a clean full-package validation, lifecycle task closure remains deferred pending its independent repair or an explicit disposition.
+
+## Step 21: Repair the durable-schema privacy fixture baseline
+
+The full runtime failure was not unrelated after all: the external-operation schema adds a fixed durable SQLite footprint, causing the old 500-row privacy fixture to fall below its intended “database is less than half the source” signal. I increased the source fixture to 750 rows and made the receipt assertion derive from `rowCount`; the privacy invariant itself remains unchanged (`persistedBytes < input.Size/2`) and is now meaningful against the enlarged fixed schema.
+
+Focused normal/race restart tests passed, followed by full normal and race suites for both `workflowv3sqlite` and `workflowv3runtime`, plus lint. This clears the former full-suite blocker and completes the lifecycle test matrix: cancellation, lease loss, restart/reopen, retry idempotency, concurrency, and privacy.
