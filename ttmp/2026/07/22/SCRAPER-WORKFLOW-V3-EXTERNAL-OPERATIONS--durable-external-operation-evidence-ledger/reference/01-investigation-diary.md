@@ -858,3 +858,7 @@ A fixture run produced 282 operation records across twelve cells; every referenc
 ### What was tricky to build
 
 The sweep deletes per-cell SQLite files to avoid retaining transient runtime state. Export therefore must happen after terminal snapshot/budget resolution but before `Store.Close` and runtime deletion. The error paths need exactly the same ordering; otherwise failed cells would be the ones least likely to retain call-time evidence.
+
+## Step 12: Close per-cell evidence and failed reductions
+
+The RAG sweep now derives a closed, deterministic reduction directly from operation ledger rows for failed or timed-out cells: admission/completion/incomplete counts, bounded outcomes, elapsed time, peak active spans, generation/embedding overlap, and operation counts. A forced one-nanosecond fixture deadline emitted a privacy-safe failed checkpoint, JSONL, and manifest with a zero-operation reduction; the normal fixture run exercises populated per-cell exports. No provider text or arbitrary metadata is admitted into this reduction.
