@@ -115,3 +115,8 @@ Step 12: completed RAG per-cell operation custody and deterministic failed-cell 
 
 Step 13: added race-validated concurrent external-operation admission and completion regression
 
+
+## 2026-07-22
+
+Step 14: mapped the researchctl public import seam for RAG-owned operation custody export
+
