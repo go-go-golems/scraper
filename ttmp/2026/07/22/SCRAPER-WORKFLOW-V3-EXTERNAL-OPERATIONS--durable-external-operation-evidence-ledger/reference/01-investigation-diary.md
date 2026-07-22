@@ -574,3 +574,47 @@ provider/tool call --Finish--> immutable completion
 canceled/stale lease --Begin--> rejected
 canceled/stale lease + prior ticket --Finish--> accepted safe evidence only
 ```
+
+## Step 6: Scope recorders to trusted module factories
+
+This step connects the ledger to the Workflow runtime without making it a JavaScript capability. Exact host-module factories now declare immutable operation descriptors. The engine collects descriptors only for the leased task's requested module aliases and builds a recorder bound to that lease. The recorder checks the lease during admission and resolves only those descriptor digests.
+
+`TaskModuleContext` receives the recorder for trusted Go module implementation. `workflow/task` remains unchanged, and the isolated-worker request protocol still has no recorder or database path.
+
+**Commit (code):** `80ef254` — "workflowv3: scope external operation recorders"
+
+### What I did
+- Added descriptor ownership and cloned lookup to `TaskModuleRegistry`.
+- Added the lease-scoped SQLite recorder adapter.
+- Constructed and injected the recorder in `Engine.ExecuteLease`.
+- Passed it only through `TaskRequest` and `TaskModuleContext`.
+- Added registry clone/scope regression coverage.
+
+### Why
+The host module that performs a provider/tool call needs the recorder, but JavaScript and restricted workers must not gain arbitrary external-operation or database authority.
+
+### What worked
+```text
+GOWORK=off go test ./pkg/workflowv3runtime -run '^(TestTaskModuleRegistry|TestEngineCompletesWorkflow|TestRunTaskPreservesTypedFailure)$' -count=1
+ok github.com/go-go-golems/scraper/pkg/workflowv3runtime
+GOWORK=off golangci-lint run ./pkg/workflowv3runtime/... ./pkg/workflowv3sqlite/...
+0 issues.
+```
+
+### What didn't work
+The initial compile omitted the `workflowv3` import in `modules.go`; Go reported undefined references. Adding the explicit import fixed the build. No behavior was masked.
+
+### What I learned
+Descriptor selection belongs to exact module aliases, not JavaScript task code. A recorder with no matching descriptor rejects admission; completing an operation still uses the admission's descriptor digest and ticket.
+
+### What was tricky to build
+The engine must treat descriptor/recorder construction failures as typed Workflow failures before task execution. This preserves parent lease authority while avoiding a fresh side channel into Goja.
+
+### What warrants a second pair of eyes
+Review the recorder's completion lookup path and the planned bounded finish context before provider modules begin using it.
+
+### What should be done in the future
+Implement queries/projections/export next, then wire the RAG provider using the scoped recorder.
+
+### Code review instructions
+Review `modules.go`, `engine.go`, and the SQLite adapter. Verify no JavaScript object or isolated-worker protocol field exposes the recorder.

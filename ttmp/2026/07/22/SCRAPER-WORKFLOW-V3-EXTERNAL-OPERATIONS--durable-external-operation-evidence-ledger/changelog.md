@@ -58,3 +58,13 @@ Step 5: implemented durable lease-fenced operation admission and ticket-fenced l
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/external_operation.go — Begin/Finish operation evidence authority
 
+
+## 2026-07-22
+
+Step 6: scoped external-operation recorders to exact trusted host-module aliases (commit 80ef254)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/engine.go — Lease-scoped recorder injection
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/modules.go — Host-only operation descriptor ownership
+

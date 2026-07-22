@@ -5,7 +5,7 @@
 - [x] Define bounded external-operation contracts and validation in workflowv3 <!-- t:boyf -->
 - [x] Add additive SQLite operation admission completion and counter tables <!-- t:k5rh -->
 - [x] Implement lease-fenced Begin and operation-ticket-fenced Finish APIs <!-- t:u57a -->
-- [ ] Inject a scoped recorder into trusted task module factories without exposing it to JavaScript <!-- t:ujto -->
+- [x] Inject a scoped recorder into trusted task module factories without exposing it to JavaScript <!-- t:ujto -->
 - [ ] Add operation queries projections canonical JSONL export and deterministic digest <!-- t:esh8 -->
 - [ ] Reconcile operation counters with attempt budget reservations and settlement <!-- t:evrq -->
 - [ ] Add cancellation lease-loss retry restart concurrency and privacy tests <!-- t:nmzl -->
