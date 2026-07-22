@@ -952,3 +952,59 @@ Performed a static authority-surface audit for `ExternalOperations`, recorder Be
 ## Step 28: Real preflight rejects stale canonical specification
 
 A non-submitting real sweep preflight was attempted with the approved matrix shape (60 planned requests, 61 prior admissions, eight retries). It failed before provider submission with `RAG_MODEL_MANIFEST_INVALID: RAG_MODEL_MANIFEST_DIGEST`, proving the discovered older TTC specification does not match the current host profile. No paid call was made. The remaining unblock input is a current canonical real-run specification/artifact root agreeing with the host profile, in addition to the previously stated numeric authority.
+
+## Step 29: Retroactive diary normalization for the ledger ticket
+
+This entry normalizes the terse external-operation ledger entries into the required continuation record. The ticket now has a separate completion audit, detailed RAG-side counterpart diary, relations, and changelog evidence; this entry connects them with the prompt, failure chain, review risks, and validation commands that were previously only implicit in short status updates.
+
+The important current state is not a generic “blocked” label: fixture/SQLite/runtime/researchctl evidence is complete, while the non-submitting real preflight has exposed stale host manifest identities in sequence. Model digest repair advanced validation to a prompt-template digest mismatch. That exact ordering matters because it proves no paid call happened before host identity validation.
+
+### Prompt Context
+
+**User prompt (verbatim):** "don't forget to read the skill for the diary to make sure you are using the right format, and retroactively update all the steps you forgot for. We need a lot of info to get quality results. do this first. we can continue the code after that."
+
+**Assistant interpretation:** Restore strict diary context for the durable ledger and qualification work before modifying further host configuration.
+
+**Inferred user intent:** Preserve enough causal, command-level, privacy-aware evidence for reviewers to reproduce or safely continue the real qualification.
+
+**Commit (code):** `00c30a7` — "docs: normalize TTC diary and preserve manifest repair"; this ticket's related audit is `c85766f`.
+
+### What I did
+- Re-read the diary skill and worked reference.
+- Added the RAG ticket's complete retrospective entry with exact preflight failures, scripts, commands, host-boundary rationale, review risks, and future work.
+- Confirmed ticket-local scripts now retain fixture custody validation, real preflight, and manifest digest repair mechanics without copying host configuration/data.
+- Cross-checked the ledger audit, task state, fixture custody evidence, researchctl import result, race/full suites, and reMarkable pre-authority bundle.
+
+### Why
+- The ledger's safety claims are reviewable only if provider authority, host configuration boundaries, and failure ordering are explicit.
+
+### What worked
+- Generic ledger requirements remain backed by full/race tests, fixture operation evidence, privacy scan, graph inspection, and a fresh researchctl import.
+- Model-manifest digest repair advanced validation to the prompt-manifest gate without provider submission.
+
+### What didn't work
+- The latest host validation failure is exact and unresolved:
+
+```text
+Error: load real provider host: RAG_PROMPT_MANIFEST_INVALID: RAG_PROMPT_MANIFEST_TEMPLATE_DIGEST
+```
+
+### What I learned
+- Content-addressed host identities must be repaired in dependency order; a successful model-manifest check says nothing about prompt template identity.
+
+### What was tricky to build
+- Ticket reproducibility conflicts with host privacy if scripts hard-code operational paths or copy YAML. The retained scripts therefore require environment-provided paths and publish only typed digest/failure evidence.
+
+### What warrants a second pair of eyes
+- Review any host prompt-manifest repair against the exact `.txt` template bytes and canonical manifest algorithm before it is written.
+- Confirm real authority is still valid after the corrected profile changes provider/profile identity.
+
+### What should be done in the future
+- Repair prompt template/manifest identities through a preview-first ticket script, validate the provider set, compile a current canonical real spec, rerun non-submitting preflight, and only then consider the approved bounded run.
+
+### Code review instructions
+- Review RAG ticket `scripts/05-real-preflight.sh` and `scripts/06-refresh-model-manifest-digests.go` alongside `pkg/ragproviders/manifests.go`.
+- Re-run full scraper validation after generic ledger changes; run RAG provider validation before any real sweep.
+
+### Technical details
+- The real matrix remains 60 planned generation calls with 61 prior admissions and eight retry admissions; it is not allowed to run while either model or prompt manifest validation fails.

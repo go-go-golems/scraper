@@ -190,3 +190,8 @@ Step 27: audited JavaScript and isolated-child surfaces for recorder authority e
 
 Step 28: non-submitting real preflight rejected stale TTC model-manifest identity before provider submission
 
+
+## 2026-07-22
+
+Step 29: normalized ledger diary context and recorded current host identity failure chain
+
