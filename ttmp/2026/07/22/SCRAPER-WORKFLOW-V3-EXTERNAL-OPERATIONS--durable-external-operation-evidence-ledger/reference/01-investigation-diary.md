@@ -176,6 +176,8 @@ The initial doctor run identified four ticket topics that were not yet in the sc
 
 **Inferred user intent:** Make the design immediately reviewable and usable as an implementation handoff.
 
+**Commit (docs):** `2cd6536` — "docs: design durable external operation ledger"
+
 ### What I did
 
 - Validated design and diary frontmatter.

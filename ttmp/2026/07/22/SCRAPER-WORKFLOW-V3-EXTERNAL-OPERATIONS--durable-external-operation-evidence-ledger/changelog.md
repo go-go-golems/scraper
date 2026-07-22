@@ -24,3 +24,8 @@ Validated frontmatter and vocabulary, passed docmgr doctor, and uploaded the fiv
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/22/SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS--durable-external-operation-evidence-ledger/design-doc/01-durable-external-operation-evidence-ledger-design-and-implementation-guide.md — Validated and delivered primary guide
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/22/SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS--durable-external-operation-evidence-ledger/reference/01-investigation-diary.md — Recorded validation and upload evidence
 
+
+## 2026-07-22
+
+Commit 2cd6536 stores and publishes the external-operation ledger design ticket
+
