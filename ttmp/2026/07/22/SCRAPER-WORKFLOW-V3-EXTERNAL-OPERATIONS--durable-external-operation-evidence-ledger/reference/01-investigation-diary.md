@@ -862,3 +862,16 @@ The sweep deletes per-cell SQLite files to avoid retaining transient runtime sta
 ## Step 12: Close per-cell evidence and failed reductions
 
 The RAG sweep now derives a closed, deterministic reduction directly from operation ledger rows for failed or timed-out cells: admission/completion/incomplete counts, bounded outcomes, elapsed time, peak active spans, generation/embedding overlap, and operation counts. A forced one-nanosecond fixture deadline emitted a privacy-safe failed checkpoint, JSONL, and manifest with a zero-operation reduction; the normal fixture run exercises populated per-cell exports. No provider text or arbitrary metadata is admitted into this reduction.
+
+## Step 13: Concurrent ledger admission/completion regression
+
+Added a store-level concurrency regression that admits sixteen operations concurrently under one active Workflow lease, then completes those exact tickets concurrently. It asserts all admissions and completions are persisted, the joined query returns every row, and the bounded progress projection is `16/16/0` (admitted/completed/incomplete). The same test passed under Go's race detector.
+
+**Validation:**
+
+```text
+GOWORK=off go test ./pkg/workflowv3sqlite -run 'TestExternalOperation(ConcurrentAdmissionAndCompletion|AdmissionAndLateTicketCompletion|RejectsWrongCompletionTicket)' -count=1
+GOWORK=off go test -race ./pkg/workflowv3sqlite -run TestExternalOperationConcurrentAdmissionAndCompletion -count=1
+```
+
+This advances, but does not close, the lifecycle validation task: restart/process-death and broader cancellation/lease-loss privacy-corpus checks remain required.
