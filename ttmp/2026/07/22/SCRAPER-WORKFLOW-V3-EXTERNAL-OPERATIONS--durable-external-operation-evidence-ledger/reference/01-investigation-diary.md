@@ -829,3 +829,17 @@ Update the sweep to export per-cell operation JSONL/manifests before runtime del
 ### Code review instructions
 
 Review RAG `internal/workflowv3ttc/provider.go` around provider admission/call/finish ordering and `module.go` for host-only dispatch. Confirm no prompt, source text, provider body, URL, header, or credential crosses into an operation spec or completion.
+
+## Step 10: Contain fixture-control latency regression
+
+I attempted a 16-chunk fixture sweep after enabling the new operation recorder through `OperatorProvider`. The first cell completed all sixteen generation and sixteen embedding attempts but remained running until the fixed 30-second fixture deadline. Its compact failed-cell custody exported zero-secret operation files. This indicates that the additional FULL-synchronous admission/completion transactions materially change fixture-control timing or expose a downstream completion delay.
+
+I did not increase the fixture timeout or publish the sweep custody wiring. I restored the uncommitted sweep changes so the regression is contained, leaving the committed provider instrumentation available for focused investigation.
+
+**Exact command:** `GOWORK=off go run ./cmd/rag-ttc-v3-sweep --profile fixtures --chunks 16 --concurrency 1,2,4 --maximum-requests 90 --output /tmp/rag-ttc-operation-control`
+
+**Exact failure:** `cell {ChunksPerRequest:1 Concurrency:1 Replicate:1} timed out after 30s with status running (dispatcher: context canceled)`.
+
+### What should be done in the future
+
+Profile Begin/Finish transaction latency and inspect the run/map/reduction state before deciding whether fixture controls need a deliberately instrumented profile or whether the recorder has a completion-path defect. Do not raise the timeout blindly.
