@@ -295,6 +295,22 @@ func (e *Engine) ExecuteLease(ctx context.Context, lease workflowv3.Lease) error
 		}
 		return &AttemptExecutionError{Err: fmt.Errorf("resolve inputs: %w", err)}
 	}
+	descriptors, err := e.Modules.OperationDescriptors(registered.Spec.Modules)
+	if err != nil {
+		failure := workflowv3.Failure{Class: "configuration", Code: "WORKFLOW_OPERATION_DESCRIPTOR", Retryable: false, Message: "task operation descriptor is unavailable"}
+		if persistErr := e.Store.FailWithoutCharge(ctx, lease, failure, e.now()); persistErr != nil {
+			return fmt.Errorf("resolve operation descriptors: %v; persist failure: %w", err, persistErr)
+		}
+		return &AttemptExecutionError{Err: fmt.Errorf("resolve operation descriptors: %w", err)}
+	}
+	recorder, err := e.Store.ExternalOperationRecorder(lease, descriptors)
+	if err != nil {
+		failure := workflowv3.Failure{Class: "internal", Code: "WORKFLOW_OPERATION_RECORDER", Retryable: true, Message: "task operation recorder construction failed"}
+		if persistErr := e.Store.InfrastructureFail(ctx, lease, failure, e.now()); persistErr != nil {
+			return fmt.Errorf("construct operation recorder: %v; persist failure: %w", err, persistErr)
+		}
+		return &AttemptExecutionError{Err: fmt.Errorf("construct operation recorder: %w", err)}
+	}
 	attemptCtx, cancelAttempt := context.WithCancel(ctx)
 	watchDone := make(chan struct{})
 	go e.watchLease(ctx, lease, cancelAttempt, watchDone)
@@ -305,7 +321,7 @@ func (e *Engine) ExecuteLease(ctx context.Context, lease workflowv3.Lease) error
 	taskRequest := TaskRequest{
 		RunID: lease.RunID, NodeKey: lease.NodeKey, Attempt: lease.Attempt,
 		Task: registered, Inputs: inputs, Artifacts: e.Artifacts,
-		Modules: e.Modules,
+		Modules: e.Modules, ExternalOperations: recorder,
 	}
 	isolation := workflowv3.EffectivePlanIsolation(lease.PlanNode.Isolation)
 	var result TaskResult

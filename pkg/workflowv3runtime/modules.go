@@ -17,6 +17,7 @@ import (
 	fetchmod "github.com/go-go-golems/go-go-goja/modules/fetch"
 	fsmod "github.com/go-go-golems/go-go-goja/modules/fs"
 	gggengine "github.com/go-go-golems/go-go-goja/pkg/engine"
+	"github.com/go-go-golems/scraper/pkg/workflowv3"
 )
 
 // TaskModuleContext is the lease-scoped context used to construct one trusted
@@ -24,26 +25,33 @@ import (
 var allowlistedToolID = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.:-][a-z0-9]+)*$`)
 
 type TaskModuleContext struct {
-	Context   context.Context
-	Request   TaskRequest
-	Workspace string
+	Context            context.Context
+	Request            TaskRequest
+	Workspace          string
+	ExternalOperations workflowv3.ExternalOperationRecorder
 }
 
 // TaskModuleFactory creates one exact alias for one fresh task runtime.
 type TaskModuleFactory struct {
-	Alias    string
-	Validate func() error
-	Build    func(TaskModuleContext) (gggengine.RuntimeModuleRegistrar, error)
+	Alias      string
+	Validate   func() error
+	Operations []workflowv3.ExternalOperationDescriptor
+	Build      func(TaskModuleContext) (gggengine.RuntimeModuleRegistrar, error)
+}
+
+type taskModuleFactory struct {
+	build      func(TaskModuleContext) (gggengine.RuntimeModuleRegistrar, error)
+	operations []workflowv3.ExternalOperationDescriptor
 }
 
 // TaskModuleRegistry is an immutable set of policy-selected module aliases.
 type TaskModuleRegistry struct {
-	factories map[string]func(TaskModuleContext) (gggengine.RuntimeModuleRegistrar, error)
+	factories map[string]taskModuleFactory
 }
 
 func NewTaskModuleRegistry(factories ...TaskModuleFactory) (*TaskModuleRegistry, error) {
 	registry := &TaskModuleRegistry{
-		factories: make(map[string]func(TaskModuleContext) (gggengine.RuntimeModuleRegistrar, error), len(factories)),
+		factories: make(map[string]taskModuleFactory, len(factories)),
 	}
 	for _, factory := range factories {
 		alias := strings.TrimSpace(factory.Alias)
@@ -58,7 +66,13 @@ func NewTaskModuleRegistry(factories ...TaskModuleFactory) (*TaskModuleRegistry,
 		if _, exists := registry.factories[alias]; exists {
 			return nil, fmt.Errorf("task module alias %q is already registered", alias)
 		}
-		registry.factories[alias] = factory.Build
+		operations := workflowv3.CloneExternalOperationDescriptors(factory.Operations)
+		for _, operation := range operations {
+			if err := workflowv3.ValidateExternalOperationDescriptor(operation); err != nil {
+				return nil, fmt.Errorf("task module %q external operation: %w", alias, err)
+			}
+		}
+		registry.factories[alias] = taskModuleFactory{build: factory.Build, operations: operations}
 	}
 	return registry, nil
 }
@@ -83,7 +97,31 @@ func (r *TaskModuleRegistry) build(alias string, context TaskModuleContext) (ggg
 	if !ok {
 		return nil, fmt.Errorf("task requests unsupported module %q", alias)
 	}
-	return factory(context)
+	return factory.build(context)
+}
+
+// OperationDescriptors returns cloned host operation policies for exactly the
+// module aliases selected by one task plan.
+func (r *TaskModuleRegistry) OperationDescriptors(aliases []string) ([]workflowv3.ExternalOperationDescriptor, error) {
+	if r == nil {
+		return nil, fmt.Errorf("task module registry is required")
+	}
+	byDigest := map[string]workflowv3.ExternalOperationDescriptor{}
+	for _, alias := range aliases {
+		factory, ok := r.factories[alias]
+		if !ok {
+			return nil, fmt.Errorf("task requests unsupported module %q", alias)
+		}
+		for _, descriptor := range factory.operations {
+			byDigest[descriptor.Digest] = descriptor
+		}
+	}
+	ret := make([]workflowv3.ExternalOperationDescriptor, 0, len(byDigest))
+	for _, descriptor := range byDigest {
+		ret = append(ret, descriptor)
+	}
+	sort.Slice(ret, func(i, j int) bool { return ret[i].Digest < ret[j].Digest })
+	return workflowv3.CloneExternalOperationDescriptors(ret), nil
 }
 
 func FSInputModule() TaskModuleFactory {
