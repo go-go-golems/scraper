@@ -175,3 +175,8 @@ Step 24: added evidence-backed pre-authority completion audit with exact real-ru
 
 Step 25: visually inspected fixture evidence graphs for rendering quality and privacy
 
+
+## 2026-07-22
+
+Step 26: published pre-authority audit and design bundle to reMarkable
+

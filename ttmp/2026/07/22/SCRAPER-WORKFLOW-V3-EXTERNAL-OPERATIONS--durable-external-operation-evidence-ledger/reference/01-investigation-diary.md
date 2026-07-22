@@ -940,3 +940,7 @@ Created a formal completion audit mapping every implemented ledger requirement t
 ## Step 25: Fixture graph visual inspection
 
 Reviewed the rendered fixture makespan, generation/embedding overlap, provider latency, and request timeline figures. They are legible without clipping or blank regions and contain no visible source, provider-body, credential, URL, or host-path content. Renderer source confirms the overlap label spelling despite a tentative vision-model concern. This satisfies visual inspection for existing fixture figures; the pending real qualification must repeat inspection for its derived figures.
+
+## Step 26: Publish the pre-authority audit bundle to reMarkable
+
+Uploaded the completion audit and durable-ledger design guide as `Workflow V3 External Operations Pre Authority Audit.pdf` to `/ai/2026/07/22/SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS`. This is a review bundle for the current fixture-validated state, not a claim that the blocked real qualification is complete.
