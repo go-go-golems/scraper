@@ -944,3 +944,7 @@ Reviewed the rendered fixture makespan, generation/embedding overlap, provider l
 ## Step 26: Publish the pre-authority audit bundle to reMarkable
 
 Uploaded the completion audit and durable-ledger design guide as `Workflow V3 External Operations Pre Authority Audit.pdf` to `/ai/2026/07/22/SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS`. This is a review bundle for the current fixture-validated state, not a claim that the blocked real qualification is complete.
+
+## Step 27: JavaScript and isolated-child authority surface audit
+
+Performed a static authority-surface audit for `ExternalOperations`, recorder Begin/Finish methods, and lower-camel variants. No JavaScript or TypeScript source under `pkg`/`cmd` exposes those names, and the isolated protocol has no corresponding field. The only remaining references outside the trusted recorder implementation are Go-only `TaskRequest`/`TaskModuleContext` wiring in `task_runner.go`. This corroborates the design boundary: JavaScript can express task intent but cannot acquire recorder or SQLite authority.

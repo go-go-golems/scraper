@@ -180,3 +180,8 @@ Step 25: visually inspected fixture evidence graphs for rendering quality and pr
 
 Step 26: published pre-authority audit and design bundle to reMarkable
 
+
+## 2026-07-22
+
+Step 27: audited JavaScript and isolated-child surfaces for recorder authority exposure
+
