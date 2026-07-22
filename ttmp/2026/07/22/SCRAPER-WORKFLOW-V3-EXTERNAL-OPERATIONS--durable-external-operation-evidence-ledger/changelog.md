@@ -120,3 +120,8 @@ Step 13: added race-validated concurrent external-operation admission and comple
 
 Step 14: mapped the researchctl public import seam for RAG-owned operation custody export
 
+
+## 2026-07-22
+
+Step 15: added RAG-owned strict researchctl operation-custody run-export builder
+

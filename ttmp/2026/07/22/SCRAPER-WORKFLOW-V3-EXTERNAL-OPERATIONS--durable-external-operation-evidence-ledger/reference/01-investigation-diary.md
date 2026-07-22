@@ -883,3 +883,7 @@ I traced researchctl's existing `import-run` path before adding a domain adapter
 The RAG-side adapter must therefore create one completed external-run export whose artifacts include the sweep evidence, per-cell operation JSONL, and manifests, and whose scalar metrics are derived only from the compact evidence. It must receive a canonical researchctl specification, explicit operator-recorded timestamp, project/experiment import target, and stable external-run identity; inventing timestamps or using host paths would make repeat import identity non-deterministic or leak privacy-sensitive information.
 
 The next implementation slice is an RAG-owned exporter plus an import integration test that verifies artifact staging and scalar metrics via researchctl's public contracts. This reconnaissance made no code change and left task `a77h` open.
+
+## Step 15: RAG-owned researchctl custody builder
+
+Implemented the RAG-side `BuildOperationCustodyRunExport` adapter. It turns prepublished compact operation artifacts and scalar reductions into researchctl's existing generic run-export format, while keeping source paths out of persisted values. The builder is strict about relative artifact URIs, identity, and timestamps; researchctl's own verifier validates the completed bundle. CLI wiring/import remains the next `a77h` substep.
