@@ -11,6 +11,8 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/cmd/rag-ttc-v3-sweep/main.go
+      Note: Step 11 canonical per-cell operation JSONL and manifest custody
     - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/internal/workflowv3ttc/module.go
       Note: Host-only RAG operation dispatch (commit b728e0a)
     - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/internal/workflowv3ttc/provider.go
@@ -41,6 +43,7 @@ LastUpdated: 2026-07-22T19:55:00-04:00
 WhatFor: Preserve the investigation path, evidence, failures, design decisions, validation, and continuation instructions for the external-operation ledger ticket.
 WhenToUse: Read before resuming design or implementation work on SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS.
 ---
+
 
 
 
@@ -843,3 +846,15 @@ I did not increase the fixture timeout or publish the sweep custody wiring. I re
 ### What should be done in the future
 
 Profile Begin/Finish transaction latency and inspect the run/map/reduction state before deciding whether fixture controls need a deliberately instrumented profile or whether the recorder has a completion-path defect. Do not raise the timeout blindly.
+
+## Step 11: Verify per-cell operation custody through the TTC sweep
+
+The prior timeout proved transient: a repeat with the ordinary 30-second cell bound completed all twelve fixture cells. I then wired the generic export into the RAG sweep. Before a successful cell's SQLite runtime is deleted, the sweep writes its canonical operation JSONL and manifest and places only their relative paths plus canonical manifest data in the cell checkpoint. Timeout and terminal paths do the same before their failed-cell checkpoint. Export/checkpoint errors now fail loudly rather than silently producing incomplete custody.
+
+A fixture run produced 282 operation records across twelve cells; every referenced JSONL and manifest existed. This is a generic-ledger integration validation, not paid-provider authority.
+
+**RAG validation command:** `GOWORK=off go run ./cmd/rag-ttc-v3-sweep --profile fixtures --chunks 16 --concurrency 1,2,4 --maximum-requests 90 --output /tmp/rag-ledger-default-check`.
+
+### What was tricky to build
+
+The sweep deletes per-cell SQLite files to avoid retaining transient runtime state. Export therefore must happen after terminal snapshot/budget resolution but before `Store.Close` and runtime deletion. The error paths need exactly the same ordering; otherwise failed cells would be the ones least likely to retain call-time evidence.
