@@ -932,3 +932,7 @@ After the lifecycle fixture repair, ran `GOWORK=off go test ./... -count=1` acro
 ## Step 23: Real qualification custody runbook
 
 Documented the final real-provider qualification checks against the now-complete fixture path: per-cell JSONL/manifest publication, failed-cell reductions, fresh researchctl staging/import, expanded privacy canary scope, and cumulative authority reconciliation. This is preparation only; it does not authorize a paid call or narrow the existing approval requirement.
+
+## Step 24: Evidence-backed pre-authority completion audit
+
+Created a formal completion audit mapping every implemented ledger requirement to commits/files and fresh validation. The audit leaves the ticket active: only the explicitly authorized paid real qualification, its post-run privacy/export/import/report checks, and final re-audit are missing. It records the exact cumulative envelope and the required affirmative input rather than treating generic goal continuation as spending approval.
