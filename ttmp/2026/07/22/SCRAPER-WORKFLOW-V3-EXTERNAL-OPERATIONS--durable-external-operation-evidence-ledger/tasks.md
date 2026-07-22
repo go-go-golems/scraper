@@ -2,7 +2,7 @@
 
 ## TODO
 
-- [ ] Define bounded external-operation contracts and validation in workflowv3 <!-- t:boyf -->
+- [x] Define bounded external-operation contracts and validation in workflowv3 <!-- t:boyf -->
 - [ ] Add additive SQLite operation admission completion and counter tables <!-- t:k5rh -->
 - [ ] Implement lease-fenced Begin and operation-ticket-fenced Finish APIs <!-- t:u57a -->
 - [ ] Inject a scoped recorder into trusted task module factories without exposing it to JavaScript <!-- t:ujto -->

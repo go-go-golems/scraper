@@ -13,6 +13,10 @@ Owners: []
 RelatedFiles:
     - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/internal/workflowv3ttc/provider.go
       Note: Real failure path that motivated the reusable ledger
+    - Path: repo://pkg/workflowv3/external_operation.go
+      Note: Step 3 implementation and policy boundary (commit b637095)
+    - Path: repo://pkg/workflowv3/external_operation_test.go
+      Note: Step 3 focused regression evidence (commit b637095)
     - Path: repo://pkg/workflowv3sqlite/store.go
       Note: Primary lease and transaction evidence inspected during Step 1
     - Path: ws://researchctl/internal/labsqlite/import.go
@@ -23,6 +27,7 @@ LastUpdated: 2026-07-22T19:55:00-04:00
 WhatFor: Preserve the investigation path, evidence, failures, design decisions, validation, and continuation instructions for the external-operation ledger ticket.
 WhenToUse: Read before resuming design or implementation work on SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS.
 ---
+
 
 
 # Investigation Diary
@@ -237,3 +242,120 @@ git diff --check
 - PDF: `SCRAPER WORKFLOW V3 EXTERNAL OPERATIONS DESIGN.pdf`
 - Bundle inputs: index, design guide, diary, tasks, changelog.
 - ToC depth: 2.
+
+## Step 3: Define closed external-operation contracts
+
+This step implements the first reusable slice: the Workflow V3 domain model for durable external effects. The new contracts distinguish immutable host policy from one admission specification, one opaque completion ticket, and one terminal completion. This establishes the privacy and validation boundary before any SQLite persistence or runtime authority is added.
+
+The descriptor supports counters with multiple explicitly sorted roles. A provider `requests` counter, for example, is both reserved before the call and reported as actual usage after it returns. That corrected an ambiguity in the initial guide, where a single counter role could not express this common accounting relationship without duplicating counter names.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 1)
+
+**Assistant interpretation:** Begin implementation of the documented generic external-operation ledger in small, reviewable slices while maintaining the ticket diary and committing at appropriate intervals.
+
+**Inferred user intent:** Deliver production-quality reusable Workflow V3 machinery, not a workload-specific workaround, with an auditable implementation history.
+
+**Commit (code):** `b637095` — "workflowv3: define external operation contracts"
+
+### What I did
+
+- Added `pkg/workflowv3/external_operation.go`.
+- Added closed contracts for operation kind, version, counter roles, descriptor, admission spec, redacted failure, completion, opaque ticket, joined read model, and host-only recorder interface.
+- Added canonical descriptor identity creation and validation.
+- Enforced SHA-256 authority/correlation identities, bounded cardinality, sorted unique counters/roles, checked nonnegative integers, closed outcomes, closed accounting modes, and no arbitrary metadata payload.
+- Added cloning helpers so policy registries can keep immutable copies.
+- Added `pkg/workflowv3/external_operation_test.go` for descriptor identity, mutation isolation, malformed policies, descriptor-authorized specs, completion semantics, and ticket JSON/log redaction.
+- Corrected the design's counter API sketch from one `Role` to sorted `Roles`.
+
+### Why
+
+Persistence needs a stable domain contract before it can safely enforce fencing or accounting. Defining policy, data, and capability types now lets the SQLite and runtime slices accept only validated, closed values and prevents an arbitrary JSON metadata channel from appearing later.
+
+### What worked
+
+The focused checks passed:
+
+```text
+GOWORK=off go test ./pkg/workflowv3 -count=1
+ok   github.com/go-go-golems/scraper/pkg/workflowv3
+
+GOWORK=off go test -race ./pkg/workflowv3 -count=1
+ok   github.com/go-go-golems/scraper/pkg/workflowv3
+
+GOWORK=off golangci-lint run ./pkg/workflowv3/...
+0 issues.
+```
+
+The tests prove the completion key is omitted from JSON and the ticket's string representation, while descriptor digest and counter policy are deterministic.
+
+### What didn't work
+
+The first lint invocation failed because an unused provisional normalization helper remained after the validator was simplified:
+
+```text
+pkg/workflowv3/external_operation.go:378:6: func normalizeExternalOperationName is unused (unused)
+func normalizeExternalOperationName(value string) string {
+     ^
+1 issues:
+* unused: 1
+```
+
+I removed the unused helper and an unused import, then reran formatting, focused tests, race tests, lint, and `git diff --check` successfully.
+
+### What I learned
+
+- Counter roles need to be a sorted set, not a single enum: `requests`, token quantities, and cost are commonly both reservation and usage values.
+- A Go struct cannot be an absolute secret container, but omitting the completion key from JSON and `String()` prevents ordinary evidence and log paths from exposing it. Later store APIs must never return it in snapshots, events, errors, or exports.
+- Completion validation can reuse the existing closed Workflow failure class/code vocabulary while excluding its free-form message field.
+
+### What was tricky to build
+
+The important distinction is between descriptor counters and operation values. Descriptors define the only names and roles a trusted module may use. An admission spec can provide only descriptor-authorized reservation/measure values; a completion can provide only descriptor-authorized usage values. This keeps the eventual SQLite schema generic without turning into a generic arbitrary-key telemetry store.
+
+The validation also needs to distinguish `unknown` completion from zero duration or zero cost. Unknown is allowed only with conservative accounting and no failure payload, preventing an aborted request from being misrepresented as a successful zero-cost call.
+
+### What warrants a second pair of eyes
+
+- Review whether provider timing must require a UTC timestamp at API validation, or whether normalization should occur at persistence boundaries while accepting offset timestamps from trusted host modules.
+- Review the 100,000 per-attempt cardinality and 32-counter bounds for realistic browser/batch workloads.
+- Review whether `ExternalOperationTicket.CompletionKey` should become a private capability wrapper after the SQLite package API is designed; current JSON and string redaction is tested, but Go callers can still access an exported field.
+- Review future budget mappings: the domain slice intentionally validates counter roles without yet binding descriptor reservation names to `BudgetAmount` dimensions.
+
+### What should be done in the future
+
+Implement task `k5rh` next: additive SQLite tables, full-durability configuration, and migration/invariant tests. Do not wire the recorder into runtime or RAG until durable admission/completion storage exists.
+
+### Code review instructions
+
+Start with `pkg/workflowv3/external_operation.go`:
+
+1. inspect the descriptor digest envelope and sorted-role rules;
+2. verify no free-form data field or failure message exists;
+3. inspect completion outcome/accounting combinations;
+4. inspect ticket redaction semantics.
+
+Then run:
+
+```text
+GOWORK=off go test ./pkg/workflowv3 -count=1
+GOWORK=off go test -race ./pkg/workflowv3 -count=1
+GOWORK=off golangci-lint run ./pkg/workflowv3/...
+git diff --check
+```
+
+### Technical details
+
+The implemented state contracts are:
+
+```text
+ExternalOperationDescriptor
+  -> validated ExternalOperationSpec
+  -> future lease-fenced BeginExternalOperation
+  -> ExternalOperationTicket (operation ID + non-serialized completion key)
+  -> future ticket-fenced FinishExternalOperation
+  -> ExternalOperationCompletion
+```
+
+The descriptor digest is SHA-256 over canonical JSON with `Digest` cleared. Counter names and roles are required to be strictly sorted and unique, so equal semantic policies always produce the same digest.

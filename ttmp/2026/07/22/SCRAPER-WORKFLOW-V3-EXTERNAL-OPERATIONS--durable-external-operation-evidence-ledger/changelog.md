@@ -29,3 +29,13 @@ Validated frontmatter and vocabulary, passed docmgr doctor, and uploaded the fiv
 
 Commit 2cd6536 stores and publishes the external-operation ledger design ticket
 
+
+## 2026-07-22
+
+Step 3: defined validated privacy-safe external-operation descriptor spec completion ticket and recorder contracts (commit b637095)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/external_operation.go — Generic operation contract and validation
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/external_operation_test.go — Contract privacy and validation tests
+
