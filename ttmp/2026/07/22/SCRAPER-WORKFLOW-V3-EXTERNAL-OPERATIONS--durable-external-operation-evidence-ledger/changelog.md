@@ -140,3 +140,8 @@ Step 17: added reopen-safe external operation completion and idempotency regress
 
 Step 18: passed byte-level privacy canary over the fixture custody and researchctl export bundle
 
+
+## 2026-07-22
+
+Step 19: added race-validated lease-loss fence and prior-ticket completion regression
+

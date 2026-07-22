@@ -901,3 +901,9 @@ This validates the key crash window after durable admission and before post-call
 ## Step 18: Fixture custody privacy canary
 
 Ran a byte-level privacy canary against the complete 12-cell fixture sweep custody bundle (aggregate/cell evidence, operation JSONL/manifests, and researchctl export). It found none of: fixture source text, a deliberately sensitive provider-body sentinel, authorization/bearer text, HTTP URLs, `content_text`, or provider configuration filenames. This is evidence for the published fixture bundle only; future real-provider qualification must repeat the same scan over outputs and transient SQLite/WAL custody before cleanup.
+
+## Step 19: Lease-loss ticket fencing regression
+
+Added a lease-loss regression: admit an external operation under a one-millisecond lease, let a new lease fence the old attempt, prove the old lease cannot admit another operation, then finish the previously admitted ticket. The old lease returns `ErrStaleCompletion`; the prior ticket's completion remains durable and the operation projection is `1/1` admitted/completed. The same test passed under the race detector.
+
+This confirms the intended split: lease loss removes Workflow/node authority but does not erase post-call evidence authorized by a pre-existing ticket.

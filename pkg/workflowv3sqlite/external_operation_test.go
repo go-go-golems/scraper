@@ -121,6 +121,31 @@ func TestExternalOperationAllocationSettlesAttemptBudget(t *testing.T) {
 	require.Zero(t, budget[0].Reserved)
 }
 
+func TestExternalOperationTicketCompletesAfterLeaseLoss(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := storeFixture(t, "first")
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	now := time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, store.CreateRun(ctx, "operation-lease-loss", plan, map[string]workflowv3.ArtifactRef{"source": artifactRef("source/v1", "operation-lease-loss")}, now))
+	lease, err := store.LeaseNext(ctx, registry, now, time.Millisecond)
+	require.NoError(t, err)
+	descriptor := operationDescriptor(t)
+	ticket, err := store.BeginExternalOperation(ctx, *lease, descriptor, workflowv3.ExternalOperationSpec{DescriptorDigest: descriptor.Digest}, now)
+	require.NoError(t, err)
+	_, err = store.LeaseNext(ctx, registry, now.Add(2*time.Millisecond), time.Minute)
+	require.NoError(t, err)
+	_, err = store.BeginExternalOperation(ctx, *lease, descriptor, workflowv3.ExternalOperationSpec{DescriptorDigest: descriptor.Digest}, now.Add(2*time.Millisecond))
+	require.ErrorIs(t, err, ErrStaleCompletion)
+	completion := workflowv3.ExternalOperationCompletion{ProviderStartedAt: now, ElapsedMicros: 7, Outcome: workflowv3.ExternalOperationOutcomeSucceeded, AccountingMode: workflowv3.ExternalOperationAccountingActual, Counters: []workflowv3.ExternalOperationCounter{{Name: "requests", Units: 1}}}
+	require.NoError(t, store.FinishExternalOperation(ctx, ticket, descriptor, completion, now.Add(3*time.Millisecond)))
+	progress, err := store.ExternalOperationProgress(ctx, "operation-lease-loss")
+	require.NoError(t, err)
+	require.Equal(t, 1, progress.Admitted)
+	require.Equal(t, 1, progress.Completed)
+}
+
 func TestExternalOperationCompletionSurvivesStoreReopen(t *testing.T) {
 	ctx := context.Background()
 	registry, plan := storeFixture(t, "first")
