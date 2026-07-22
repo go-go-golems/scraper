@@ -446,6 +446,27 @@ WHERE run_id = ? AND map_key = ? AND status = 'succeeded'`,
 	if affected, _ := result.RowsAffected(); affected != 1 {
 		return fmt.Errorf("map publication state changed")
 	}
+	var planBody []byte
+	if err := tx.QueryRowContext(ctx, `SELECT plan_json FROM v3_runs WHERE run_id = ?`, runID).Scan(&planBody); err != nil {
+		return err
+	}
+	var plan workflowv3.WorkflowPlan
+	if err := workflowv3.StrictDecode(planBody, &plan); err != nil {
+		return err
+	}
+	for _, downstream := range plan.Maps {
+		if downstream.Source.Source != "map-output" || downstream.Source.MapKey != mapKey {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `
+UPDATE v3_expansions SET source_schema = ?, source_digest = ?, source_media_type = ?,
+  source_size_bytes = ?, source_locator = ?, updated_at = ?
+WHERE run_id = ? AND map_key = ? AND status = 'pending' AND source_digest IS NULL`,
+			output.Schema, output.Digest, output.MediaType, output.Size, output.Locator,
+			formatTime(now), runID, downstream.Key); err != nil {
+			return fmt.Errorf("activate downstream map %s: %w", downstream.Key, err)
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `
 UPDATE v3_runs SET status = 'succeeded', updated_at = ?
 WHERE run_id = ? AND status = 'running'
