@@ -17,6 +17,8 @@ RelatedFiles:
       Note: Step 3 implementation and policy boundary (commit b637095)
     - Path: repo://pkg/workflowv3/external_operation_test.go
       Note: Step 3 focused regression evidence (commit b637095)
+    - Path: repo://pkg/workflowv3sqlite/budget.go
+      Note: Step 8 operation budget accounting implementation (commit b8857b1)
     - Path: repo://pkg/workflowv3sqlite/external_operation.go
       Note: |-
         Step 4 durability evidence (commit 1542075)
@@ -35,6 +37,7 @@ LastUpdated: 2026-07-22T19:55:00-04:00
 WhatFor: Preserve the investigation path, evidence, failures, design decisions, validation, and continuation instructions for the external-operation ledger ticket.
 WhenToUse: Read before resuming design or implementation work on SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS.
 ---
+
 
 
 
@@ -693,3 +696,70 @@ Implement budget reconciliation next, then instrument RAG provider calls and use
 ### Code review instructions
 
 Start with `external_operation_query.go`. Verify stable order, no secret completion key, atomic writer ordering, and explicit incomplete count. Then inspect `operational.go` for coherent progress projection and run the validation commands above.
+
+## Step 8: Reconcile operation reservations with Workflow attempt budgets
+
+This step closes the accounting gap between observed effects and existing Workflow budgets. An external operation may now reserve only dimensions already reserved for its active attempt, and cumulative operation allocations cannot exceed that attempt reservation. At settlement, actual operation counters become authoritative for allocated dimensions; incomplete or conservative operations charge their allocation.
+
+This keeps one budget ledger: `v3_budget_reservations` remains authoritative for run limits, while operation allocations explain how an attempt spent its already-reserved capacity.
+
+**Commit (code):** `b8857b1` — "workflowv3: reconcile operation budget usage"
+
+### What I did
+
+- Checked every operation reservation against the active attempt's durable reservation.
+- Rejected unbudgeted, over-allocated, and overflowed operation admissions.
+- Validated actual completion counters against admitted allocations.
+- Derived actual/conservative operation usage during attempt settlement.
+- Rejected disagreement between task-reported and operation-derived usage.
+- Allowed operation-derived dimensions to satisfy actual settlement without duplicate task reporting.
+- Added a budgeted operation regression proving one request allocation, rejected second admission, actual completion, and final budget settlement.
+
+### Why
+
+Provider requests, tokens, and cost are effects. A task cannot claim those values in a separate unverified channel after the operation ledger exists. The admission allocation needs to prevent excess calls before provider submission, while settlement needs conservative charging when a call's usage remains unknown.
+
+### What worked
+
+```text
+GOWORK=off go test ./pkg/workflowv3sqlite -count=1
+ok github.com/go-go-golems/scraper/pkg/workflowv3sqlite
+GOWORK=off go test -race ./pkg/workflowv3sqlite -count=1
+ok github.com/go-go-golems/scraper/pkg/workflowv3sqlite
+GOWORK=off golangci-lint run ./pkg/workflowv3sqlite/...
+0 issues.
+```
+
+### What didn't work
+
+The first build failed because `budget.go` needed the `math` import for checked integer summation:
+
+```text
+pkg/workflowv3sqlite/budget.go:309:50: undefined: math
+```
+
+Adding the import fixed the build; no accounting behavior was bypassed.
+
+### What I learned
+
+- Actual operation accounting must validate against admission allocation at Finish, not only during final task settlement; otherwise a malformed completion could remain durable until a distant terminal path.
+- An incomplete admission is naturally conservative: it has a durable allocation but no terminal completion row.
+- A task that reports an operation-bound dimension must agree exactly with the ledger. A task may omit that dimension because the ledger supplies it authoritatively.
+
+### What was tricky to build
+
+There are three distinct settlement states: actual counters, conservative allocation, and no allocation. The implementation preserves existing behavior for tasks with no external allocations, derives only allocated dimensions, and retains existing reserved/used invariants. This avoids inventing a parallel accounting system.
+
+### What warrants a second pair of eyes
+
+- Verify the intended policy for a provider that reports partial usage after timeout; current descriptors choose actual versus conservative at completion.
+- Review future multi-request batch descriptors to ensure their allocation and counter names remain aligned with task budget claims.
+- Stress-test the per-attempt allocation aggregation under higher concurrent Begin calls; SQLite immediate transactions serialize it, but a benchmark should quantify overhead.
+
+### What should be done in the future
+
+Wire the RAG generation and embedding providers through the host-only recorder, export each sweep cell before transient deletion, and add forced malformed/timeout/cancellation fixture tests.
+
+### Code review instructions
+
+Review `checkExternalOperationAllocation`, `validateCompletionAllocation`, and `operationActualUsage`, then run the focused SQLite tests. Check that no path can submit more allocated request units than the active attempt reservation.

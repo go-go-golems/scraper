@@ -7,7 +7,7 @@
 - [x] Implement lease-fenced Begin and operation-ticket-fenced Finish APIs <!-- t:u57a -->
 - [x] Inject a scoped recorder into trusted task module factories without exposing it to JavaScript <!-- t:ujto -->
 - [x] Add operation queries projections canonical JSONL export and deterministic digest <!-- t:esh8 -->
-- [ ] Reconcile operation counters with attempt budget reservations and settlement <!-- t:evrq -->
+- [x] Reconcile operation counters with attempt budget reservations and settlement <!-- t:evrq -->
 - [ ] Add cancellation lease-loss retry restart concurrency and privacy tests <!-- t:nmzl -->
 - [ ] Integrate RAG generation and embedding providers with the generic recorder <!-- t:qfpd -->
 - [ ] Publish per-cell operation evidence and deterministic failed-cell reductions <!-- t:q293 -->
