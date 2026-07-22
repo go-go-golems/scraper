@@ -100,3 +100,8 @@ Step 9: integrated TTC generation and per-request embedding provider spans with 
 
 Step 10: contained a fixture sweep timeout after provider instrumentation; reverted uncommitted sweep custody wiring and preserved exact evidence for performance triage
 
+
+## 2026-07-22
+
+Step 11: verified RAG fixture sweep exports 282 durable provider-operation records into per-cell JSONL/manifest custody
+
