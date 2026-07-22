@@ -19,13 +19,14 @@ import (
 )
 
 type TaskRequest struct {
-	RunID     workflowv3.RunID
-	NodeKey   workflowv3.NodeKey
-	Attempt   int
-	Task      workflowv3.RegisteredTask
-	Inputs    map[string]workflowv3.ArtifactRef
-	Artifacts workflowv3.ArtifactStore
-	Modules   *TaskModuleRegistry
+	RunID              workflowv3.RunID
+	NodeKey            workflowv3.NodeKey
+	Attempt            int
+	Task               workflowv3.RegisteredTask
+	Inputs             map[string]workflowv3.ArtifactRef
+	Artifacts          workflowv3.ArtifactStore
+	Modules            *TaskModuleRegistry
+	ExternalOperations workflowv3.ExternalOperationRecorder
 }
 
 type TaskResult struct {
@@ -94,6 +95,7 @@ func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
 	for _, alias := range request.Task.Spec.Modules {
 		module, err := request.Modules.build(alias, TaskModuleContext{
 			Context: ctx, Request: request, Workspace: workspace,
+			ExternalOperations: request.ExternalOperations,
 		})
 		if err != nil {
 			return TaskResult{}, &RuntimeConstructionError{Err: err}

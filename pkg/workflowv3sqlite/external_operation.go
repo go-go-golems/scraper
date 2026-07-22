@@ -15,7 +15,65 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrExternalOperationCompletionConflict = errors.New("workflow v3 external operation completion conflict")
+var (
+	ErrExternalOperationCompletionConflict    = errors.New("workflow v3 external operation completion conflict")
+	ErrExternalOperationDescriptorUnavailable = errors.New("workflow v3 external operation descriptor unavailable")
+)
+
+type externalOperationRecorder struct {
+	store       *Store
+	lease       workflowv3.Lease
+	descriptors map[string]workflowv3.ExternalOperationDescriptor
+}
+
+// ExternalOperationRecorder returns the host-only recorder permitted for one
+// leased attempt. Each descriptor must have been selected by an exact task
+// module alias; JavaScript never receives this recorder directly.
+func (s *Store) ExternalOperationRecorder(lease workflowv3.Lease, descriptors []workflowv3.ExternalOperationDescriptor) (workflowv3.ExternalOperationRecorder, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("workflow v3 store is required")
+	}
+	if lease.RunID == "" || lease.NodeKey == "" || lease.Attempt < 1 || lease.Token == "" {
+		return nil, fmt.Errorf("valid workflow lease is required")
+	}
+	allowed := make(map[string]workflowv3.ExternalOperationDescriptor, len(descriptors))
+	for _, descriptor := range descriptors {
+		if err := workflowv3.ValidateExternalOperationDescriptor(descriptor); err != nil {
+			return nil, err
+		}
+		if _, duplicate := allowed[descriptor.Digest]; duplicate {
+			continue
+		}
+		allowed[descriptor.Digest] = descriptor
+	}
+	return &externalOperationRecorder{store: s, lease: lease, descriptors: allowed}, nil
+}
+
+func (r *externalOperationRecorder) BeginExternalOperation(ctx context.Context, spec workflowv3.ExternalOperationSpec) (workflowv3.ExternalOperationTicket, error) {
+	if r == nil {
+		return workflowv3.ExternalOperationTicket{}, fmt.Errorf("external operation recorder is required")
+	}
+	descriptor, ok := r.descriptors[spec.DescriptorDigest]
+	if !ok {
+		return workflowv3.ExternalOperationTicket{}, ErrExternalOperationDescriptorUnavailable
+	}
+	return r.store.BeginExternalOperation(ctx, r.lease, descriptor, spec, time.Now().UTC())
+}
+
+func (r *externalOperationRecorder) FinishExternalOperation(ctx context.Context, ticket workflowv3.ExternalOperationTicket, completion workflowv3.ExternalOperationCompletion) error {
+	if r == nil {
+		return fmt.Errorf("external operation recorder is required")
+	}
+	var descriptorDigest string
+	if err := r.store.db.QueryRowContext(ctx, `SELECT descriptor_digest FROM v3_external_operations WHERE operation_id=?`, ticket.OperationID).Scan(&descriptorDigest); err != nil {
+		return err
+	}
+	descriptor, ok := r.descriptors[descriptorDigest]
+	if !ok {
+		return ErrExternalOperationDescriptorUnavailable
+	}
+	return r.store.FinishExternalOperation(ctx, ticket, descriptor, completion, time.Now().UTC())
+}
 
 // checkSQLiteDurability verifies the authority-bearing SQLite settings that the
 // DSN requests for every connection. External operation admission must not
