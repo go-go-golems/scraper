@@ -95,3 +95,8 @@ Step 9: integrated TTC generation and per-request embedding provider spans with 
 
 - /home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/internal/workflowv3ttc/provider.go — Provider adapter
 
+
+## 2026-07-22
+
+Step 10: contained a fixture sweep timeout after provider instrumentation; reverted uncommitted sweep custody wiring and preserved exact evidence for performance triage
+
