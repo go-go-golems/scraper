@@ -68,3 +68,12 @@ Step 6: scoped external-operation recorders to exact trusted host-module aliases
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/engine.go — Lease-scoped recorder injection
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/modules.go — Host-only operation descriptor ownership
 
+
+## 2026-07-22
+
+Step 7: added coherent operation queries, bounded projections, and atomic canonical JSONL/manifest custody export (commit 27efa9e)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/external_operation_query.go — Primary export mechanism
+

@@ -21,6 +21,8 @@ RelatedFiles:
       Note: |-
         Step 4 durability evidence (commit 1542075)
         Step 5 authoritative persistence implementation (commit e061769)
+    - Path: repo://pkg/workflowv3sqlite/external_operation_query.go
+      Note: Step 7 custody/export implementation (commit 27efa9e)
     - Path: repo://pkg/workflowv3sqlite/schema.sql
       Note: Step 4 schema implementation (commit 1542075)
     - Path: repo://pkg/workflowv3sqlite/store.go
@@ -33,6 +35,7 @@ LastUpdated: 2026-07-22T19:55:00-04:00
 WhatFor: Preserve the investigation path, evidence, failures, design decisions, validation, and continuation instructions for the external-operation ledger ticket.
 WhenToUse: Read before resuming design or implementation work on SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS.
 ---
+
 
 
 
@@ -618,3 +621,75 @@ Implement queries/projections/export next, then wire the RAG provider using the 
 
 ### Code review instructions
 Review `modules.go`, `engine.go`, and the SQLite adapter. Verify no JavaScript object or isolated-worker protocol field exposes the recorder.
+
+## Step 7: Add coherent operation queries, projection, and atomic custody export
+
+This step makes the persisted ledger usable after task or run failure. Workflow V3 can now reconstruct ordered compact operation records, derive bounded counts/outcomes/active-by-kind status, and atomically publish a canonical JSONL ledger plus a digest/size manifest. The export deliberately includes incomplete admissions rather than inventing a completion.
+
+The export is not tied to successful task outputs. It therefore remains available for succeeded, failed, canceled, and partially observed runs and is safe to checkpoint before a source-bearing transient database is removed.
+
+**Commit (code):** `27efa9e` — "workflowv3: export external operation evidence"
+
+### What I did
+
+- Added canonical JSONL export record and manifest contracts.
+- Added ordered `Store.ExternalOperations`, bounded progress, and per-run operational projection.
+- Added coherent read transactions for detailed rows and safe scalar counters.
+- Added atomic JSONL and manifest file writers with file and directory fsync.
+- Added plan digest, event sequence, row/completion/incomplete counts, descriptor digests, JSONL SHA-256, byte count, and privacy classification to the manifest.
+- Added regression coverage for successful late completion, query reconstruction, progress, ticket non-disclosure, deterministic repeated export bytes, and manifest output.
+- Made `CompletedAt` store-owned so callers cannot claim their own completion persistence timestamp.
+
+### Why
+
+A durable recorder is only useful if its evidence can leave a transient workflow database safely. JSONL is the primary row-level evidence; the manifest identifies an exact immutable export and allows downstream researchctl artifact verification.
+
+### What worked
+
+```text
+GOWORK=off go test ./pkg/workflowv3 ./pkg/workflowv3sqlite -count=1
+ok github.com/go-go-golems/scraper/pkg/workflowv3
+ok github.com/go-go-golems/scraper/pkg/workflowv3sqlite
+
+GOWORK=off go test -race ./pkg/workflowv3 ./pkg/workflowv3sqlite -count=1
+ok github.com/go-go-golems/scraper/pkg/workflowv3
+ok github.com/go-go-golems/scraper/pkg/workflowv3sqlite
+
+GOWORK=off golangci-lint run ./pkg/workflowv3/... ./pkg/workflowv3sqlite/...
+0 issues.
+```
+
+### What didn't work
+
+The first export test reused `operations` as both a SQL count variable and the operation slice:
+
+```text
+no new variables on left side of :=
+cannot use store.ExternalOperations(...) as int value in assignment
+```
+
+I renamed the SQL count to `operationRows`, then reran focused, race, lint, and diff validation successfully.
+
+### What I learned
+
+- The manifest must avoid a generated-at timestamp if byte-identical repeated export is required. Event sequence plus digest/size supplies a stable as-of identity.
+- Incomplete does not imply active. The projection computes incomplete from every admission without completion, while active-by-kind includes only incomplete rows whose attempt remains `running`.
+- Completion timestamps belong to persistence, not to a provider caller; provider start plus monotonic elapsed remains the data-plane timing evidence.
+
+### What was tricky to build
+
+The export has two crash-safe files. JSONL is written and fsynced first, renamed, and directory-synced; the manifest is then canonically written by the same sequence. A caller may only remove a runtime after both files are present. The manifest's JSONL digest protects against a partial or mismatched downstream file.
+
+### What warrants a second pair of eyes
+
+- The current detailed query performs bounded child-counter queries per operation. It is simple and correct, but a large-scale workload may warrant a batched internal loader after a benchmark.
+- Review whether export paths should be constrained to an explicit evidence root by a future higher-level custody API rather than accepting operator-provided output paths.
+- Verify the researchctl bridge uses both JSONL and manifest artifacts and checks the manifest digest before treating derived metrics as evidence.
+
+### What should be done in the future
+
+Implement budget reconciliation next, then instrument RAG provider calls and use this export for failed/successful sweep-cell custody.
+
+### Code review instructions
+
+Start with `external_operation_query.go`. Verify stable order, no secret completion key, atomic writer ordering, and explicit incomplete count. Then inspect `operational.go` for coherent progress projection and run the validation commands above.
