@@ -887,3 +887,7 @@ The next implementation slice is an RAG-owned exporter plus an import integratio
 ## Step 15: RAG-owned researchctl custody builder
 
 Implemented the RAG-side `BuildOperationCustodyRunExport` adapter. It turns prepublished compact operation artifacts and scalar reductions into researchctl's existing generic run-export format, while keeping source paths out of persisted values. The builder is strict about relative artifact URIs, identity, and timestamps; researchctl's own verifier validates the completed bundle. CLI wiring/import remains the next `a77h` substep.
+
+## Step 16: End-to-end researchctl operation-custody import
+
+Wired the RAG sweep to emit an optional compact `researchctl-run-export.json` only with explicit operator-owned custody identity fields. The generated bundle references aggregate/cell evidence plus every JSONL/manifest artifact using relative URIs and derives four scalar-only metrics. A fresh researchctl laboratory successfully staged and atomically imported 37 verified artifacts and four metrics from a twelve-cell fixture sweep. This completes task `a77h` without creating a researchctl-to-RAG dependency.

@@ -125,3 +125,8 @@ Step 14: mapped the researchctl public import seam for RAG-owned operation custo
 
 Step 15: added RAG-owned strict researchctl operation-custody run-export builder
 
+
+## 2026-07-22
+
+Step 16: completed end-to-end RAG sweep operation custody staging and researchctl atomic import
+
