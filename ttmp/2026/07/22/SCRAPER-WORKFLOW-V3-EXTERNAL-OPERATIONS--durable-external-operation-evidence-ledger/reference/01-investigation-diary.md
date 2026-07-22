@@ -936,3 +936,7 @@ Documented the final real-provider qualification checks against the now-complete
 ## Step 24: Evidence-backed pre-authority completion audit
 
 Created a formal completion audit mapping every implemented ledger requirement to commits/files and fresh validation. The audit leaves the ticket active: only the explicitly authorized paid real qualification, its post-run privacy/export/import/report checks, and final re-audit are missing. It records the exact cumulative envelope and the required affirmative input rather than treating generic goal continuation as spending approval.
+
+## Step 25: Fixture graph visual inspection
+
+Reviewed the rendered fixture makespan, generation/embedding overlap, provider latency, and request timeline figures. They are legible without clipping or blank regions and contain no visible source, provider-body, credential, URL, or host-path content. Renderer source confirms the overlap label spelling despite a tentative vision-model concern. This satisfies visual inspection for existing fixture figures; the pending real qualification must repeat inspection for its derived figures.
