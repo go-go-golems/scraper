@@ -195,10 +195,17 @@ func TestCompileReductionPinsBoundedHomogeneousTemplate(t *testing.T) {
 			Inputs:   map[string]string{"partition": ReductionPartitionSchemaV1}, Outputs: map[string]string{"count": "word-count/v1"},
 			ResourceClass: "cpu.reduce",
 		},
+		TaskSpec{
+			Identity: ImplementationIdentity{TaskKey: TaskKey{Kind: "finalize", Version: "v1"}, BundleDigest: testBundleDigest, Entrypoint: "tasks.cjs#finalize", ABI: TaskABI},
+			Inputs:   map[string]string{"count": "word-count/v1"}, Outputs: map[string]string{"receipt": "receipt/v1"},
+		},
 	)
 	require.NoError(t, err)
 	ir := WorkflowIR{
-		Schema: IRSchema, Name: "word-count", Inputs: []IRInput{}, Nodes: []IRNode{},
+		Schema: IRSchema, Name: "word-count", Inputs: []IRInput{}, Nodes: []IRNode{{
+			Key: "finalize", Task: TaskKey{Kind: "finalize", Version: "v1"},
+			Bindings: map[string]ValueRef{"count": {Source: "reduction-output", ReduceKey: "merge-counts", Schema: "word-count/v1"}},
+		}},
 		SetInputs: []IRSetInput{{Name: "documents", ItemSchema: "document/v1", ManifestSchema: ItemManifestSchemaV1}},
 		Maps: []IRMap{{
 			Key: "count-documents", Source: SetRef{Source: "set-input", Name: "documents", ItemSchema: "document/v1", ManifestSchema: ItemManifestSchemaV1},
@@ -220,6 +227,7 @@ func TestCompileReductionPinsBoundedHomogeneousTemplate(t *testing.T) {
 	require.Equal(t, "cpu.reduce", plan.Reductions[0].ResourceClass)
 	require.Equal(t, ReducePolicy{FanIn: 8, MaxLevels: 4}, plan.Reductions[0].Policy)
 	require.Equal(t, "word-count/v1", plan.Outputs[0].Value.Schema)
+	require.Equal(t, "reduction-output", plan.Nodes[0].Bindings["count"].Source)
 
 	invalid := ir
 	invalid.Reductions = append([]IRReduce(nil), ir.Reductions...)

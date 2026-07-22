@@ -109,6 +109,26 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		nodeSpecs[node.Key] = spec
 	}
 
+	reductionSchemas := make(map[string]string, len(ir.Reductions))
+	for _, reduced := range ir.Reductions {
+		if strings.TrimSpace(reduced.Key) == "" {
+			return fmt.Errorf("reduction key is required")
+		}
+		if _, exists := reductionSchemas[reduced.Key]; exists {
+			return fmt.Errorf("duplicate reduction key %q", reduced.Key)
+		}
+		spec, ok := catalog.Lookup(reduced.PartitionTask)
+		if !ok {
+			return fmt.Errorf("reduction %q references unknown task %s@%s", reduced.Key, reduced.PartitionTask.Kind, reduced.PartitionTask.Version)
+		}
+		if len(spec.Outputs) != 1 {
+			return fmt.Errorf("reduction %q reducer must declare one output", reduced.Key)
+		}
+		for _, schema := range spec.Outputs {
+			reductionSchemas[reduced.Key] = schema
+		}
+	}
+
 	gateSchemas := make(map[NodeKey]string, len(ir.Gates))
 	for _, gate := range ir.Gates {
 		if strings.TrimSpace(string(gate.Key)) == "" {
@@ -166,7 +186,7 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 					return fmt.Errorf("node %q cannot consume budget-activation gate %q", node.Key, binding.GateKey)
 				}
 			}
-			actualSchema, err := refSchema(binding, inputSchemas, nodeSpecs, gateSchemas)
+			actualSchema, err := refSchema(binding, inputSchemas, nodeSpecs, gateSchemas, reductionSchemas)
 			if err != nil {
 				return fmt.Errorf("node %q binding %q: %w", node.Key, port, err)
 			}
@@ -262,7 +282,7 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 						return fmt.Errorf("map %q cannot consume budget-activation gate %q", mapped.Key, binding.GateKey)
 					}
 				}
-				actualSchema, err = refSchema(binding, inputSchemas, nodeSpecs, gateSchemas)
+				actualSchema, err = refSchema(binding, inputSchemas, nodeSpecs, gateSchemas, reductionSchemas)
 				if err != nil {
 					return fmt.Errorf("map %q binding %q: %w", mapped.Key, port, err)
 				}
@@ -352,7 +372,7 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 						return fmt.Errorf("reduction %q cannot consume budget-activation gate %q", reduced.Key, binding.GateKey)
 					}
 				}
-				actualSchema, err = refSchema(binding, inputSchemas, nodeSpecs, gateSchemas)
+				actualSchema, err = refSchema(binding, inputSchemas, nodeSpecs, gateSchemas, reductionSchemas)
 				if err != nil {
 					return fmt.Errorf("reduction %q binding %q: %w", reduced.Key, port, err)
 				}
@@ -397,7 +417,7 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 			}
 			actual = schema
 		} else {
-			actual, err = refSchema(output.Value, inputSchemas, nodeSpecs, gateSchemas)
+			actual, err = refSchema(output.Value, inputSchemas, nodeSpecs, gateSchemas, reductionSchemas)
 			if err != nil {
 				return fmt.Errorf("workflow output %q: %w", output.Name, err)
 			}
@@ -537,7 +557,7 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 	return plan, nil
 }
 
-func refSchema(ref ValueRef, inputs map[string]string, nodes map[NodeKey]TaskSpec, gates map[NodeKey]string) (string, error) {
+func refSchema(ref ValueRef, inputs map[string]string, nodes map[NodeKey]TaskSpec, gates map[NodeKey]string, reductions map[string]string) (string, error) {
 	switch ref.Source {
 	case "input":
 		schema, ok := inputs[ref.Name]
@@ -549,6 +569,12 @@ func refSchema(ref ValueRef, inputs map[string]string, nodes map[NodeKey]TaskSpe
 		schema, ok := gates[ref.GateKey]
 		if !ok {
 			return "", fmt.Errorf("unknown gate %q", ref.GateKey)
+		}
+		return schema, nil
+	case "reduction-output":
+		schema, ok := reductions[ref.ReduceKey]
+		if !ok {
+			return "", fmt.Errorf("unknown reduction %q", ref.ReduceKey)
 		}
 		return schema, nil
 	case "node-output":
