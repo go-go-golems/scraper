@@ -11,8 +11,12 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/internal/workflowv3ttc/module.go
+      Note: Host-only RAG operation dispatch (commit b728e0a)
     - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/internal/workflowv3ttc/provider.go
-      Note: Real failure path that motivated the reusable ledger
+      Note: |-
+        Real failure path that motivated the reusable ledger
+        Step 9 RAG provider operation adapter (commits b728e0a 3bde483 0147ea2)
     - Path: repo://pkg/workflowv3/external_operation.go
       Note: Step 3 implementation and policy boundary (commit b637095)
     - Path: repo://pkg/workflowv3/external_operation_test.go
@@ -37,6 +41,7 @@ LastUpdated: 2026-07-22T19:55:00-04:00
 WhatFor: Preserve the investigation path, evidence, failures, design decisions, validation, and continuation instructions for the external-operation ledger ticket.
 WhenToUse: Read before resuming design or implementation work on SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS.
 ---
+
 
 
 
@@ -763,3 +768,64 @@ Wire the RAG generation and embedding providers through the host-only recorder, 
 ### Code review instructions
 
 Review `checkExternalOperationAllocation`, `validateCompletionAllocation`, and `operationActualUsage`, then run the focused SQLite tests. Check that no path can submit more allocated request units than the active attempt reservation.
+
+## Step 9: Adapt TTC generation and embedding providers to the generic ledger
+
+This step connected the generic host-only recorder to RAG TTC provider calls. `OperatorProvider` now declares exact generation and embedding operation descriptors tied to non-secret provider/embedding profile digests. Generation is admitted after cumulative sweep authority and immediately before the provider call. Embedding is admitted once per underlying embedding provider request, not once per aggregate batch.
+
+The implementation preserves the existing domain contracts: RAG still owns provider error classification, representation validation, and domain usage. Workflow owns admission, span custody, and budget authority. The provider uses a short `context.WithoutCancel` persistence window only after a call returns, so cancellation stops the call but does not erase safe completion evidence.
+
+**Commits (code):** `b728e0a` — "workflowv3: record TTC generation operations"; `3bde483` — "workflowv3: record TTC embedding operations"; `0147ea2` — "workflowv3: preserve TTC malformed provider spans"
+
+### What I did
+
+- Updated RAG's scraper dependency to the pushed ledger implementation (`b8857b1`); private-module retrieval required `GOPRIVATE`/`GONOSUMDB`.
+- Added operation descriptor/provider capability interfaces.
+- Added generation and embedding descriptors to `OperatorProvider`.
+- Wrapped generation and per-request embedding calls in recorder Begin/Finish.
+- Recorded actual counters where known and conservative completion on provider error.
+- Recorded a failed, conservative generation span when returned representations are malformed.
+- Added a recorder regression test for generation success.
+- Ran focused TTC tests, lint, then repository hooks including full core tests, TypeScript typecheck, and snapshot release builds.
+
+### What worked
+
+The RAG repository pre-commit and pre-push hooks passed. The pushed pre-push evidence includes lint, `go vet`, core package tests, site typecheck, GoReleaser snapshot build, and a second core test pass.
+
+### What didn't work
+
+The first `go get` of the newly pushed scraper commit failed through the public checksum service:
+
+```text
+verifying module: reading https://sum.golang.org/lookup/github.com/go-go-golems/scraper@...: 500 Internal Server Error
+```
+
+Rerunning with the repository's private-module configuration succeeded:
+
+```text
+GOWORK=off GOPRIVATE=github.com/go-go-golems/* GONOSUMDB=github.com/go-go-golems/* go get github.com/go-go-golems/scraper@b8857b1
+```
+
+### What I learned
+
+- A batch abstraction can conceal multiple provider calls. Embedding instrumentation belongs around each `Embed` request so operation concurrency and request count remain true.
+- Cumulative sweep authority is intentionally ordered before generic Workflow operation admission; a crash can overcount conservatively but cannot undercount a submitted generation request.
+- Provider response validation is a domain failure after a successful transport response; it still needs a durable span. The current implementation records it as a failed conservative operation to keep the measurement available.
+
+### What was tricky to build
+
+The `OperatorProvider` instance is shared while recorders are lease-scoped. The adapter therefore takes a recorder as a method argument rather than storing it in provider configuration, avoiding cross-attempt leakage and races.
+
+### What warrants a second pair of eyes
+
+- Review the remaining early accounting-error paths after a provider success: they currently preserve the admission and will conservatively settle, but should be normalized into explicit completion outcomes before the real fixture qualification.
+- Review whether malformed response completion should be `failed/actual` rather than `failed/conservative` once usage extraction is moved earlier in the generation path.
+- Add an end-to-end engine test using `OperatorProvider` rather than only a recorder unit test before authorizing a paid run.
+
+### What should be done in the future
+
+Update the sweep to export per-cell operation JSONL/manifests before runtime deletion, add failure-cell reductions from those records, then implement researchctl verified artifact import and fixture failure qualification.
+
+### Code review instructions
+
+Review RAG `internal/workflowv3ttc/provider.go` around provider admission/call/finish ordering and `module.go` for host-only dispatch. Confirm no prompt, source text, provider body, URL, header, or credential crosses into an operation spec or completion.
