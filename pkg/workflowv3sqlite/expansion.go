@@ -16,6 +16,13 @@ type ExpansionCandidate struct {
 	Source workflowv3.ArtifactRef
 }
 
+type ChainedExpansionCandidate struct {
+	RunID    workflowv3.RunID
+	MapKey   string
+	Manifest workflowv3.ItemManifest
+	Final    bool
+}
+
 type ExpansionFinalizationCandidate struct {
 	RunID  workflowv3.RunID
 	MapKey string
@@ -55,9 +62,94 @@ ORDER BY r.created_at, e.map_key`)
 		); err != nil {
 			return nil, err
 		}
-		candidates = append(candidates, candidate)
+		_, mapped, _, err := s.loadPlanMap(ctx, candidate.RunID, candidate.MapKey)
+		if err != nil {
+			return nil, err
+		}
+		if mapped.Source.Source == "set-input" {
+			candidates = append(candidates, candidate)
+		}
 	}
 	return candidates, rows.Err()
+}
+
+func (s *Store) ChainedExpansionCandidate(ctx context.Context) (*ChainedExpansionCandidate, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT e.run_id, e.map_key, e.next_index, e.page_size
+FROM v3_expansions e JOIN v3_runs r ON r.run_id = e.run_id
+WHERE r.status = 'running' AND e.status IN ('pending','expanding')
+ORDER BY r.created_at, e.map_key`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	type expansion struct {
+		runID      workflowv3.RunID
+		mapKey     string
+		next, page int
+	}
+	var expansions []expansion
+	for rows.Next() {
+		var item expansion
+		if err := rows.Scan(&item.runID, &item.mapKey, &item.next, &item.page); err != nil {
+			return nil, err
+		}
+		expansions = append(expansions, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, candidate := range expansions {
+		_, mapped, _, err := s.loadPlanMap(ctx, candidate.runID, candidate.mapKey)
+		if err != nil {
+			return nil, err
+		}
+		if mapped.Source.Source != "map-output" {
+			continue
+		}
+		var upstreamStatus string
+		var upstreamTotal int
+		if err := s.db.QueryRowContext(ctx, `SELECT status, total_items FROM v3_expansions WHERE run_id = ? AND map_key = ?`, candidate.runID, mapped.Source.MapKey).Scan(&upstreamStatus, &upstreamTotal); err != nil {
+			return nil, err
+		}
+		itemRows, err := s.db.QueryContext(ctx, `
+SELECT item.item_key, node.status, output.schema_id, output.digest, output.media_type,
+  output.size_bytes, output.locator
+FROM v3_map_items item
+JOIN v3_nodes node ON node.run_id = item.run_id AND node.node_key = item.node_key
+LEFT JOIN v3_node_outputs output ON output.run_id = item.run_id AND output.node_key = item.node_key
+WHERE item.run_id = ? AND item.map_key = ? ORDER BY item.item_index`, candidate.runID, mapped.Source.MapKey)
+		if err != nil {
+			return nil, err
+		}
+		items := []workflowv3.ManifestItem{}
+		for itemRows.Next() {
+			var key, status string
+			var schema, digest, media, locator sql.NullString
+			var size sql.NullInt64
+			if err := itemRows.Scan(&key, &status, &schema, &digest, &media, &size, &locator); err != nil {
+				_ = itemRows.Close()
+				return nil, err
+			}
+			if status != "succeeded" || !schema.Valid || !digest.Valid || !media.Valid || !size.Valid || !locator.Valid {
+				break
+			}
+			items = append(items, workflowv3.ManifestItem{Key: key, Value: workflowv3.ArtifactRef{Schema: schema.String, Digest: digest.String, MediaType: media.String, Size: size.Int64, Locator: locator.String}})
+		}
+		if err := itemRows.Close(); err != nil {
+			return nil, err
+		}
+		final := upstreamStatus == "published" && len(items) == upstreamTotal
+		if len(items)-candidate.next < candidate.page && !final {
+			continue
+		}
+		manifest, err := workflowv3.NewItemManifest(mapped.Source.ItemSchema, items)
+		if err != nil {
+			return nil, err
+		}
+		return &ChainedExpansionCandidate{RunID: candidate.runID, MapKey: candidate.mapKey, Manifest: manifest, Final: final}, nil
+	}
+	return nil, nil
 }
 
 func (s *Store) ExpansionFinalizationCandidates(ctx context.Context) ([]ExpansionFinalizationCandidate, error) {
@@ -83,12 +175,21 @@ ORDER BY r.created_at, e.map_key`)
 
 // ExpandNextPage materializes at most one deterministic bounded map page. A nil
 // page means expansion is intentionally backpressured.
-func (s *Store) ExpandNextPage(
+func (s *Store) ExpandNextPage(ctx context.Context, runID workflowv3.RunID, mapKey string, manifestRef workflowv3.ArtifactRef, manifest workflowv3.ItemManifest, now time.Time) (*ExpansionPage, error) {
+	return s.expandNextPage(ctx, runID, mapKey, manifestRef, manifest, true, false, now)
+}
+
+func (s *Store) ExpandNextChainedPage(ctx context.Context, runID workflowv3.RunID, mapKey string, manifestRef workflowv3.ArtifactRef, manifest workflowv3.ItemManifest, final bool, now time.Time) (*ExpansionPage, error) {
+	return s.expandNextPage(ctx, runID, mapKey, manifestRef, manifest, final, true, now)
+}
+
+func (s *Store) expandNextPage(
 	ctx context.Context,
 	runID workflowv3.RunID,
 	mapKey string,
 	manifestRef workflowv3.ArtifactRef,
 	manifest workflowv3.ItemManifest,
+	final, chained bool,
 	now time.Time,
 ) (*ExpansionPage, error) {
 	if err := workflowv3.ValidateArtifactRef(manifestRef); err != nil {
@@ -111,8 +212,8 @@ func (s *Store) ExpandNextPage(
 	if err != nil {
 		return nil, err
 	}
-	if mapped.Source.Source != "set-input" && mapped.Source.Source != "map-output" {
-		return nil, fmt.Errorf("map %q source is not available for expansion", mapKey)
+	if (!chained && mapped.Source.Source != "set-input") || (chained && mapped.Source.Source != "map-output") {
+		return nil, fmt.Errorf("map %q source is not available for this expansion mode", mapKey)
 	}
 	if manifest.ItemSchema != mapped.Source.ItemSchema {
 		return nil, fmt.Errorf("map %q item schema %q does not match %q", mapKey, manifest.ItemSchema, mapped.Source.ItemSchema)
@@ -146,20 +247,40 @@ WHERE e.run_id = ? AND e.map_key = ?`, runID, mapKey).Scan(
 	if runStatus != "running" || status == "failed" || status == "canceled" || status == "succeeded" {
 		return nil, fmt.Errorf("map %s/%s is not expandable", runID, mapKey)
 	}
-	if !sourceSchema.Valid || sourceSchema.String != manifestRef.Schema ||
-		!sourceDigest.Valid || sourceDigest.String != manifestRef.Digest ||
-		!sourceMediaType.Valid || sourceMediaType.String != manifestRef.MediaType ||
-		!sourceSize.Valid || sourceSize.Int64 != manifestRef.Size ||
-		!sourceLocator.Valid || sourceLocator.String != manifestRef.Locator {
-		return nil, fmt.Errorf("map %q source ref does not match submitted input", mapKey)
-	}
-	if totalItems >= 0 && totalItems != len(manifest.Items) {
-		return nil, fmt.Errorf("map %q cardinality changed from %d to %d", mapKey, totalItems, len(manifest.Items))
-	}
-	if totalItems < 0 {
+	if chained {
+		if len(manifest.Items) < nextIndex {
+			return nil, fmt.Errorf("map %q chained cardinality regressed", mapKey)
+		}
+		if _, err := tx.ExecContext(ctx, `
+UPDATE v3_expansions SET source_schema = ?, source_digest = ?, source_media_type = ?,
+  source_size_bytes = ?, source_locator = ?, updated_at = ?
+WHERE run_id = ? AND map_key = ?`, manifestRef.Schema, manifestRef.Digest,
+			manifestRef.MediaType, manifestRef.Size, manifestRef.Locator, formatTime(now), runID, mapKey); err != nil {
+			return nil, err
+		}
 		totalItems = len(manifest.Items)
+	} else {
+		if !sourceSchema.Valid || sourceSchema.String != manifestRef.Schema ||
+			!sourceDigest.Valid || sourceDigest.String != manifestRef.Digest ||
+			!sourceMediaType.Valid || sourceMediaType.String != manifestRef.MediaType ||
+			!sourceSize.Valid || sourceSize.Int64 != manifestRef.Size ||
+			!sourceLocator.Valid || sourceLocator.String != manifestRef.Locator {
+			return nil, fmt.Errorf("map %q source ref does not match submitted input", mapKey)
+		}
+		if totalItems >= 0 && totalItems != len(manifest.Items) {
+			return nil, fmt.Errorf("map %q cardinality changed from %d to %d", mapKey, totalItems, len(manifest.Items))
+		}
+		if totalItems < 0 {
+			totalItems = len(manifest.Items)
+		}
 	}
 	if nextIndex == totalItems {
+		if chained && !final {
+			if err := tx.Commit(); err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}
 		terminalStatus := "expanded"
 		if totalItems == 0 {
 			terminalStatus = "succeeded"
@@ -184,6 +305,12 @@ WHERE run_id = ? AND map_key = ? AND next_index = ?`,
 
 	count := mapped.Policy.PageSize
 	if remaining := totalItems - nextIndex; remaining < count {
+		if chained && !final {
+			if err := tx.Commit(); err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}
 		count = remaining
 	}
 	if mapped.Policy.MaxMaterializedAhead-(materialized-terminal) < count {
@@ -300,7 +427,7 @@ INSERT INTO v3_expansion_pages(
 	}
 	newNext := nextIndex + count
 	newStatus := "expanding"
-	if newNext == totalItems {
+	if newNext == totalItems && final {
 		newStatus = "expanded"
 	}
 	result, err := tx.ExecContext(ctx, `

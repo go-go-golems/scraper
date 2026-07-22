@@ -4422,3 +4422,28 @@ streaming/independent generation-embedding refill rather than a phase barrier,
 all restart/fencing/cancellation boundaries, real prepared-store reopen in a
 fresh process, query evaluation/citations/researchctl evidence, comprehensive
 privacy/storage scans, and the bounded P3 provider sample.
+
+## Step 44: Stream deterministic chained-map pages for independent resources
+
+The initial chained-map fix activated a downstream map only after full upstream
+publication. That preserved correctness but retained the generation/embedding
+phase barrier diagnosed in the earlier TTC run, so it could not satisfy Slice
+12's independent work-conserving resource requirement.
+
+Chained map expansion now materializes only deterministic contiguous page
+prefixes. A downstream page becomes eligible when a complete configured page of
+ordered upstream outputs is committed, or when the upstream map is published
+and the deterministic final short page is available. Each prefix is encoded as
+an immutable external item manifest; SQLite stores only its compact ref and the
+ordinary expansion cursor. Partial availability never changes page membership,
+and a short page never materializes before final cardinality is known, so
+capacity and completion timing cannot alter child or page identity.
+
+The regular set-input path remains unchanged. Chained candidates read only
+committed upstream output refs, respect ordinary materialization backpressure,
+reuse ordinary node/lease/budget/isolation execution, and keep the downstream
+map nonterminal until the final prefix. Focused SQLite expansion tests, the
+17.11s concurrency-invariance lazy-map test, the real 1,807-item restart/privacy
+map test (28.48s), and bounded multi-level reduction test passed. The latest
+large-map storage evidence is `source=7561185 persistedSQLite=6619136
+ratio=0.8754`; payloads remain external.
