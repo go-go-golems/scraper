@@ -161,6 +161,15 @@ CREATE TABLE IF NOT EXISTS v3_reduction_partitions (
   FOREIGN KEY (run_id, node_key) REFERENCES v3_nodes(run_id, node_key) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS v3_reduction_consumers (
+  run_id TEXT NOT NULL,
+  node_key TEXT NOT NULL,
+  reduce_key TEXT NOT NULL,
+  PRIMARY KEY (run_id, node_key, reduce_key),
+  FOREIGN KEY (run_id, node_key) REFERENCES v3_nodes(run_id, node_key) ON DELETE CASCADE,
+  FOREIGN KEY (run_id, reduce_key) REFERENCES v3_reductions(run_id, reduce_key) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS v3_run_resource_dispatch (
   run_id TEXT NOT NULL,
   resource_class TEXT NOT NULL,
@@ -330,3 +339,5 @@ CREATE INDEX IF NOT EXISTS v3_reductions_status_idx
   ON v3_reductions(status, updated_at, run_id, reduce_key);
 CREATE INDEX IF NOT EXISTS v3_reduction_partitions_node_idx
   ON v3_reduction_partitions(run_id, node_key);
+CREATE INDEX IF NOT EXISTS v3_reduction_consumers_node_idx
+  ON v3_reduction_consumers(run_id, node_key);

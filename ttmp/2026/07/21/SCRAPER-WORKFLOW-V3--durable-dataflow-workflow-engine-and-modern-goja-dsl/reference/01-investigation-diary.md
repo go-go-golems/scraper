@@ -4359,3 +4359,23 @@ copying only the published compact manifest ref into a still-pending expansion.
 It remains idempotent and performs no artifact-body persistence. Focused SQLite
 and runtime map suites passed. This is a generic chained-map correctness fix,
 not RAG behavior in scraper.
+
+## Step 42: Permit ordinary nodes to consume published reduction roots
+
+The RAG production graph reduces prepared shards, validates the root, waits at a
+publication gate, and then publishes. Authoring correctly produced a
+`reduction-output` value, but generic compiler validation allowed that source
+only as a run output, not as an ordinary task binding. Extending only the
+compiler would have leased the consumer prematurely, so the complete generic
+contract now includes:
+
+- compiler schema resolution from the exact reduction partition task output;
+- additive `v3_reduction_consumers` relation with foreign keys and index;
+- submission-time materialization of exact node/reduction relations;
+- lease exclusion until the reduction is durably `published`; and
+- input resolution from the fenced published root ref.
+
+This keeps the reduction body external and adds only compact control identity.
+Focused compiler, full SQLite, and affected reduction/budget/runtime tests pass.
+The RAG repository uses this to place validation and approval after reduction,
+without introducing RAG semantics into scraper.

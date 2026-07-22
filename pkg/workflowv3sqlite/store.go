@@ -245,6 +245,18 @@ INSERT INTO v3_reductions(
 			return fmt.Errorf("insert reduction %s: %w", reduced.Key, err)
 		}
 	}
+	for _, node := range plan.Nodes {
+		for _, binding := range node.Bindings {
+			if binding.Source != "reduction-output" {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `
+INSERT INTO v3_reduction_consumers(run_id, node_key, reduce_key)
+VALUES (?, ?, ?)`, runID, node.Key, binding.ReduceKey); err != nil {
+				return fmt.Errorf("insert reduction consumer %s -> %s: %w", node.Key, binding.ReduceKey, err)
+			}
+		}
+	}
 	if err := insertEvent(ctx, tx, runID, "", "run.created", map[string]any{
 		"planDigest": plan.Digest,
 	}, now); err != nil {
@@ -314,6 +326,13 @@ WHERE n.status = 'pending' AND r.status = 'running'
     WHERE d.run_id = n.run_id
       AND d.node_key = n.node_key
       AND dependency.status != 'succeeded'
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM v3_reduction_consumers consumer
+    JOIN v3_reductions reduction
+      ON reduction.run_id = consumer.run_id AND reduction.reduce_key = consumer.reduce_key
+    WHERE consumer.run_id = n.run_id AND consumer.node_key = n.node_key
+      AND reduction.status != 'published'
   )
   AND NOT EXISTS (
     SELECT 1 FROM v3_gate_consumers consumer
@@ -510,6 +529,11 @@ FROM v3_node_outputs WHERE run_id = ? AND node_key = ? AND port = ?`,
 SELECT input_schema, input_digest, input_media_type, input_size_bytes, input_locator
 FROM v3_map_items WHERE run_id = ? AND map_key = ? AND node_key = ?`,
 				lease.RunID, binding.MapKey, lease.NodeKey)
+		case "reduction-output":
+			row = s.db.QueryRowContext(ctx, `
+SELECT root_schema, root_digest, root_media_type, root_size_bytes, root_locator
+FROM v3_reductions WHERE run_id = ? AND reduce_key = ? AND status = 'published'`,
+				lease.RunID, binding.ReduceKey)
 		case "reduction-partition":
 			row = s.db.QueryRowContext(ctx, `
 SELECT input_schema, input_digest, input_media_type, input_size_bytes, input_locator
