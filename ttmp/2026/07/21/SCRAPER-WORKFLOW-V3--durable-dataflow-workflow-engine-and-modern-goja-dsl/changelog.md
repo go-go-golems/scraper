@@ -327,3 +327,7 @@ Implementation commit: `00f36b3` (`workflowv3: add durable approval gates`). Fre
 ## 2026-07-22
 
 Completed the evidence-backed Slices 6–10 requirement audit, normalized Slice 6/7 document status, hardened the shared-host map fixture deadline without changing runtime behavior, passed final repository validation, and published the completion bundle to `/ai/2026/07/22/SCRAPER-WORKFLOW-V3/SCRAPER WORKFLOW V3 SLICES 6 THROUGH 10 COMPLETION.pdf`
+
+## 2026-07-22
+
+Implemented the first complete Slice 11 process-isolation tranche: canonical requested/effective policy and exact executor identity, JavaScript/DTS authoring, registry-generation pinning and rolling executor coexistence, additive SQLite attempt evidence and projections, static worker/launcher binaries, bounded canonical protocol, Bubblewrap namespaces, cgroup-v2 CPU/memory/process controls, fixed allowlisted tools, parent-only candidate publication, cancellation/fencing, worker-death retry, privacy, migration, and real integration evidence

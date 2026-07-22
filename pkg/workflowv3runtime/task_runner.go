@@ -93,7 +93,7 @@ func RunTask(ctx context.Context, request TaskRequest) (TaskResult, error) {
 	}
 	for _, alias := range request.Task.Spec.Modules {
 		module, err := request.Modules.build(alias, TaskModuleContext{
-			Request: request, Workspace: workspace,
+			Context: ctx, Request: request, Workspace: workspace,
 		})
 		if err != nil {
 			return TaskResult{}, &RuntimeConstructionError{Err: err}

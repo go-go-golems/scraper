@@ -142,7 +142,17 @@ CREATE TABLE v3_attempts (
   failure_retryable INTEGER,
   failure_message TEXT,
   PRIMARY KEY (run_id, node_key, attempt_no)
-);`)
+);
+INSERT INTO v3_runs(run_id,name,plan_digest,plan_json,status,created_at,updated_at)
+VALUES ('legacy','legacy','sha256:legacy','{}','running','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
+INSERT INTO v3_nodes(
+  run_id,node_key,ordinal,task_kind,task_version,bundle_digest,entrypoint,
+  task_abi,bindings_json,input_schemas_json,output_schemas_json,modules_json,status
+) VALUES ('legacy','node',0,'legacy.task','v1','sha256:legacy','tasks.cjs#run',
+  'scraper-js-task/v1','{}','{}','{}','[]','running');
+INSERT INTO v3_attempts(
+  run_id,node_key,attempt_no,status,lease_token,cancel_epoch,registry_generation,started_at
+) VALUES ('legacy','node',1,'running','token',0,'legacy-generation','2026-01-01T00:00:00Z');`)
 	require.NoError(t, err)
 	require.NoError(t, database.Close())
 
@@ -151,8 +161,8 @@ CREATE TABLE v3_attempts (
 	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	for table, columns := range map[string][]string{
 		"v3_runs":                 {"dispatch_count"},
-		"v3_nodes":                {"resource_class", "max_attempts", "retry_backoff_ms", "ready_at", "failure_count", "budget_account", "budget_on_exhausted", "budget_approval_gate"},
-		"v3_attempts":             {"resource_class"},
+		"v3_nodes":                {"resource_class", "max_attempts", "retry_backoff_ms", "ready_at", "failure_count", "budget_account", "budget_on_exhausted", "budget_approval_gate", "isolation_class", "isolation_policy_digest", "isolation_executor_digest", "isolation_policy_json"},
+		"v3_attempts":             {"resource_class", "isolation_class", "isolation_policy_digest", "isolation_executor_digest"},
 		"v3_expansions":           {"page_size", "max_items", "max_materialized_ahead", "output_digest"},
 		"v3_expansion_pages":      {"page_digest"},
 		"v3_map_items":            {"item_key", "input_digest"},
@@ -165,6 +175,26 @@ CREATE TABLE v3_attempts (
 			require.True(t, exists, "%s.%s", table, column)
 		}
 	}
+	var nodeClass, nodeDigest string
+	var nodePolicy []byte
+	require.NoError(t, store.db.QueryRowContext(ctx, `
+SELECT isolation_class, isolation_policy_digest, isolation_policy_json
+FROM v3_nodes WHERE run_id = 'legacy' AND node_key = 'node'`).Scan(&nodeClass, &nodeDigest, &nodePolicy))
+	require.Equal(t, workflowv3.IsolationInProcessTrusted, nodeClass)
+	require.NotEmpty(t, nodeDigest)
+	var migratedPolicy workflowv3.PlanIsolation
+	require.NoError(t, workflowv3.StrictDecode(nodePolicy, &migratedPolicy))
+	require.Equal(t, nodeDigest, migratedPolicy.PolicyDigest)
+	var attemptClass, attemptDigest string
+	require.NoError(t, store.db.QueryRowContext(ctx, `
+SELECT isolation_class, isolation_policy_digest FROM v3_attempts
+WHERE run_id = 'legacy' AND node_key = 'node' AND attempt_no = 1`).Scan(&attemptClass, &attemptDigest))
+	require.Equal(t, nodeClass, attemptClass)
+	require.Equal(t, nodeDigest, attemptDigest)
+	var isolationIndex int
+	require.NoError(t, store.db.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'v3_nodes_isolation_idx'`).Scan(&isolationIndex))
+	require.Equal(t, 1, isolationIndex)
 	for _, table := range []string{
 		"v3_budget_accounts", "v3_node_budget_claims", "v3_budget_reservations",
 		"v3_gates", "v3_gate_dependencies", "v3_gate_consumers",

@@ -39,6 +39,24 @@ type RetryPolicy struct {
 	BackoffMillis int64 `json:"backoffMillis"`
 }
 
+type IsolationPolicy struct {
+	Class            string `json:"class"`
+	WallTimeMillis   int64  `json:"wallTimeMillis,omitempty"`
+	CPUTimeMillis    int64  `json:"cpuTimeMillis,omitempty"`
+	MemoryBytes      int64  `json:"memoryBytes,omitempty"`
+	MaxProcesses     int64  `json:"maxProcesses,omitempty"`
+	MaxOutputBytes   int64  `json:"maxOutputBytes,omitempty"`
+	MaxOutputFiles   int    `json:"maxOutputFiles,omitempty"`
+	MaxProtocolBytes int64  `json:"maxProtocolBytes,omitempty"`
+}
+
+type PlanIsolation struct {
+	Requested      IsolationPolicy `json:"requested"`
+	Effective      IsolationPolicy `json:"effective"`
+	PolicyDigest   string          `json:"policyDigest"`
+	ExecutorDigest string          `json:"executorDigest,omitempty"`
+}
+
 type BudgetAmount struct {
 	Dimension string `json:"dimension"`
 	Units     int64  `json:"units"`
@@ -66,13 +84,15 @@ type PlanBudgetClaim struct {
 }
 
 type TaskSpec struct {
-	Identity      ImplementationIdentity `json:"identity"`
-	Inputs        map[string]string      `json:"inputs"`
-	Outputs       map[string]string      `json:"outputs"`
-	Modules       []string               `json:"modules,omitempty"`
-	ResourceClass string                 `json:"resourceClass"`
-	Retry         RetryPolicy            `json:"retry"`
-	BudgetMaximum *BudgetClaim           `json:"budgetMaximum,omitempty"`
+	Identity                ImplementationIdentity `json:"identity"`
+	Inputs                  map[string]string      `json:"inputs"`
+	Outputs                 map[string]string      `json:"outputs"`
+	Modules                 []string               `json:"modules,omitempty"`
+	ResourceClass           string                 `json:"resourceClass"`
+	Retry                   RetryPolicy            `json:"retry"`
+	BudgetMaximum           *BudgetClaim           `json:"budgetMaximum,omitempty"`
+	IsolationMaximum        IsolationPolicy        `json:"isolationMaximum"`
+	IsolationExecutorDigest string                 `json:"isolationExecutorDigest,omitempty"`
 }
 
 type ValueRef struct {
@@ -105,6 +125,7 @@ type IRNode struct {
 	Bindings  map[string]ValueRef `json:"bindings"`
 	DependsOn []NodeKey           `json:"dependsOn,omitempty"`
 	Budget    *BudgetClaim        `json:"budget,omitempty"`
+	Isolation *IsolationPolicy    `json:"isolation,omitempty"`
 }
 
 type IRSetInput struct {
@@ -120,12 +141,13 @@ type MapPolicy struct {
 }
 
 type IRMap struct {
-	Key      string              `json:"key"`
-	Source   SetRef              `json:"source"`
-	ItemTask TaskKey             `json:"itemTask"`
-	Bindings map[string]ValueRef `json:"bindings"`
-	Policy   MapPolicy           `json:"policy"`
-	Budget   *BudgetClaim        `json:"budget,omitempty"`
+	Key       string              `json:"key"`
+	Source    SetRef              `json:"source"`
+	ItemTask  TaskKey             `json:"itemTask"`
+	Bindings  map[string]ValueRef `json:"bindings"`
+	Policy    MapPolicy           `json:"policy"`
+	Budget    *BudgetClaim        `json:"budget,omitempty"`
+	Isolation *IsolationPolicy    `json:"isolation,omitempty"`
 }
 
 type IRSetOutput struct {
@@ -145,6 +167,7 @@ type IRReduce struct {
 	Bindings      map[string]ValueRef `json:"bindings"`
 	Policy        ReducePolicy        `json:"policy"`
 	Budget        *BudgetClaim        `json:"budget,omitempty"`
+	Isolation     *IsolationPolicy    `json:"isolation,omitempty"`
 }
 
 type GatePolicy struct {
@@ -199,6 +222,7 @@ type PlanNode struct {
 	ResourceClass  string                 `json:"resourceClass"`
 	Retry          RetryPolicy            `json:"retry"`
 	Budget         *PlanBudgetClaim       `json:"budget,omitempty"`
+	Isolation      *PlanIsolation         `json:"isolation,omitempty"`
 }
 
 type PlanMap struct {
@@ -213,6 +237,7 @@ type PlanMap struct {
 	Retry          RetryPolicy            `json:"retry"`
 	Policy         MapPolicy              `json:"policy"`
 	Budget         *PlanBudgetClaim       `json:"budget,omitempty"`
+	Isolation      *PlanIsolation         `json:"isolation,omitempty"`
 }
 
 type PlanReduce struct {
@@ -227,6 +252,7 @@ type PlanReduce struct {
 	Retry          RetryPolicy            `json:"retry"`
 	Policy         ReducePolicy           `json:"policy"`
 	Budget         *PlanBudgetClaim       `json:"budget,omitempty"`
+	Isolation      *PlanIsolation         `json:"isolation,omitempty"`
 }
 
 type WorkflowPlan struct {
@@ -254,17 +280,20 @@ type Failure struct {
 }
 
 type Attempt struct {
-	RunID              RunID     `json:"runId"`
-	NodeKey            NodeKey   `json:"nodeKey"`
-	Number             int       `json:"number"`
-	Status             string    `json:"status"`
-	LeaseToken         string    `json:"-"`
-	CancelEpoch        int64     `json:"cancelEpoch"`
-	RegistryGeneration string    `json:"registryGeneration"`
-	ResourceClass      string    `json:"resourceClass"`
-	StartedAt          time.Time `json:"startedAt"`
-	FinishedAt         time.Time `json:"finishedAt,omitempty"`
-	Failure            *Failure  `json:"failure,omitempty"`
+	RunID                   RunID     `json:"runId"`
+	NodeKey                 NodeKey   `json:"nodeKey"`
+	Number                  int       `json:"number"`
+	Status                  string    `json:"status"`
+	LeaseToken              string    `json:"-"`
+	CancelEpoch             int64     `json:"cancelEpoch"`
+	RegistryGeneration      string    `json:"registryGeneration"`
+	ResourceClass           string    `json:"resourceClass"`
+	IsolationClass          string    `json:"isolationClass"`
+	IsolationPolicyDigest   string    `json:"isolationPolicyDigest"`
+	IsolationExecutorDigest string    `json:"isolationExecutorDigest,omitempty"`
+	StartedAt               time.Time `json:"startedAt"`
+	FinishedAt              time.Time `json:"finishedAt,omitempty"`
+	Failure                 *Failure  `json:"failure,omitempty"`
 }
 
 type Lease struct {
@@ -369,6 +398,8 @@ type OperationalSnapshot struct {
 type QueueSnapshot struct {
 	Ready               int                          `json:"ready"`
 	ActiveByResource    map[string]int               `json:"activeByResource"`
+	ActiveByIsolation   map[string]int               `json:"activeByIsolation"`
+	ReadyByIsolation    map[string]int               `json:"readyByIsolation"`
 	BlockedByReason     map[string]int               `json:"blockedByReason"`
 	Maps                []MapProgress                `json:"maps,omitempty"`
 	Reductions          []ReductionProgress          `json:"reductions,omitempty"`

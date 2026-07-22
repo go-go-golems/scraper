@@ -12,8 +12,9 @@ type RegisteredTask struct {
 }
 
 type RegistryBuilder struct {
-	tasks   map[ImplementationIdentity]RegisteredTask
-	modules map[string]struct{}
+	tasks              map[ImplementationIdentity]RegisteredTask
+	modules            map[string]struct{}
+	isolationExecutors map[string]string
 }
 
 type RegistryResolver interface {
@@ -24,15 +25,17 @@ type RegistryResolver interface {
 }
 
 type SealedRegistry struct {
-	generation string
-	tasks      map[ImplementationIdentity]RegisteredTask
-	modules    map[string]struct{}
+	generation         string
+	tasks              map[ImplementationIdentity]RegisteredTask
+	modules            map[string]struct{}
+	isolationExecutors map[string]string
 }
 
 func NewRegistryBuilder() *RegistryBuilder {
 	return &RegistryBuilder{
-		tasks:   map[ImplementationIdentity]RegisteredTask{},
-		modules: map[string]struct{}{},
+		tasks:              map[ImplementationIdentity]RegisteredTask{},
+		modules:            map[string]struct{}{},
+		isolationExecutors: map[string]string{},
 	}
 }
 
@@ -49,6 +52,23 @@ func (b *RegistryBuilder) AdvertiseModules(aliases ...string) error {
 		}
 		b.modules[alias] = struct{}{}
 	}
+	return nil
+}
+
+func (b *RegistryBuilder) AdvertiseIsolationExecutor(class, digest string) error {
+	if b == nil {
+		return fmt.Errorf("registry builder is nil")
+	}
+	if class != IsolationSubprocessRestricted {
+		return fmt.Errorf("isolation executor class %q is not advertisable", class)
+	}
+	if err := validateSHA256Digest(digest); err != nil {
+		return fmt.Errorf("isolation executor digest: %w", err)
+	}
+	if existing, ok := b.isolationExecutors[class]; ok && existing != digest {
+		return fmt.Errorf("isolation executor class %q is already advertised with another digest", class)
+	}
+	b.isolationExecutors[class] = digest
 	return nil
 }
 
@@ -76,6 +96,13 @@ func (b *RegistryBuilder) Seal() (*SealedRegistry, error) {
 	sealedTasks := make(map[ImplementationIdentity]RegisteredTask, len(b.tasks))
 	for identity, task := range b.tasks {
 		identities = append(identities, identity)
+		if task.Spec.IsolationMaximum.Class == IsolationSubprocessRestricted {
+			digest, ok := b.isolationExecutors[IsolationSubprocessRestricted]
+			if !ok {
+				return nil, fmt.Errorf("implementation %s requires an unadvertised restricted isolation executor", formatIdentity(task.Spec.Identity))
+			}
+			task.Spec.IsolationExecutorDigest = digest
+		}
 		sealedTasks[identity] = task
 	}
 	sort.Slice(identities, func(i, j int) bool {
@@ -95,15 +122,28 @@ func (b *RegistryBuilder) Seal() (*SealedRegistry, error) {
 			}
 		}
 	}
+	type isolationExecutor struct {
+		Class  string `json:"class"`
+		Digest string `json:"digest"`
+	}
+	executors := make([]isolationExecutor, 0, len(b.isolationExecutors))
+	sealedExecutors := make(map[string]string, len(b.isolationExecutors))
+	for class, digest := range b.isolationExecutors {
+		executors = append(executors, isolationExecutor{Class: class, Digest: digest})
+		sealedExecutors[class] = digest
+	}
+	sort.Slice(executors, func(i, j int) bool { return executors[i].Class < executors[j].Class })
 	generation, err := Digest(struct {
-		Identities []ImplementationIdentity `json:"identities"`
-		Modules    []string                 `json:"modules"`
-	}{Identities: identities, Modules: modules})
+		Identities         []ImplementationIdentity `json:"identities"`
+		Modules            []string                 `json:"modules"`
+		IsolationExecutors []isolationExecutor      `json:"isolationExecutors,omitempty"`
+	}{Identities: identities, Modules: modules, IsolationExecutors: executors})
 	if err != nil {
 		return nil, err
 	}
 	return &SealedRegistry{
 		generation: generation, tasks: sealedTasks, modules: sealedModules,
+		isolationExecutors: sealedExecutors,
 	}, nil
 }
 
@@ -112,6 +152,18 @@ func (r *SealedRegistry) Generation() string {
 		return ""
 	}
 	return r.generation
+}
+
+func (r *SealedRegistry) IsolationExecutorDigests() []string {
+	if r == nil {
+		return nil
+	}
+	ret := make([]string, 0, len(r.isolationExecutors))
+	for _, digest := range r.isolationExecutors {
+		ret = append(ret, digest)
+	}
+	sort.Strings(ret)
+	return ret
 }
 
 func (r *SealedRegistry) ModuleAliases() []string {
@@ -152,6 +204,9 @@ func (r *SealedRegistry) ResolveNode(node PlanNode) (RegisteredTask, error) {
 	}
 	if task.Spec.ResourceClass != node.ResourceClass || task.Spec.Retry != node.Retry {
 		return RegisteredTask{}, fmt.Errorf("plan node policy does not match registered implementation")
+	}
+	if err := ValidatePlanIsolation(node.Isolation, task.Spec.IsolationMaximum); err != nil {
+		return RegisteredTask{}, fmt.Errorf("plan node isolation does not match registered implementation: %w", err)
 	}
 	if strings.Join(task.Spec.Modules, "\x00") != strings.Join(node.Modules, "\x00") {
 		return RegisteredTask{}, fmt.Errorf("plan node modules do not match registered implementation")

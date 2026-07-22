@@ -99,6 +99,14 @@ func validateTaskSpec(spec TaskSpec) error {
 			return fmt.Errorf("task %s@%s budget maximum: %w", identity.Kind, identity.Version, err)
 		}
 	}
+	if err := ValidateIsolationPolicy(spec.IsolationMaximum); err != nil {
+		return fmt.Errorf("task %s@%s isolation maximum: %w", identity.Kind, identity.Version, err)
+	}
+	if spec.IsolationExecutorDigest != "" {
+		if err := validateSHA256Digest(spec.IsolationExecutorDigest); err != nil {
+			return fmt.Errorf("task %s@%s isolation executor digest: %w", identity.Kind, identity.Version, err)
+		}
+	}
 	seenModules := map[string]struct{}{}
 	for _, module := range spec.Modules {
 		if strings.TrimSpace(module) == "" {
@@ -118,6 +126,9 @@ func normalizeTaskSpec(spec TaskSpec) TaskSpec {
 	}
 	if spec.Retry.MaxAttempts == 0 {
 		spec.Retry.MaxAttempts = 1
+	}
+	if spec.IsolationMaximum.Class == "" {
+		spec.IsolationMaximum = TrustedIsolationPolicy()
 	}
 	return spec
 }

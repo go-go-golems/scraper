@@ -15,23 +15,36 @@ declare module "workflow" {
     onExhausted: "fail-run" | "block" | "require-approval";
     approvalGate?: string;
   }
+  export interface IsolationPolicy {
+    class: "in-process.trusted" | "subprocess.restricted";
+    wallTimeMillis?: number;
+    cpuTimeMillis?: number;
+    memoryBytes?: number;
+    maxProcesses?: number;
+    maxOutputBytes?: number;
+    maxOutputFiles?: number;
+    maxProtocolBytes?: number;
+  }
   export interface GateBuilder {
     after(job: JobRef): GateBuilder;
   }
   export interface JobBuilder {
     after(job: JobRef): JobBuilder;
     budget(claim: BudgetClaim): JobBuilder;
+    isolation(policy: IsolationPolicy): JobBuilder;
   }
   export interface MapBuilder {
     pageSize(value: number): MapBuilder;
     maxItems(value: number): MapBuilder;
     maxMaterializedAhead(value: number): MapBuilder;
     budget(claim: BudgetClaim): MapBuilder;
+    isolation(policy: IsolationPolicy): MapBuilder;
   }
   export interface ReduceBuilder {
     fanIn(value: number): ReduceBuilder;
     maxLevels(value: number): ReduceBuilder;
     budget(claim: BudgetClaim): ReduceBuilder;
+    isolation(policy: IsolationPolicy): ReduceBuilder;
   }
   export interface PlanBuilder {
     budget(

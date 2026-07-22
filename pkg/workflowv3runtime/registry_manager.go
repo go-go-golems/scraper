@@ -135,6 +135,23 @@ func (m *RegistryManager) Catalog() (*workflowv3.Catalog, error) {
 	return entry.registry.Catalog()
 }
 
+func (m *RegistryManager) IsolationExecutorDigests() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	digests := map[string]struct{}{}
+	for _, entry := range m.generations {
+		for _, digest := range entry.registry.IsolationExecutorDigests() {
+			digests[digest] = struct{}{}
+		}
+	}
+	ret := make([]string, 0, len(digests))
+	for digest := range digests {
+		ret = append(ret, digest)
+	}
+	sort.Strings(ret)
+	return ret
+}
+
 func (m *RegistryManager) ModuleAliases() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()

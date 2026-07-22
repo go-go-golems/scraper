@@ -121,6 +121,8 @@ INSERT INTO v3_budget_accounts(
 		inputSchemas, _ := workflowv3.CanonicalJSON(node.InputSchemas)
 		outputSchemas, _ := workflowv3.CanonicalJSON(node.OutputSchemas)
 		modules, _ := workflowv3.CanonicalJSON(node.Modules)
+		isolation := workflowv3.EffectivePlanIsolation(node.Isolation)
+		isolationBody, _ := workflowv3.CanonicalJSON(isolation)
 		identity := node.Implementation
 		var budgetAccount, budgetOnExhausted, budgetApprovalGate any
 		if node.Budget != nil {
@@ -135,13 +137,15 @@ INSERT INTO v3_nodes(
   entrypoint, task_abi, bindings_json, input_schemas_json,
   output_schemas_json, modules_json, resource_class, max_attempts,
   retry_backoff_ms, budget_account, budget_on_exhausted,
-  budget_approval_gate, status
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+  budget_approval_gate, isolation_class, isolation_policy_digest,
+  isolation_executor_digest, isolation_policy_json, status
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
 			runID, node.Key, ordinal, identity.Kind, identity.Version,
 			identity.BundleDigest, identity.Entrypoint, identity.ABI,
 			bindings, inputSchemas, outputSchemas, modules,
 			node.ResourceClass, node.Retry.MaxAttempts, node.Retry.BackoffMillis,
 			budgetAccount, budgetOnExhausted, budgetApprovalGate,
+			isolation.Effective.Class, isolation.PolicyDigest, isolation.ExecutorDigest, isolationBody,
 		); err != nil {
 			return fmt.Errorf("insert node %s: %w", node.Key, err)
 		}
@@ -291,6 +295,8 @@ SELECT
   n.output_schemas_json, n.modules_json, n.resource_class,
   n.max_attempts, n.retry_backoff_ms, n.attempt_count, n.failure_count,
   n.budget_account, n.budget_on_exhausted, n.budget_approval_gate,
+  n.isolation_class, n.isolation_policy_digest, n.isolation_executor_digest,
+  n.isolation_policy_json,
   r.cancel_epoch
 FROM v3_nodes n
 JOIN v3_runs r ON r.run_id = n.run_id
@@ -389,6 +395,7 @@ ORDER BY COALESCE(fairness.dispatch_count, 0), r.created_at, n.ordinal, n.run_id
 		return nil, err
 	}
 	selected.node.Budget = budget
+	selectedIsolation := workflowv3.EffectivePlanIsolation(selected.node.Isolation)
 	attempt := selected.attemptCount + 1
 	token := uuid.NewString()
 	expires := now.Add(duration)
@@ -409,10 +416,13 @@ WHERE run_id = ? AND node_key = ? AND status = 'pending'`,
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO v3_attempts(
   run_id, node_key, attempt_no, status, lease_token, cancel_epoch,
-  registry_generation, resource_class, started_at
-) VALUES (?, ?, ?, 'running', ?, ?, ?, ?, ?)`,
+  registry_generation, resource_class, isolation_class,
+  isolation_policy_digest, isolation_executor_digest, started_at
+) VALUES (?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?)`,
 		selected.runID, selected.node.Key, attempt, token, selected.cancelEpoch,
-		generation, selected.node.ResourceClass, formatTime(now),
+		generation, selected.node.ResourceClass,
+		selectedIsolation.Effective.Class, selectedIsolation.PolicyDigest,
+		selectedIsolation.ExecutorDigest, formatTime(now),
 	); err != nil {
 		return nil, fmt.Errorf("insert attempt: %w", err)
 	}
@@ -435,7 +445,10 @@ UPDATE v3_runs SET updated_at = ? WHERE run_id = ?`,
 	}
 	if err := insertEvent(ctx, tx, selected.runID, selected.node.Key, "attempt.started", map[string]any{
 		"attempt": attempt, "registryGeneration": generation,
-		"resourceClass": selected.node.ResourceClass,
+		"resourceClass":           selected.node.ResourceClass,
+		"isolationClass":          selectedIsolation.Effective.Class,
+		"isolationPolicyDigest":   selectedIsolation.PolicyDigest,
+		"isolationExecutorDigest": selectedIsolation.ExecutorDigest,
 	}, now); err != nil {
 		return nil, err
 	}
@@ -942,7 +955,8 @@ FROM v3_expansions WHERE run_id = ? AND map_key = ? AND status = 'published'`,
 	}
 	rows, err := s.db.QueryContext(ctx, `
 SELECT node_key, attempt_no, status, cancel_epoch, registry_generation,
-  resource_class, started_at, finished_at, failure_class, failure_code,
+  resource_class, isolation_class, isolation_policy_digest,
+  isolation_executor_digest, started_at, finished_at, failure_class, failure_code,
   failure_retryable, failure_message
 FROM v3_attempts WHERE run_id = ? ORDER BY node_key, attempt_no`, runID)
 	if err != nil {
@@ -1002,7 +1016,8 @@ WHERE status = 'running' GROUP BY resource_class`)
 func scanLeaseCandidate(rows rowScanner) (leaseCandidate, error) {
 	var candidate leaseCandidate
 	var kind, version, bundleDigest, entrypoint, abi string
-	var bindings, inputSchemas, outputSchemas, modules []byte
+	var bindings, inputSchemas, outputSchemas, modules, isolationBody []byte
+	var isolationClass, isolationDigest, isolationExecutorDigest string
 	if err := rows.Scan(
 		&candidate.runID, &candidate.node.Key, &kind, &version, &bundleDigest,
 		&entrypoint, &abi, &bindings, &inputSchemas, &outputSchemas, &modules,
@@ -1010,6 +1025,7 @@ func scanLeaseCandidate(rows rowScanner) (leaseCandidate, error) {
 		&candidate.node.Retry.BackoffMillis, &candidate.attemptCount,
 		&candidate.failureCount, &candidate.budgetAccount,
 		&candidate.budgetOnExhausted, &candidate.budgetApprovalGate,
+		&isolationClass, &isolationDigest, &isolationExecutorDigest, &isolationBody,
 		&candidate.cancelEpoch,
 	); err != nil {
 		return candidate, err
@@ -1030,6 +1046,15 @@ func scanLeaseCandidate(rows rowScanner) (leaseCandidate, error) {
 	if err := workflowv3.StrictDecode(modules, &candidate.node.Modules); err != nil {
 		return candidate, err
 	}
+	var isolation workflowv3.PlanIsolation
+	if err := workflowv3.StrictDecode(isolationBody, &isolation); err != nil {
+		return candidate, fmt.Errorf("decode node isolation: %w", err)
+	}
+	if isolation.Effective.Class != isolationClass || isolation.PolicyDigest != isolationDigest ||
+		isolation.ExecutorDigest != isolationExecutorDigest {
+		return candidate, fmt.Errorf("node isolation columns do not match canonical policy")
+	}
+	candidate.node.Isolation = &isolation
 	return candidate, nil
 }
 
@@ -1192,7 +1217,9 @@ func scanAttempt(row rowScanner, runID workflowv3.RunID) (workflowv3.Attempt, er
 	var failureRetryable sql.NullBool
 	if err := row.Scan(
 		&attempt.NodeKey, &attempt.Number, &attempt.Status, &attempt.CancelEpoch,
-		&attempt.RegistryGeneration, &attempt.ResourceClass, &started, &finished, &failureClass,
+		&attempt.RegistryGeneration, &attempt.ResourceClass,
+		&attempt.IsolationClass, &attempt.IsolationPolicyDigest,
+		&attempt.IsolationExecutorDigest, &started, &finished, &failureClass,
 		&failureCode, &failureRetryable, &failureMessage,
 	); err != nil {
 		return attempt, err
@@ -1223,7 +1250,14 @@ func migrateAdditiveColumns(ctx context.Context, db *sql.DB) error {
 		{"v3_nodes", "budget_account", "TEXT"},
 		{"v3_nodes", "budget_on_exhausted", "TEXT"},
 		{"v3_nodes", "budget_approval_gate", "TEXT"},
+		{"v3_nodes", "isolation_class", "TEXT NOT NULL DEFAULT 'in-process.trusted'"},
+		{"v3_nodes", "isolation_policy_digest", "TEXT NOT NULL DEFAULT ''"},
+		{"v3_nodes", "isolation_executor_digest", "TEXT NOT NULL DEFAULT ''"},
+		{"v3_nodes", "isolation_policy_json", "BLOB"},
 		{"v3_attempts", "resource_class", "TEXT NOT NULL DEFAULT 'cpu.default'"},
+		{"v3_attempts", "isolation_class", "TEXT NOT NULL DEFAULT 'in-process.trusted'"},
+		{"v3_attempts", "isolation_policy_digest", "TEXT NOT NULL DEFAULT ''"},
+		{"v3_attempts", "isolation_executor_digest", "TEXT NOT NULL DEFAULT ''"},
 	}
 	for _, migration := range migrations {
 		exists, err := columnExists(ctx, db, migration.table, migration.column)
@@ -1242,6 +1276,26 @@ func migrateAdditiveColumns(ctx context.Context, db *sql.DB) error {
 		if _, err := db.ExecContext(ctx, statement); err != nil {
 			return err
 		}
+	}
+	trusted := workflowv3.EffectivePlanIsolation(nil)
+	trustedBody, err := workflowv3.CanonicalJSON(trusted)
+	if err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `
+UPDATE v3_nodes SET isolation_policy_digest = ?, isolation_policy_json = ?
+WHERE isolation_policy_digest = ''`, trusted.PolicyDigest, trustedBody); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `
+UPDATE v3_attempts SET isolation_policy_digest = ?
+WHERE isolation_policy_digest = ''`, trusted.PolicyDigest); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `
+CREATE INDEX IF NOT EXISTS v3_nodes_isolation_idx
+ON v3_nodes(status, isolation_class, run_id)`); err != nil {
+		return err
 	}
 	return nil
 }

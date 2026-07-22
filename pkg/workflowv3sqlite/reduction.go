@@ -267,6 +267,8 @@ WHERE run_id = ? AND reduce_key = ? AND level = ? AND status != 'succeeded'`,
 		outputSchemas, _ := workflowv3.CanonicalJSON(reduced.OutputSchemas)
 		modules, _ := workflowv3.CanonicalJSON(reduced.Modules)
 		identity := reduced.Implementation
+		isolation := workflowv3.EffectivePlanIsolation(reduced.Isolation)
+		isolationBody, _ := workflowv3.CanonicalJSON(isolation)
 		var budgetAccount, budgetOnExhausted, budgetApprovalGate any
 		if reduced.Budget != nil {
 			budgetAccount, budgetOnExhausted = reduced.Budget.Account, reduced.Budget.OnExhausted
@@ -280,13 +282,15 @@ INSERT INTO v3_nodes(
   entrypoint, task_abi, bindings_json, input_schemas_json,
   output_schemas_json, modules_json, resource_class, max_attempts,
   retry_backoff_ms, budget_account, budget_on_exhausted,
-  budget_approval_gate, status
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+  budget_approval_gate, isolation_class, isolation_policy_digest,
+  isolation_executor_digest, isolation_policy_json, status
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
 			runID, nodeKey, ordinalBase+ordinal, identity.Kind, identity.Version,
 			identity.BundleDigest, identity.Entrypoint, identity.ABI,
 			bindingsBody, inputSchemas, outputSchemas, modules,
 			reduced.ResourceClass, reduced.Retry.MaxAttempts, reduced.Retry.BackoffMillis,
-			budgetAccount, budgetOnExhausted, budgetApprovalGate); err != nil {
+			budgetAccount, budgetOnExhausted, budgetApprovalGate,
+			isolation.Effective.Class, isolation.PolicyDigest, isolation.ExecutorDigest, isolationBody); err != nil {
 			return fmt.Errorf("insert reduction node %d: %w", ordinal, err)
 		}
 		if err := insertNodeBudget(ctx, tx, runID, nodeKey, reduced.Budget); err != nil {

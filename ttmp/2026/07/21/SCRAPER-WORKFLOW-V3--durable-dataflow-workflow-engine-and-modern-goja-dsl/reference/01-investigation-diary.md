@@ -4158,3 +4158,188 @@ The upload returned `OK: uploaded`; no post-upload listing was needed.
 After that commit, the complete runtime/store race suites passed again in
 11.670s and 1.697s, isolated lint returned `0 issues.`, and HEAD matched the
 pushed upstream with a clean worktree.
+
+## Step 39: Audit and freeze Slice 11 and Slice 12 contracts
+
+### Prompt Context
+
+**User prompt (verbatim):** `lets do tasks 11 and 12.`
+
+**Assistant interpretation:** Continue the completed Workflow V3 sequence with
+production process isolation and the full safe real-provider TTC acceptance
+workload, retaining the same hard evidence and publication standard.
+
+**Inferred user intent:** Implement both slices end to end rather than merely
+add roadmap sections or rerun the unsafe legacy workflow.
+
+### Documentation audit
+
+The cross-slice intern guide contained target summaries for Slices 11 and 12,
+but neither slice had its own implementation-ready design. Therefore the audit
+answer was **no**: the documentation prerequisite was not met.
+
+I added:
+
+- `design-doc/09-slice-11-process-isolation-bounded-worker-protocol.md`, which
+  freezes canonical isolation identity, requested/effective host policy,
+  bounded protocol frames, Bubblewrap/rlimit controls, parent-owned leases and
+  artifacts, cancellation/fencing, typed failures, privacy, migration, tests,
+  and hard acceptance criteria;
+- `design-doc/10-slice-12-rag-ttc-production-workload.md`, which freezes scraper,
+  RAG, and researchctl authority boundaries; exact identities; the compact
+  graph; provider retries; budget/gate controls; publication/reopen; the
+  P0–P4 preflight ladder; metrics/citations/cost evidence; privacy; migration;
+  and the prohibition on diagnostic v9 artifacts.
+
+Added ticket tasks `xd44` (Slice 11), `rika` (Slice 12), and `a8wf` (final audit
+and publication). Existing Slices 1–10 and the worktree were clean before this
+tranche.
+
+### Initial environment evidence and decisions
+
+- Linux kernel is `6.8.0-136-generic` and unprivileged user namespaces are
+  enabled.
+- `/usr/bin/bwrap`, `/usr/bin/unshare`, and `/usr/bin/prlimit` are installed.
+- Slice 11 will implement exact `in-process.trusted` and
+  `subprocess.restricted` classes. Unsupported container/networked classes will
+  be rejected, never silently downgraded.
+- The restricted worker protocol remains an attempt transport under the current
+  engine. It will not become a second scheduler or receive workflow SQLite.
+- RAG integration belongs in the RAG composition binary/packages; scraper must
+  remain domain-neutral and must not import RAG.
+- The active RAG TTC worktree is
+  `/home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system` on
+  `task/rag-eval-ttc`; researchctl is the current workspace sibling on
+  `task/benchmark-cpu-inference`.
+- `/tmp/rag-ttc-full-v9*` remains diagnostic-only and forbidden from
+  publication/import.
+
+### Next implementation step
+
+Add canonical isolation policy/default/maxima to Workflow V3 types, bundle
+catalog, compiler, JavaScript/DTS authoring, exact goldens, and validation tests
+before touching process launch or SQLite. This keeps Go authoritative and makes
+runtime work consume a reviewed immutable contract.
+
+## Step 40: Implement canonical and executable Slice 11 isolation
+
+### What I implemented
+
+- Added canonical `IsolationPolicy` and requested/effective `PlanIsolation` with
+  closed trusted/restricted classes, safe bounds, checked host clamping, policy
+  digest, and exact executor digest.
+- Kept old plans and bundle digests compatible: trusted bundle manifests omit
+  the new optional maximum, old plan nodes omit isolation and normalize to the
+  canonical trusted profile, and additive migration backfills trusted node and
+  attempt evidence.
+- Added explicit registry boot advertisement for the restricted executor digest.
+  A restricted bundle cannot seal without it. Registry generation identity now
+  includes executor profiles, and exact plan admission rejects substitution.
+- Added rolling `IsolationExecutorSet` routing by digest. A registry manager
+  retaining generation A and active generation B requires both executable
+  profiles until A is removed.
+- Added JavaScript job/map/reduce `.isolation(...)`, standalone DTS, direct
+  authoring parity, and exact IR/plan goldens. Broad `exec:allowlisted` modules
+  are compiler-rejected unless the effective class is restricted.
+- Added additive node/attempt isolation class, policy digest, executor digest,
+  and canonical policy persistence; map/reduction children inherit it. Queue
+  projections expose ready/active counts by isolation class.
+- Added strict one-request/one-response canonical JSON framing with bounded
+  bootstrap and compiled frame limits, exact attempt/task/policy identity, no
+  payload bodies, typed failure/usage, and candidate refs only.
+- Added static `workflowv3-task-worker` and `workflowv3-isolation-launcher`
+  binaries. The launcher joins a delegated cgroup before Bubblewrap can fork;
+  Bubblewrap unshares all namespaces including network, clears environment,
+  mounts only exact read-only worker/bundle/input/tool files plus writable
+  output and tmpfs, and provides no workflow database or artifact authority.
+- Added delegated cgroup-v2 aggregate memory, zero-swap, pids, and CPU-time
+  enforcement; parent wall-time kill through `cgroup.kill`; worker descriptor
+  and file-size rlimits; bounded stderr discard; and cancellation process-tree
+  cleanup.
+- Added parent-only candidate validation: exact ports/schemas, tree file/byte
+  bounds, no traversal/symlink/hardlink/special files, recomputed digest/size,
+  then publication through the parent's artifact store and ordinary fenced
+  completion.
+- Added a fixed-ID synchronous `exec:allowlisted` module with no shell, path,
+  environment, cwd, or redirection authority. Tool executable bytes are part of
+  executor identity.
+
+### Real evidence
+
+The real Bubblewrap fixture builds static worker/launcher/tool binaries and
+proves:
+
+- isolated and trusted execution produce the same output digest;
+- a JavaScript-authored restricted run completes through the ordinary engine
+  with durable class/policy/executor attempt evidence and no source canary in
+  SQLite;
+- empty HOME, fixed PATH, absent `/etc/passwd`, absent parent environment
+  canary, and denied network inside an allowlisted tool;
+- fixed tool success, undeclared tool failure, cgroup process limit, cgroup OOM
+  classification, aggregate CPU limit, wall-time limit, and cancellation;
+- malformed/oversized frames, traversal, symlink, hardlink, digest drift, and
+  output tree limits are rejected;
+- killing the worker from an allowlisted child creates immutable retryable
+  `ISOLATION_CHILD_EXIT` evidence and a fresh second process succeeds;
+- run cancellation kills a spinning child, leaves the attempt canceled, and
+  stale output cannot publish;
+- rolling A/B executor digests coexist and missing retained A is rejected.
+
+### Failures and fixes
+
+The first tool execution failed because `RLIMIT_NPROC=8` counts all host-user
+processes/threads, not only the sandbox. I first tested an absolute host-process
+floor, then rejected that approximate design. The final implementation uses
+cgroup-v2 `pids.max`; a static launcher joins the cgroup before Bubblewrap forks,
+closing the parent-to-child race.
+
+Creating a child cgroup under the current terminal scope produced no delegated
+controller files because that scope's `cgroup.subtree_control` is empty. The
+launcher now walks ancestors and selects the first writable delegation with
+both memory and pids controllers (the user service on this host).
+
+The first cancellation test hung because killing only Bubblewrap left the
+worker holding stdout. A parent monitor now calls `cgroup.kill` on context
+termination, closing the complete process tree and pipes before wait returns.
+
+A one-gigabyte `RLIMIT_AS` killed the Go runtime due virtual-address reservation
+rather than domain memory use. Memory enforcement moved to cgroup
+`memory.max`/`memory.swap.max`; OOM classification reads authoritative
+`memory.events`. CPU enforcement similarly reads aggregate cgroup `cpu.stat`
+rather than per-process estimates.
+
+The first registry-quarantine regression failed because Engine validation called
+`Catalog()` after the active generation was quarantined. Validation now reads
+the union of immutable executor digests from retained registries, analogous to
+module aliases, and does not require an admissible active catalog merely to
+project blocked work.
+
+### Validation evidence
+
+- Core/authoring/store/runtime full focused packages passed; runtime completed
+  in 123.804 seconds with all prior slices.
+- Focused runtime/store race suites passed in 42.076s and 1.288s.
+- Isolated golangci-lint returned `0 issues.`
+- `make build-go` generated and built scraper plus both static isolation
+  binaries; `file` reported both statically linked and `ldd` reported
+  `not a dynamic executable`.
+- All changed JavaScript parsed, exact DTS/goldens passed, additive migration
+  and `git diff --check` passed, and docmgr doctor was clean.
+
+### Next steps
+
+Complete Slice 11 operational help and remaining full repository validation,
+commit the implementation and evidence, then begin the RAG-owned Workflow V3
+adapter and the Slice 12 P0/P1 deterministic preflight. Do not contact real
+providers before P0–P2 pass.
+
+### Full validation retry
+
+The first fresh `make validate` run hit the pre-existing websocket timing test
+`TestServerRuntimeEventsWebsocketSnapshotAndLiveEvents`: it timed out after ten
+seconds while the concurrently expensive isolation runtime suite was running.
+The isolated test passed 10/10 in 0.850s, establishing timing contention rather
+than a product regression. I made no test or product change. A complete fresh
+`make validate` retry then passed all Go packages, web unit tests, generated
+outputs, all three Go builds, TypeScript, and the Vite production build. The
+runtime package including real isolation completed in 86.548s.

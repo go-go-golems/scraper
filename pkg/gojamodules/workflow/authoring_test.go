@@ -398,6 +398,52 @@ module.exports = workflow.compile(workflow.define("bad-gate", p => {
 	require.ErrorContains(t, err, "branch cancellation is not supported")
 }
 
+func TestAuthorCompilesRestrictedIsolationToGoldens(t *testing.T) {
+	maximum := workflowv3.IsolationPolicy{
+		Class:          workflowv3.IsolationSubprocessRestricted,
+		WallTimeMillis: 30_000, CPUTimeMillis: 10_000, MemoryBytes: 256 << 20,
+		MaxProcesses: 8, MaxOutputBytes: 16 << 20,
+		MaxOutputFiles: 16, MaxProtocolBytes: 1 << 20,
+	}
+	catalog, err := workflowv3.NewCatalog(workflowv3.TaskSpec{
+		Identity: workflowv3.ImplementationIdentity{
+			TaskKey:      workflowv3.TaskKey{Kind: "isolated.transform", Version: "v1"},
+			BundleDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Entrypoint:   "tasks.cjs#run", ABI: workflowv3.TaskABI,
+		},
+		Inputs: map[string]string{"source": "source/v1"}, Outputs: map[string]string{"output": "output/v1"},
+		ResourceClass: "cpu.isolated", Retry: workflowv3.RetryPolicy{MaxAttempts: 2}, IsolationMaximum: maximum,
+		IsolationExecutorDigest: "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+	})
+	require.NoError(t, err)
+	source := `
+const workflow = require("workflow");
+const tasks = require("isolation-tasks");
+module.exports = workflow.compile(workflow.define("isolated", plan => {
+  const source = plan.input("source", {schema: "source/v1"});
+  const job = plan.task("transform", tasks.transform({source}), task => task.isolation({
+    class: "subprocess.restricted",
+    wallTimeMillis: 5000,
+    cpuTimeMillis: 2000,
+    memoryBytes: 536870912,
+    maxProcesses: 4,
+    maxOutputBytes: 1048576,
+    maxOutputFiles: 4,
+    maxProtocolBytes: 262144,
+  }));
+  plan.output("output", job.output("output"));
+}));`
+	result, err := workflowmodule.Author(context.Background(), source, catalog, workflowmodule.DescriptorModule{
+		Name: "isolation-tasks", Factories: map[string]workflowv3.TaskKey{"transform": {Kind: "isolated.transform", Version: "v1"}},
+	})
+	require.NoError(t, err)
+	assertGolden(t, "isolation.ir.json", result.IR)
+	assertGolden(t, "isolation.plan.json", result.Plan)
+	require.NotNil(t, result.Plan.Nodes[0].Isolation)
+	require.Equal(t, int64(5_000), result.Plan.Nodes[0].Isolation.Effective.WallTimeMillis)
+	require.Equal(t, int64(256<<20), result.Plan.Nodes[0].Isolation.Effective.MemoryBytes)
+}
+
 func TestTypeScriptDeclaresMinimalSurface(t *testing.T) {
 	declaration := workflowmodule.TypeScript()
 	expectedDeclaration, err := os.ReadFile("testdata/workflow.d.ts")
@@ -408,6 +454,7 @@ func TestTypeScriptDeclaresMinimalSurface(t *testing.T) {
 		"input<T = unknown>", "inputSet<T = unknown>", "map<I, O>(", "reduce<I, O>(",
 		"outputSet(name: string", "task(", "output(name: string",
 		"BudgetClaim", "budget(claim: BudgetClaim)", "gate<TDecision",
+		"IsolationPolicy", "isolation(policy: IsolationPolicy)",
 	} {
 		require.Contains(t, declaration, expected)
 	}

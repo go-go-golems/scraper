@@ -15,6 +15,7 @@ type Engine struct {
 	Registry                    workflowv3.RegistryResolver
 	Artifacts                   workflowv3.ArtifactStore
 	Modules                     *TaskModuleRegistry
+	Isolation                   IsolatedTaskExecutor
 	LeaseDuration               time.Duration
 	RegistryQuarantineThreshold int
 	Now                         func() time.Time
@@ -282,11 +283,25 @@ func (e *Engine) ExecuteLease(ctx context.Context, lease workflowv3.Lease) error
 		close(watchDone)
 		cancelAttempt()
 	}()
-	result, err := RunTask(attemptCtx, TaskRequest{
+	taskRequest := TaskRequest{
 		RunID: lease.RunID, NodeKey: lease.NodeKey, Attempt: lease.Attempt,
 		Task: registered, Inputs: inputs, Artifacts: e.Artifacts,
 		Modules: e.Modules,
-	})
+	}
+	isolation := workflowv3.EffectivePlanIsolation(lease.PlanNode.Isolation)
+	var result TaskResult
+	switch isolation.Effective.Class {
+	case workflowv3.IsolationInProcessTrusted:
+		result, err = RunTask(attemptCtx, taskRequest)
+	case workflowv3.IsolationSubprocessRestricted:
+		if e.Isolation == nil {
+			err = &IsolationConstructionError{Err: fmt.Errorf("restricted isolation executor is not configured")}
+		} else {
+			result, err = e.Isolation.Execute(attemptCtx, taskRequest, isolation)
+		}
+	default:
+		err = &IsolationConstructionError{Err: fmt.Errorf("unsupported isolation class %q", isolation.Effective.Class)}
+	}
 	if err != nil {
 		var preparation *TaskPreparationError
 		if errors.As(err, &preparation) {
@@ -298,6 +313,17 @@ func (e *Engine) ExecuteLease(ctx context.Context, lease workflowv3.Lease) error
 				return fmt.Errorf("prepare task: %v; persist failure: %w", err, persistErr)
 			}
 			return &AttemptExecutionError{Err: fmt.Errorf("prepare task: %w", err)}
+		}
+		var isolationConstruction *IsolationConstructionError
+		if errors.As(err, &isolationConstruction) {
+			failure := workflowv3.Failure{
+				Class: "configuration", Code: "ISOLATION_PROFILE_UNAVAILABLE",
+				Retryable: true, Message: "task isolation profile is unavailable",
+			}
+			if persistErr := e.Store.InfrastructureFail(ctx, lease, failure, e.now()); persistErr != nil {
+				return fmt.Errorf("construct task isolation: %v; persist failure: %w", err, persistErr)
+			}
+			return &AttemptExecutionError{Err: fmt.Errorf("construct task isolation: %w", err)}
 		}
 		var construction *RuntimeConstructionError
 		if errors.As(err, &construction) {
@@ -422,6 +448,22 @@ func (e *Engine) validate() error {
 	for i := range advertised {
 		if advertised[i] != configured[i] {
 			return fmt.Errorf("registry advertises modules %v but runtime configures %v", advertised, configured)
+		}
+	}
+	if provider, ok := e.Registry.(interface{ IsolationExecutorDigests() []string }); ok {
+		digests := provider.IsolationExecutorDigests()
+		if len(digests) > 0 {
+			if e.Isolation == nil {
+				return fmt.Errorf("registry requires restricted isolation but no executor is configured")
+			}
+			if err := e.Isolation.Validate(); err != nil {
+				return fmt.Errorf("validate restricted isolation executor: %w", err)
+			}
+			for _, digest := range digests {
+				if err := e.Isolation.Supports(digest); err != nil {
+					return fmt.Errorf("registry isolation executor is unavailable: %w", err)
+				}
+			}
 		}
 	}
 	return nil
