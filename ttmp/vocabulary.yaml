@@ -77,6 +77,14 @@ topics:
       description: Release engineering, versioning, tagging, and publishing
     - slug: sqlite
       description: SQLite storage, schema, and query organization
+    - slug: workflow-v3
+      description: Scraper durable dataflow Workflow V3 architecture and implementation
+    - slug: durability
+      description: Crash-safe persistence recovery and restart behavior
+    - slug: observability
+      description: Operational measurements projections tracing and diagnostics
+    - slug: privacy
+      description: Data minimization redaction secret handling and privacy boundaries
 docTypes:
     - slug: index
       description: Ticket index documents
