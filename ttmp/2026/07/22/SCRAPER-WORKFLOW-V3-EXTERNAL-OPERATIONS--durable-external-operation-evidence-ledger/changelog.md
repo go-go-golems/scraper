@@ -155,3 +155,8 @@ Step 20: recorded full lifecycle-suite audit and the unchanged runtime restart b
 
 Step 21: repaired durable schema privacy fixture baseline; full normal/race lifecycle suites now pass
 
+
+## 2026-07-22
+
+Step 22: full scraper Go test and lint suites passed after lifecycle fixture repair
+
