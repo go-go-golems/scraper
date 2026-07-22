@@ -891,3 +891,9 @@ Implemented the RAG-side `BuildOperationCustodyRunExport` adapter. It turns prep
 ## Step 16: End-to-end researchctl operation-custody import
 
 Wired the RAG sweep to emit an optional compact `researchctl-run-export.json` only with explicit operator-owned custody identity fields. The generated bundle references aggregate/cell evidence plus every JSONL/manifest artifact using relative URIs and derives four scalar-only metrics. A fresh researchctl laboratory successfully staged and atomically imported 37 verified artifacts and four metrics from a twelve-cell fixture sweep. This completes task `a77h` without creating a researchctl-to-RAG dependency.
+
+## Step 17: Reopen-safe operation completion regression
+
+Added a process-boundary persistence regression: admit an operation, close the SQLite store, reopen it, then finish using the original opaque ticket. The reopened store accepts the first completion, accepts an identical retry idempotently, and reports `1/1/0` admitted/completed/incomplete. Focused normal and race runs plus package lint passed.
+
+This validates the key crash window after durable admission and before post-call completion. It does not yet model an actual SIGKILL between SQLite writes, but exercises the durable reopen semantics through the same public store boundary.

@@ -121,6 +121,34 @@ func TestExternalOperationAllocationSettlesAttemptBudget(t *testing.T) {
 	require.Zero(t, budget[0].Reserved)
 }
 
+func TestExternalOperationCompletionSurvivesStoreReopen(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := storeFixture(t, "first")
+	path := filepath.Join(t.TempDir(), "workflow.db")
+	store, err := Open(ctx, path)
+	require.NoError(t, err)
+	now := time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, store.CreateRun(ctx, "operation-reopen", plan, map[string]workflowv3.ArtifactRef{"source": artifactRef("source/v1", "operation-reopen")}, now))
+	lease, err := store.LeaseNext(ctx, registry, now, time.Minute)
+	require.NoError(t, err)
+	descriptor := operationDescriptor(t)
+	ticket, err := store.BeginExternalOperation(ctx, *lease, descriptor, workflowv3.ExternalOperationSpec{DescriptorDigest: descriptor.Digest}, now.Add(time.Millisecond))
+	require.NoError(t, err)
+	require.NoError(t, store.Close())
+
+	store, err = Open(ctx, path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	completion := workflowv3.ExternalOperationCompletion{ProviderStartedAt: now, ElapsedMicros: 11, Outcome: workflowv3.ExternalOperationOutcomeSucceeded, AccountingMode: workflowv3.ExternalOperationAccountingActual, Counters: []workflowv3.ExternalOperationCounter{{Name: "requests", Units: 1}}}
+	require.NoError(t, store.FinishExternalOperation(ctx, ticket, descriptor, completion, now.Add(2*time.Millisecond)))
+	require.NoError(t, store.FinishExternalOperation(ctx, ticket, descriptor, completion, now.Add(3*time.Millisecond)))
+	progress, err := store.ExternalOperationProgress(ctx, "operation-reopen")
+	require.NoError(t, err)
+	require.Equal(t, 1, progress.Admitted)
+	require.Equal(t, 1, progress.Completed)
+	require.Zero(t, progress.Incomplete)
+}
+
 func TestExternalOperationConcurrentAdmissionAndCompletion(t *testing.T) {
 	ctx := context.Background()
 	registry, plan := storeFixture(t, "first")
