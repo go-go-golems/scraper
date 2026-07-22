@@ -55,7 +55,26 @@ func (e *Engine) ExpandOne(ctx context.Context) (bool, error) {
 			return true, nil
 		}
 	}
-	return false, nil
+	chained, err := e.Store.ChainedExpansionCandidate(ctx)
+	if err != nil {
+		return false, err
+	}
+	if chained == nil {
+		return false, nil
+	}
+	body, err := workflowv3.EncodeItemManifest(chained.Manifest)
+	if err != nil {
+		return false, err
+	}
+	ref, err := e.Artifacts.Put(ctx, workflowv3.ItemManifestSchemaV1, "application/json", body)
+	if err != nil {
+		return false, fmt.Errorf("publish chained map prefix: %w", err)
+	}
+	page, err := e.Store.ExpandNextChainedPage(ctx, chained.RunID, chained.MapKey, ref, chained.Manifest, chained.Final, e.now())
+	if err != nil {
+		return false, err
+	}
+	return page != nil, nil
 }
 
 func (e *Engine) FinalizeOneMap(ctx context.Context) (bool, error) {
