@@ -26,7 +26,11 @@ func TestDatabaseSyncCrashAfterSideEffectIsIdempotentAcrossRestart(t *testing.T)
 	artifacts, err := workflowv3.NewFileArtifactStore(filepath.Join(root, "artifacts"), 1<<20)
 	require.NoError(t, err)
 	privateCanary := "PRIVATE-DB-ROW-CANARY-5a7e"
-	const rowCount = 500
+	// Keep the source substantially larger than SQLite's fixed durable schema
+	// footprint. The assertion below still rejects persistence of the source
+	// payload; the added operation-ledger tables make a 500-row fixture too
+	// small to distinguish that fixed overhead from a privacy regression.
+	const rowCount = 750
 	input := putJSONArtifact(t, artifacts, "database-sync-dataset-ref/v1", map[string]any{
 		"expectedCount":    rowCount,
 		"crashAfterCommit": true,
@@ -91,7 +95,7 @@ func TestDatabaseSyncCrashAfterSideEffectIsIdempotentAcrossRestart(t *testing.T)
 	require.NoError(t, err)
 	require.Contains(t, string(receipt), `"configureDenied":true`)
 	require.Contains(t, string(receipt), `"applied":false`)
-	require.Contains(t, string(receipt), `"count":500`)
+	require.Contains(t, string(receipt), fmt.Sprintf(`"count":%d`, rowCount))
 	require.NoError(t, reopened.Close())
 
 	finalStore, err := workflowv3sqlite.Open(ctx, workflowPath)
