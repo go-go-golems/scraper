@@ -19,6 +19,8 @@ RelatedFiles:
       Note: Closed generic external-operation contracts validation descriptor identity and host-only recorder interface (commit b637095)
     - Path: repo://pkg/workflowv3/external_operation_test.go
       Note: Regression coverage for privacy-safe contracts and deterministic validation (commit b637095)
+    - Path: repo://pkg/workflowv3/types.go
+      Note: Bounded operation progress and export contracts (commit 27efa9e)
     - Path: repo://pkg/workflowv3runtime/engine.go
       Note: Parent lease owner and scoped recorder injection point
     - Path: repo://pkg/workflowv3runtime/modules.go
@@ -27,6 +29,8 @@ RelatedFiles:
       Note: |-
         SQLite durability and external ledger invariant checks (commit 1542075)
         Lease-fenced admission and ticket-fenced immutable completion (commit e061769)
+    - Path: repo://pkg/workflowv3sqlite/external_operation_query.go
+      Note: Canonical ordered query operational projection and atomic JSONL/manifest custody export (commit 27efa9e)
     - Path: repo://pkg/workflowv3sqlite/external_operation_test.go
       Note: Late completion idempotency stale lease and wrong ticket regression tests (commit e061769)
     - Path: repo://pkg/workflowv3sqlite/schema.sql
@@ -47,6 +51,7 @@ LastUpdated: 2026-07-22T19:55:00-04:00
 WhatFor: Guide implementation of a generic Workflow V3 external-operation ledger and its RAG and researchctl integration without leaking payloads or weakening lease and budget authority.
 WhenToUse: Read before changing Workflow V3 persistence, task-module APIs, provider instrumentation, operation evidence exports, or researchctl custody for network, model, browser, database, or subprocess calls.
 ---
+
 
 
 
