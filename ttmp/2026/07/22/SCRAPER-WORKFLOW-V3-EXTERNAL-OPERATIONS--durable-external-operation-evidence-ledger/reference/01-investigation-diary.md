@@ -948,3 +948,7 @@ Uploaded the completion audit and durable-ledger design guide as `Workflow V3 Ex
 ## Step 27: JavaScript and isolated-child authority surface audit
 
 Performed a static authority-surface audit for `ExternalOperations`, recorder Begin/Finish methods, and lower-camel variants. No JavaScript or TypeScript source under `pkg`/`cmd` exposes those names, and the isolated protocol has no corresponding field. The only remaining references outside the trusted recorder implementation are Go-only `TaskRequest`/`TaskModuleContext` wiring in `task_runner.go`. This corroborates the design boundary: JavaScript can express task intent but cannot acquire recorder or SQLite authority.
+
+## Step 28: Real preflight rejects stale canonical specification
+
+A non-submitting real sweep preflight was attempted with the approved matrix shape (60 planned requests, 61 prior admissions, eight retries). It failed before provider submission with `RAG_MODEL_MANIFEST_INVALID: RAG_MODEL_MANIFEST_DIGEST`, proving the discovered older TTC specification does not match the current host profile. No paid call was made. The remaining unblock input is a current canonical real-run specification/artifact root agreeing with the host profile, in addition to the previously stated numeric authority.

@@ -185,3 +185,8 @@ Step 26: published pre-authority audit and design bundle to reMarkable
 
 Step 27: audited JavaScript and isolated-child surfaces for recorder authority exposure
 
+
+## 2026-07-22
+
+Step 28: non-submitting real preflight rejected stale TTC model-manifest identity before provider submission
+
