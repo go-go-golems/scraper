@@ -77,3 +77,12 @@ Step 7: added coherent operation queries, bounded projections, and atomic canoni
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/external_operation_query.go — Primary export mechanism
 
+
+## 2026-07-22
+
+Step 8: reconciled operation allocations and actual/conservative counters with authoritative attempt budget settlement (commit b8857b1)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/budget.go — Operation accounting reconciliation
+
