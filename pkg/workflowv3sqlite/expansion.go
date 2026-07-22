@@ -111,7 +111,7 @@ func (s *Store) ExpandNextPage(
 	if err != nil {
 		return nil, err
 	}
-	if mapped.Source.Source != "set-input" {
+	if mapped.Source.Source != "set-input" && mapped.Source.Source != "map-output" {
 		return nil, fmt.Errorf("map %q source is not available for expansion", mapKey)
 	}
 	if manifest.ItemSchema != mapped.Source.ItemSchema {
