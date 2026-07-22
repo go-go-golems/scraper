@@ -302,6 +302,72 @@ CREATE TABLE IF NOT EXISTS v3_attempts (
   FOREIGN KEY (run_id, node_key) REFERENCES v3_nodes(run_id, node_key) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS v3_external_operations (
+  operation_id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  node_key TEXT NOT NULL,
+  attempt_no INTEGER NOT NULL,
+  ordinal INTEGER NOT NULL CHECK (ordinal > 0),
+  kind TEXT NOT NULL,
+  kind_version TEXT NOT NULL,
+  descriptor_digest TEXT NOT NULL,
+  authority_digest TEXT NOT NULL,
+  correlation_digest TEXT,
+  completion_key_digest TEXT NOT NULL,
+  admitted_at TEXT NOT NULL,
+  UNIQUE (run_id, node_key, attempt_no, ordinal),
+  FOREIGN KEY (run_id, node_key, attempt_no)
+    REFERENCES v3_attempts(run_id, node_key, attempt_no) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS v3_external_operation_allocations (
+  operation_id TEXT NOT NULL,
+  dimension TEXT NOT NULL,
+  units INTEGER NOT NULL CHECK (units > 0),
+  PRIMARY KEY (operation_id, dimension),
+  FOREIGN KEY (operation_id)
+    REFERENCES v3_external_operations(operation_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS v3_external_operation_measures (
+  operation_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  units INTEGER NOT NULL CHECK (units >= 0),
+  PRIMARY KEY (operation_id, name),
+  FOREIGN KEY (operation_id)
+    REFERENCES v3_external_operations(operation_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS v3_external_operation_completions (
+  operation_id TEXT PRIMARY KEY,
+  provider_started_at TEXT NOT NULL,
+  elapsed_micros INTEGER NOT NULL CHECK (elapsed_micros >= 0),
+  outcome TEXT NOT NULL CHECK (outcome IN
+    ('succeeded','failed','canceled','timed-out','unknown')),
+  failure_class TEXT,
+  failure_code TEXT,
+  accounting_mode TEXT NOT NULL CHECK (accounting_mode IN
+    ('actual','conservative','none')),
+  completed_at TEXT NOT NULL,
+  completion_digest TEXT NOT NULL,
+  FOREIGN KEY (operation_id)
+    REFERENCES v3_external_operations(operation_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS v3_external_operation_counters (
+  operation_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  units INTEGER NOT NULL CHECK (units >= 0),
+  PRIMARY KEY (operation_id, name),
+  FOREIGN KEY (operation_id)
+    REFERENCES v3_external_operation_completions(operation_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_v3_external_operations_attempt
+  ON v3_external_operations(run_id, node_key, attempt_no, ordinal);
+CREATE INDEX IF NOT EXISTS idx_v3_external_operations_kind
+  ON v3_external_operations(run_id, kind, admitted_at, operation_id);
+
 CREATE TABLE IF NOT EXISTS v3_node_outputs (
   run_id TEXT NOT NULL,
   node_key TEXT NOT NULL,

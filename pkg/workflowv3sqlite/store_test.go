@@ -198,12 +198,23 @@ SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'v3_nodes_iso
 	for _, table := range []string{
 		"v3_budget_accounts", "v3_node_budget_claims", "v3_budget_reservations",
 		"v3_gates", "v3_gate_dependencies", "v3_gate_consumers",
+		"v3_external_operations", "v3_external_operation_allocations",
+		"v3_external_operation_measures", "v3_external_operation_completions",
+		"v3_external_operation_counters",
 	} {
 		var count int
 		require.NoError(t, store.db.QueryRowContext(ctx, `
 SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count))
 		require.Equal(t, 1, count, table)
 	}
+	var journalMode string
+	var synchronous, foreignKeys int
+	require.NoError(t, store.db.QueryRowContext(ctx, `PRAGMA journal_mode`).Scan(&journalMode))
+	require.Equal(t, "wal", journalMode)
+	require.NoError(t, store.db.QueryRowContext(ctx, `PRAGMA synchronous`).Scan(&synchronous))
+	require.Equal(t, 2, synchronous)
+	require.NoError(t, store.db.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&foreignKeys))
+	require.Equal(t, 1, foreignKeys)
 }
 
 func TestStorePersistsAppendOnlyAttemptsAndReopens(t *testing.T) {
