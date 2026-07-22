@@ -86,3 +86,12 @@ Step 8: reconciled operation allocations and actual/conservative counters with a
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/budget.go — Operation accounting reconciliation
 
+
+## 2026-07-22
+
+Step 9: integrated TTC generation and per-request embedding provider spans with the generic Workflow V3 ledger (RAG commits b728e0a, 3bde483, 0147ea2)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/internal/workflowv3ttc/provider.go — Provider adapter
+

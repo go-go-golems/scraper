@@ -9,7 +9,7 @@
 - [x] Add operation queries projections canonical JSONL export and deterministic digest <!-- t:esh8 -->
 - [x] Reconcile operation counters with attempt budget reservations and settlement <!-- t:evrq -->
 - [ ] Add cancellation lease-loss retry restart concurrency and privacy tests <!-- t:nmzl -->
-- [ ] Integrate RAG generation and embedding providers with the generic recorder <!-- t:qfpd -->
+- [x] Integrate RAG generation and embedding providers with the generic recorder <!-- t:qfpd -->
 - [ ] Publish per-cell operation evidence and deterministic failed-cell reductions <!-- t:q293 -->
 - [ ] Map compact operation evidence into researchctl verified artifacts and metrics <!-- t:a77h -->
 - [ ] Validate fixture and bounded real-provider workflows before production use <!-- t:stdm -->
