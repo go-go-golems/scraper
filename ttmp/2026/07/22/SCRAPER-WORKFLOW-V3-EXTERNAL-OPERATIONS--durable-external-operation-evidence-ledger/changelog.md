@@ -170,3 +170,8 @@ Step 23: documented durable operation custody checks for the pending real qualif
 
 Step 24: added evidence-backed pre-authority completion audit with exact real-run blocker
 
+
+## 2026-07-22
+
+Step 25: visually inspected fixture evidence graphs for rendering quality and privacy
+
