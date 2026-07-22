@@ -390,6 +390,7 @@ type OperationalSnapshot struct {
 	Rates               []TerminalRate               `json:"rates"`
 	Queue               QueueSnapshot                `json:"queue"`
 	Budgets             []BudgetProgress             `json:"budgets,omitempty"`
+	ExternalOperations  *ExternalOperationProgress   `json:"externalOperations,omitempty"`
 	Gates               []GateProgress               `json:"gates,omitempty"`
 	GatesTruncated      bool                         `json:"gatesTruncated,omitempty"`
 	RegistryGenerations []RegistryGenerationProgress `json:"registryGenerations,omitempty"`

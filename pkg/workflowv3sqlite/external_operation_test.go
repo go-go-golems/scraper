@@ -2,6 +2,7 @@ package workflowv3sqlite
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -50,13 +51,48 @@ func TestExternalOperationAdmissionAndLateTicketCompletion(t *testing.T) {
 	_, err = store.BeginExternalOperation(ctx, *lease, descriptor, spec, now.Add(6*time.Millisecond))
 	require.ErrorIs(t, err, ErrStaleCompletion)
 
-	var operations, completions, counters int
-	require.NoError(t, store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM v3_external_operations`).Scan(&operations))
+	var operationRows, completions, counters int
+	require.NoError(t, store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM v3_external_operations`).Scan(&operationRows))
 	require.NoError(t, store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM v3_external_operation_completions`).Scan(&completions))
 	require.NoError(t, store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM v3_external_operation_counters`).Scan(&counters))
-	require.Equal(t, 1, operations)
+	require.Equal(t, 1, operationRows)
 	require.Equal(t, 1, completions)
 	require.Equal(t, 1, counters)
+
+	operations, err := store.ExternalOperations(ctx, "operation")
+	require.NoError(t, err)
+	require.Len(t, operations, 1)
+	require.NotNil(t, operations[0].Completion)
+	require.Equal(t, int64(123), operations[0].Completion.ElapsedMicros)
+	require.Equal(t, []workflowv3.ExternalOperationCounter{{Name: "requests", Units: 1}}, operations[0].Completion.Counters)
+	progress, err := store.ExternalOperationProgress(ctx, "operation")
+	require.NoError(t, err)
+	require.Equal(t, 1, progress.Admitted)
+	require.Equal(t, 1, progress.Completed)
+	require.Zero(t, progress.Incomplete)
+	require.Equal(t, map[string]int{workflowv3.ExternalOperationOutcomeSucceeded: 1}, progress.Outcomes)
+
+	exportDir := t.TempDir()
+	jsonl := filepath.Join(exportDir, "external-operations.jsonl")
+	manifestPath := filepath.Join(exportDir, "external-operations-manifest.json")
+	manifest, err := store.ExportExternalOperations(ctx, "operation", jsonl, manifestPath)
+	require.NoError(t, err)
+	require.Equal(t, workflowv3.ExternalOperationExportSchema, manifest.SchemaVersion)
+	require.Equal(t, 1, manifest.RecordCount)
+	require.Equal(t, 1, manifest.CompletedCount)
+	firstJSONL, err := os.ReadFile(jsonl)
+	require.NoError(t, err)
+	require.NotContains(t, string(firstJSONL), ticket.CompletionKey)
+	firstManifest, err := os.ReadFile(manifestPath)
+	require.NoError(t, err)
+	_, err = store.ExportExternalOperations(ctx, "operation", jsonl, manifestPath)
+	require.NoError(t, err)
+	secondJSONL, err := os.ReadFile(jsonl)
+	require.NoError(t, err)
+	secondManifest, err := os.ReadFile(manifestPath)
+	require.NoError(t, err)
+	require.Equal(t, firstJSONL, secondJSONL)
+	require.Equal(t, firstManifest, secondManifest)
 }
 
 func TestExternalOperationRejectsWrongCompletionTicket(t *testing.T) {

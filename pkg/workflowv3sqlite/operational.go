@@ -150,6 +150,13 @@ FROM v3_budget_accounts`
 	if err := rows.Close(); err != nil {
 		return snapshot, err
 	}
+	if runID != nil {
+		progress, progressErr := externalOperationProgressTx(ctx, tx, *runID)
+		if progressErr != nil {
+			return snapshot, progressErr
+		}
+		snapshot.ExternalOperations = &progress
+	}
 	if err := tx.Commit(); err != nil {
 		return snapshot, err
 	}
@@ -200,6 +207,47 @@ FROM v3_events WHERE sequence > ?`
 		events = append(events, event)
 	}
 	return events, rows.Err()
+}
+
+func externalOperationProgressTx(ctx context.Context, tx *sql.Tx, runID workflowv3.RunID) (workflowv3.ExternalOperationProgress, error) {
+	progress := workflowv3.ExternalOperationProgress{ActiveByKind: map[string]int{}, Outcomes: map[string]int{}}
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(CASE WHEN completion.operation_id IS NOT NULL THEN 1 ELSE 0 END),0) FROM v3_external_operations operation LEFT JOIN v3_external_operation_completions completion ON completion.operation_id=operation.operation_id WHERE operation.run_id=?`, runID).Scan(&progress.Admitted, &progress.Completed); err != nil {
+		return progress, err
+	}
+	progress.Incomplete = progress.Admitted - progress.Completed
+	rows, err := tx.QueryContext(ctx, `SELECT completion.outcome,COUNT(*) FROM v3_external_operation_completions completion JOIN v3_external_operations operation ON operation.operation_id=completion.operation_id WHERE operation.run_id=? GROUP BY completion.outcome`, runID)
+	if err != nil {
+		return progress, err
+	}
+	for rows.Next() {
+		var outcome string
+		var count int
+		if err := rows.Scan(&outcome, &count); err != nil {
+			_ = rows.Close()
+			return progress, err
+		}
+		progress.Outcomes[outcome] = count
+	}
+	if err := rows.Close(); err != nil {
+		return progress, err
+	}
+	rows, err = tx.QueryContext(ctx, `SELECT operation.kind,COUNT(*) FROM v3_external_operations operation JOIN v3_attempts attempt ON attempt.run_id=operation.run_id AND attempt.node_key=operation.node_key AND attempt.attempt_no=operation.attempt_no LEFT JOIN v3_external_operation_completions completion ON completion.operation_id=operation.operation_id WHERE operation.run_id=? AND completion.operation_id IS NULL AND attempt.status='running' GROUP BY operation.kind`, runID)
+	if err != nil {
+		return progress, err
+	}
+	for rows.Next() {
+		var kind string
+		var count int
+		if err := rows.Scan(&kind, &count); err != nil {
+			_ = rows.Close()
+			return progress, err
+		}
+		progress.ActiveByKind[kind] = count
+	}
+	if err := rows.Close(); err != nil {
+		return progress, err
+	}
+	return progress, rows.Err()
 }
 
 func groupedStatus(

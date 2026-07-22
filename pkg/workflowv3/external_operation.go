@@ -9,6 +9,8 @@ import (
 )
 
 const (
+	ExternalOperationExportSchema = "scraper-workflow-v3-external-operations/v1"
+
 	ExternalOperationOutcomeSucceeded = "succeeded"
 	ExternalOperationOutcomeFailed    = "failed"
 	ExternalOperationOutcomeCanceled  = "canceled"
@@ -95,6 +97,7 @@ type ExternalOperationCompletion struct {
 	Failure           *ExternalOperationFailure  `json:"failure,omitempty"`
 	AccountingMode    string                     `json:"accountingMode"`
 	Counters          []ExternalOperationCounter `json:"counters,omitempty"`
+	CompletedAt       time.Time                  `json:"completedAt,omitempty"`
 }
 
 // ExternalOperationTicket authorizes one completion for one prior admission.
@@ -134,6 +137,39 @@ type ExternalOperation struct {
 type ExternalOperationRecorder interface {
 	BeginExternalOperation(context.Context, ExternalOperationSpec) (ExternalOperationTicket, error)
 	FinishExternalOperation(context.Context, ExternalOperationTicket, ExternalOperationCompletion) error
+}
+
+// ExternalOperationProgress is a bounded, derived operator view. The ledger
+// rows remain authoritative; this projection exists only for wake-up/status UI.
+type ExternalOperationProgress struct {
+	Admitted     int            `json:"admitted"`
+	Completed    int            `json:"completed"`
+	Incomplete   int            `json:"incomplete"`
+	ActiveByKind map[string]int `json:"activeByKind,omitempty"`
+	Outcomes     map[string]int `json:"outcomes,omitempty"`
+}
+
+// ExternalOperationExportRecord is one canonical JSONL row. The envelope
+// deliberately contains only schema identity and the bounded operation model.
+type ExternalOperationExportRecord struct {
+	SchemaVersion string            `json:"schemaVersion"`
+	Operation     ExternalOperation `json:"operation"`
+}
+
+// ExternalOperationExportManifest identifies one atomically published JSONL
+// ledger without embedding its contents or any source/provider payload.
+type ExternalOperationExportManifest struct {
+	SchemaVersion     string   `json:"schemaVersion"`
+	RunID             RunID    `json:"runId"`
+	PlanDigest        string   `json:"planDigest"`
+	EventSequence     int64    `json:"eventSequence"`
+	RecordCount       int      `json:"recordCount"`
+	CompletedCount    int      `json:"completedCount"`
+	IncompleteCount   int      `json:"incompleteCount"`
+	DescriptorDigests []string `json:"descriptorDigests"`
+	JSONLDigest       string   `json:"jsonlDigest"`
+	JSONLSizeBytes    int64    `json:"jsonlSizeBytes"`
+	PrivacyClass      string   `json:"privacyClass"`
 }
 
 func ValidateExternalOperationDescriptor(descriptor ExternalOperationDescriptor) error {
@@ -272,6 +308,9 @@ func ValidateExternalOperationCompletion(descriptor ExternalOperationDescriptor,
 	}
 	if completion.ProviderStartedAt.IsZero() || completion.ProviderStartedAt.Location() != time.UTC {
 		return fmt.Errorf("external operation provider start time must be non-zero UTC")
+	}
+	if !completion.CompletedAt.IsZero() {
+		return fmt.Errorf("external operation completion time is store-owned")
 	}
 	if completion.ElapsedMicros < 0 {
 		return fmt.Errorf("external operation elapsed micros cannot be negative")
