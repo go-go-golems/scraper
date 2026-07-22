@@ -924,3 +924,7 @@ It occurs under the existing FULL-synchronous configuration and is outside the e
 The full runtime failure was not unrelated after all: the external-operation schema adds a fixed durable SQLite footprint, causing the old 500-row privacy fixture to fall below its intended “database is less than half the source” signal. I increased the source fixture to 750 rows and made the receipt assertion derive from `rowCount`; the privacy invariant itself remains unchanged (`persistedBytes < input.Size/2`) and is now meaningful against the enlarged fixed schema.
 
 Focused normal/race restart tests passed, followed by full normal and race suites for both `workflowv3sqlite` and `workflowv3runtime`, plus lint. This clears the former full-suite blocker and completes the lifecycle test matrix: cancellation, lease loss, restart/reopen, retry idempotency, concurrency, and privacy.
+
+## Step 22: Full scraper validation
+
+After the lifecycle fixture repair, ran `GOWORK=off go test ./... -count=1` across the entire scraper module and `GOWORK=off golangci-lint run ./...`. Both passed, as did `git diff --check`; the working tree was clean. This is the full-module validation complement to the focused and race Workflow V3 evidence-ledger suites.
