@@ -17,6 +17,10 @@ RelatedFiles:
       Note: Step 3 implementation and policy boundary (commit b637095)
     - Path: repo://pkg/workflowv3/external_operation_test.go
       Note: Step 3 focused regression evidence (commit b637095)
+    - Path: repo://pkg/workflowv3sqlite/external_operation.go
+      Note: Step 4 durability evidence (commit 1542075)
+    - Path: repo://pkg/workflowv3sqlite/schema.sql
+      Note: Step 4 schema implementation (commit 1542075)
     - Path: repo://pkg/workflowv3sqlite/store.go
       Note: Primary lease and transaction evidence inspected during Step 1
     - Path: ws://researchctl/internal/labsqlite/import.go
@@ -27,6 +31,7 @@ LastUpdated: 2026-07-22T19:55:00-04:00
 WhatFor: Preserve the investigation path, evidence, failures, design decisions, validation, and continuation instructions for the external-operation ledger ticket.
 WhenToUse: Read before resuming design or implementation work on SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS.
 ---
+
 
 
 
@@ -359,3 +364,120 @@ ExternalOperationDescriptor
 ```
 
 The descriptor digest is SHA-256 over canonical JSON with `Digest` cleared. Counter names and roles are required to be strictly sorted and unique, so equal semantic policies always produce the same digest.
+
+## Step 4: Add the additive SQLite evidence schema and durability checks
+
+This step adds the persistent foundation for the operation ledger without yet granting any runtime code authority to write it. The schema now has separate admission, admission allocation/measure, immutable completion, and completion-counter tables. The existing SQLite open path now requests WAL, foreign keys, and `synchronous=FULL`, then verifies those settings before allowing the store to be used.
+
+The phase deliberately stops before Begin/Finish APIs. That keeps migration and durable-open behavior reviewable independently from lease fencing, operation tickets, and budget settlement changes that will follow in the next slice.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 1)
+
+**Assistant interpretation:** Continue the planned generic ledger implementation with a durable SQLite foundation and retain exact validation evidence in the ticket diary.
+
+**Inferred user intent:** Ensure external-call authority and evidence can survive failure without weakening existing Workflow V3 database compatibility or privacy guarantees.
+
+**Commit (code):** `1542075` — "workflowv3: add external operation ledger schema"
+
+### What I did
+
+- Added five additive tables to `pkg/workflowv3sqlite/schema.sql`:
+  - `v3_external_operations`
+  - `v3_external_operation_allocations`
+  - `v3_external_operation_measures`
+  - `v3_external_operation_completions`
+  - `v3_external_operation_counters`
+- Added foreign keys, uniqueness constraints, nonnegative amount checks, immutable-completion shape, and attempt/kind indexes.
+- Added `pkg/workflowv3sqlite/external_operation.go` with startup checks for WAL, `synchronous=FULL`, foreign keys, and referential operation-ledger consistency.
+- Requested `_synchronous=FULL` in the SQLite DSN and invoke the durability and operation-invariant checks at store open.
+- Extended the legacy minimal-database migration test to require the five new tables and assert `journal_mode=wal`, `synchronous=2`, and `foreign_keys=1`.
+
+### Why
+
+Operation admission is a pre-effect authority boundary. A later checkpoint cannot repair a crash window between returning admission and submitting a provider call. The store must request and verify durable commit configuration before the future Begin API exists.
+
+Separate admission and completion tables make incomplete calls explicit and keep terminal evidence append-only. Foreign keys attach every operation to a real Workflow attempt and prevent orphaned counters from becoming canonical evidence.
+
+### What worked
+
+The targeted validation passed:
+
+```text
+GOWORK=off go test ./pkg/workflowv3sqlite -count=1
+ok   github.com/go-go-golems/scraper/pkg/workflowv3sqlite
+
+GOWORK=off go test -race ./pkg/workflowv3sqlite -count=1
+ok   github.com/go-go-golems/scraper/pkg/workflowv3sqlite
+
+GOWORK=off go test ./pkg/workflowv3runtime -run '^(TestEngineCompletesWorkflow|TestRunTaskPreservesTypedFailure)$' -count=1
+ok   github.com/go-go-golems/scraper/pkg/workflowv3runtime
+
+GOWORK=off golangci-lint run ./pkg/workflowv3sqlite/...
+0 issues.
+```
+
+The historical minimal-schema fixture opens successfully and the test proves all external-operation tables and required PRAGMA settings exist afterward.
+
+### What didn't work
+
+The full runtime package has an existing storage-size assertion failure unrelated to this schema addition:
+
+```text
+GOWORK=off go test ./pkg/workflowv3runtime -run '^TestDatabaseSyncCrashAfterSideEffectIsIdempotentAcrossRestart$' -count=3 -v
+
+Error: "299008" is not less than "249777"
+Test: TestDatabaseSyncCrashAfterSideEffectIsIdempotentAcrossRestart
+```
+
+I temporarily changed the new DSN setting from `FULL` to `NORMAL` and adjusted only the temporary startup assertion to reproduce the baseline. The same test failed with exactly the same `299008` versus `249777` result. I restored `FULL` and the required assertion; no unrelated threshold was changed or masked.
+
+### What I learned
+
+- The failing storage assertion includes the SQLite database, WAL, and SHM files together. Its fixed ratio is not a valid signal for this change because it fails under both the prior-normal and new-FULL settings in the same environment.
+- Driver DSN support explicitly recognizes `_synchronous=FULL`, and the runtime query returns SQLite value `2`; testing this at store-open prevents a silent configuration regression.
+- Schema-level foreign keys make operation orphan checks defensive reconciliation rather than the primary integrity mechanism.
+
+### What was tricky to build
+
+SQLite configuration is per connection, while `database/sql` manages a pool. Setting `_synchronous=FULL`, `_journal_mode=WAL`, and `_foreign_keys=on` in the DSN ensures the driver applies them to each opened connection; checking PRAGMAs at startup catches an unsupported or unexpectedly altered connection configuration. The initial implementation retains the existing four-connection pool rather than introducing a hidden single-connection performance change.
+
+The operation tables are intentionally not a mutable `status` table. An admission may exist without completion after process death. Completion is a separate one-to-zero-or-one relation with a unique operation ID, which will make exactly-once Finish semantics enforceable in the next phase.
+
+### What warrants a second pair of eyes
+
+- Confirm that globally requiring `synchronous=FULL` is acceptable for all Workflow V3 workloads, or decide whether operation admission should move to a dedicated authority-bearing connection after performance measurement.
+- Review whether a future schema migration should persist descriptor bodies in addition to their digests; this slice records only immutable identifiers, matching the privacy constraint.
+- Investigate the pre-existing `TestDatabaseSyncCrashAfterSideEffectIsIdempotentAcrossRestart` storage-ratio failure separately; it should not be normalized as part of this ticket.
+
+### What should be done in the future
+
+Implement task `u57a`: lease-fenced admission and operation-ticket-fenced completion APIs, with reopen, cancellation, idempotency, and stale-lease tests. Keep the full-runtime storage-ratio failure visible in subsequent validation reports until it is separately resolved.
+
+### Code review instructions
+
+Review `schema.sql` next to the existing attempts and budget reservation tables, then inspect `Store.Open` and `checkSQLiteDurability`. Verify that no new source/provider payload field is present and that all dependent rows cascade from the admission/completion identities.
+
+Run:
+
+```text
+GOWORK=off go test ./pkg/workflowv3sqlite -count=1
+GOWORK=off go test -race ./pkg/workflowv3sqlite -count=1
+GOWORK=off golangci-lint run ./pkg/workflowv3sqlite/...
+git diff --check
+```
+
+### Technical details
+
+The durable relation is now:
+
+```text
+v3_attempts
+  └─ v3_external_operations (one admission per ordinal)
+       ├─ allocations and measures
+       └─ v3_external_operation_completions (zero or one)
+            └─ counters
+```
+
+The next API must write the admission transaction before submitting an effect and must never use a completion to mutate task/node/run state.
