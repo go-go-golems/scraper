@@ -33,6 +33,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	query := uri.Query()
 	query.Set("_foreign_keys", "on")
 	query.Set("_journal_mode", "WAL")
+	query.Set("_synchronous", "FULL")
 	query.Set("_busy_timeout", "5000")
 	query.Set("_txlock", "immediate")
 	uri.RawQuery = query.Encode()
@@ -49,6 +50,14 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	if err := migrateAdditiveColumns(ctx, db); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate workflow v3 additive columns: %w", err)
+	}
+	if err := checkSQLiteDurability(ctx, db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("verify workflow v3 SQLite durability: %w", err)
+	}
+	if err := checkExternalOperationInvariants(ctx, db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("workflow v3 external operation reconciliation: %w", err)
 	}
 	if err := checkBudgetInvariants(ctx, db); err != nil {
 		_ = db.Close()
