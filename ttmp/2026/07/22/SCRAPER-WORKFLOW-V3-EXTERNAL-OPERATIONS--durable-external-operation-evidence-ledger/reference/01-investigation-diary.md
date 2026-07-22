@@ -897,3 +897,7 @@ Wired the RAG sweep to emit an optional compact `researchctl-run-export.json` on
 Added a process-boundary persistence regression: admit an operation, close the SQLite store, reopen it, then finish using the original opaque ticket. The reopened store accepts the first completion, accepts an identical retry idempotently, and reports `1/1/0` admitted/completed/incomplete. Focused normal and race runs plus package lint passed.
 
 This validates the key crash window after durable admission and before post-call completion. It does not yet model an actual SIGKILL between SQLite writes, but exercises the durable reopen semantics through the same public store boundary.
+
+## Step 18: Fixture custody privacy canary
+
+Ran a byte-level privacy canary against the complete 12-cell fixture sweep custody bundle (aggregate/cell evidence, operation JSONL/manifests, and researchctl export). It found none of: fixture source text, a deliberately sensitive provider-body sentinel, authorization/bearer text, HTTP URLs, `content_text`, or provider configuration filenames. This is evidence for the published fixture bundle only; future real-provider qualification must repeat the same scan over outputs and transient SQLite/WAL custody before cleanup.
