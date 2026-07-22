@@ -928,3 +928,7 @@ Focused normal/race restart tests passed, followed by full normal and race suite
 ## Step 22: Full scraper validation
 
 After the lifecycle fixture repair, ran `GOWORK=off go test ./... -count=1` across the entire scraper module and `GOWORK=off golangci-lint run ./...`. Both passed, as did `git diff --check`; the working tree was clean. This is the full-module validation complement to the focused and race Workflow V3 evidence-ledger suites.
+
+## Step 23: Real qualification custody runbook
+
+Documented the final real-provider qualification checks against the now-complete fixture path: per-cell JSONL/manifest publication, failed-cell reductions, fresh researchctl staging/import, expanded privacy canary scope, and cumulative authority reconciliation. This is preparation only; it does not authorize a paid call or narrow the existing approval requirement.
