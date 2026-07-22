@@ -4379,3 +4379,46 @@ This keeps the reduction body external and adds only compact control identity.
 Focused compiler, full SQLite, and affected reduction/budget/runtime tests pass.
 The RAG repository uses this to place validation and approval after reduction,
 without introducing RAG semantics into scraper.
+
+## Step 43: RAG-owned Slice 12 preparation and controlled publication tranches
+
+The RAG worktree now imports pushed scraper Workflow V3 commit `9d714e6`
+without a local replace. Two validated pushed RAG commits establish the first
+integrated vertical slices:
+
+- `60309c8` adds the RAG-owned task bundle/module, generation and embedding lazy
+  maps, bounded shard reduction, transactional request/token budgets, typed
+  malformed-output retry, compact artifact refs, and fast/full fixture paths.
+- `e2f86e7` replaces simplified fixture bodies with actual `ragoperators` chunk,
+  representation, and embedding contracts; adds a process-local exact-profile
+  operator adapter; checked usage and integer cost reporting; domain shard
+  validation and prepared-corpus publication authority; dedicated generation
+  and embedding budget-activation gates; a dependent publication validation
+  task; a separate publication gate; and post-reduction task composition.
+
+The ordinary default RAG package integration runs 65 items in about two seconds;
+the production-cardinality test is explicitly gated by
+`RAG_TTC_FULL_PREFLIGHT=1`, so repository unit tests do not silently spend 90
+seconds. The explicit fresh 1,807-item P1 run passed in 90.811s, including one
+malformed generated result, immutable retry evidence, exact key range
+`chunk-0000` through `chunk-1806`, token/request/cost settlement, two chained
+maps, and bounded reduction. Earlier, before separating the modes, the same
+preflight passed in 93.224s.
+
+The production fixture proves no publication before control: one bounded sample
+exhausts generation, waits lease-free, survives store reopen, receives a CAS
+account increase and authorized decision, then separately exhausts/approves the
+embedding account, reduces and validates, waits at the publication gate, and
+publishes exactly once after the authorized publication artifact. It also
+exposed and fixed generic chained-map activation and post-reduction task
+composition in scraper.
+
+RAG pre-commit/pre-push hooks passed package tests, repository lint/vet,
+TypeScript, release snapshot build, and existing package/service tests. Focused
+new-package lint reports zero issues. Paid providers have not been contacted.
+
+Remaining P1/P2 work includes cross-concurrency deterministic comparison,
+streaming/independent generation-embedding refill rather than a phase barrier,
+all restart/fencing/cancellation boundaries, real prepared-store reopen in a
+fresh process, query evaluation/citations/researchctl evidence, comprehensive
+privacy/storage scans, and the bounded P3 provider sample.
