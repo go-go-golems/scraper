@@ -1,12 +1,18 @@
 package workflowv3runtime
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/dop251/goja"
 	database "github.com/go-go-golems/go-go-goja/modules/database"
 	fetchmod "github.com/go-go-golems/go-go-goja/modules/fetch"
 	fsmod "github.com/go-go-golems/go-go-goja/modules/fs"
@@ -15,7 +21,10 @@ import (
 
 // TaskModuleContext is the lease-scoped context used to construct one trusted
 // module instance. Factories must not retain the temporary workspace path.
+var allowlistedToolID = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.:-][a-z0-9]+)*$`)
+
 type TaskModuleContext struct {
+	Context   context.Context
 	Request   TaskRequest
 	Workspace string
 }
@@ -91,6 +100,73 @@ func FSInputModule() TaskModuleFactory {
 				ModuleID: "workflowv3:fs-input", ModuleName: "fs:input",
 				Loader: inputFS.Loader,
 			}, nil
+		},
+	}
+}
+
+// AllowlistedExecModule exposes fixed tool IDs without a shell, environment,
+// caller-selected executable path, or caller-selected working directory.
+func AllowlistedExecModule(tools map[string]string) TaskModuleFactory {
+	cloned := make(map[string]string, len(tools))
+	for id, path := range tools {
+		cloned[id] = path
+	}
+	return TaskModuleFactory{
+		Alias: "exec:allowlisted",
+		Validate: func() error {
+			if len(cloned) == 0 {
+				return fmt.Errorf("allowlisted exec requires at least one tool")
+			}
+			for id, path := range cloned {
+				if !allowlistedToolID.MatchString(id) {
+					return fmt.Errorf("invalid allowlisted tool ID %q", id)
+				}
+				if !filepath.IsAbs(path) {
+					return fmt.Errorf("allowlisted tool %q path must be absolute", id)
+				}
+			}
+			return nil
+		},
+		Build: func(moduleContext TaskModuleContext) (gggengine.RuntimeModuleRegistrar, error) {
+			loader := func(vm *goja.Runtime, moduleObject *goja.Object) {
+				exports := moduleObject.Get("exports").ToObject(vm)
+				if err := exports.Set("run", func(call goja.FunctionCall) goja.Value {
+					id := strings.TrimSpace(call.Argument(0).String())
+					path, ok := cloned[id]
+					if !ok {
+						panic(vm.NewTypeError("tool ID is not allowlisted"))
+					}
+					argumentValue := call.Argument(1)
+					arguments := []string{}
+					if argumentValue != nil && !goja.IsUndefined(argumentValue) && !goja.IsNull(argumentValue) {
+						object := argumentValue.ToObject(vm)
+						length := int(object.Get("length").ToInteger())
+						if length < 0 || length > 64 {
+							panic(vm.NewTypeError("tool argument count exceeds 64"))
+						}
+						for index := 0; index < length; index++ {
+							argument := object.Get(strconv.Itoa(index)).String()
+							if len(argument) > 1024 || strings.ContainsRune(argument, '\x00') {
+								panic(vm.NewTypeError("tool argument is invalid"))
+							}
+							arguments = append(arguments, argument)
+						}
+					}
+					command := exec.CommandContext(moduleContext.Context, path, arguments...)
+					command.Env = []string{"LANG=C.UTF-8", "PATH=/nonexistent"}
+					command.Dir = "/tmp"
+					stdout := &boundedBuffer{limit: 64 << 10}
+					stderr := &boundedDiscard{limit: 16 << 10}
+					command.Stdout, command.Stderr = stdout, stderr
+					if err := command.Run(); err != nil || stdout.overflow {
+						panic(vm.NewGoError(fmt.Errorf("allowlisted tool failed")))
+					}
+					return vm.ToValue(map[string]any{"stdout": stdout.String()})
+				}); err != nil {
+					panic(vm.NewGoError(err))
+				}
+			}
+			return gggengine.NativeModuleRegistrar{ModuleID: "workflowv3:exec-allowlisted", ModuleName: "exec:allowlisted", Loader: loader}, nil
 		},
 	}
 }

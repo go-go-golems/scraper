@@ -114,6 +114,9 @@ func TestExpansionPagesBackpressureReopenAndResolveItems(t *testing.T) {
 		lease, err := store.LeaseNext(ctx, registry, now.Add(time.Duration(index+1)*time.Second), time.Minute)
 		require.NoError(t, err)
 		require.NotNil(t, lease)
+		isolation := workflowv3.EffectivePlanIsolation(lease.PlanNode.Isolation)
+		require.Equal(t, workflowv3.IsolationInProcessTrusted, isolation.Effective.Class)
+		require.NotEmpty(t, isolation.PolicyDigest)
 		inputs, err := store.ResolveInputs(ctx, *lease)
 		require.NoError(t, err)
 		require.Equal(t, manifest.Items[index].Value, inputs["item"])
@@ -137,6 +140,12 @@ func TestExpansionPagesBackpressureReopenAndResolveItems(t *testing.T) {
 	require.Equal(t, 2, pages)
 	require.Equal(t, 4, items)
 	require.Equal(t, items, nodes)
+	var isolationClass, isolationDigest string
+	require.NoError(t, store.db.QueryRow(`
+SELECT isolation_class, isolation_policy_digest FROM v3_nodes
+WHERE run_id = 'map-run' ORDER BY ordinal LIMIT 1`).Scan(&isolationClass, &isolationDigest))
+	require.Equal(t, workflowv3.IsolationInProcessTrusted, isolationClass)
+	require.NotEmpty(t, isolationDigest)
 }
 
 func TestExpansionIsAtomicAcrossIndependentConnections(t *testing.T) {

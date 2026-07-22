@@ -226,6 +226,8 @@ WHERE run_id = ? AND map_key = ? AND next_index = ?`,
 		outputSchemas, _ := workflowv3.CanonicalJSON(mapped.OutputSchemas)
 		modules, _ := workflowv3.CanonicalJSON(mapped.Modules)
 		identity := mapped.Implementation
+		isolation := workflowv3.EffectivePlanIsolation(mapped.Isolation)
+		isolationBody, _ := workflowv3.CanonicalJSON(isolation)
 		var budgetAccount, budgetOnExhausted, budgetApprovalGate any
 		if mapped.Budget != nil {
 			budgetAccount, budgetOnExhausted = mapped.Budget.Account, mapped.Budget.OnExhausted
@@ -239,13 +241,15 @@ INSERT INTO v3_nodes(
   entrypoint, task_abi, bindings_json, input_schemas_json,
   output_schemas_json, modules_json, resource_class, max_attempts,
   retry_backoff_ms, budget_account, budget_on_exhausted,
-  budget_approval_gate, status
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+  budget_approval_gate, isolation_class, isolation_policy_digest,
+  isolation_executor_digest, isolation_policy_json, status
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
 			runID, nodeKey, ordinalBase+itemIndex, identity.Kind, identity.Version,
 			identity.BundleDigest, identity.Entrypoint, identity.ABI,
 			bindingsBody, inputSchemas, outputSchemas, modules, mapped.ResourceClass,
 			mapped.Retry.MaxAttempts, mapped.Retry.BackoffMillis,
-			budgetAccount, budgetOnExhausted, budgetApprovalGate); err != nil {
+			budgetAccount, budgetOnExhausted, budgetApprovalGate,
+			isolation.Effective.Class, isolation.PolicyDigest, isolation.ExecutorDigest, isolationBody); err != nil {
 			return nil, fmt.Errorf("insert map child %s: %w", item.Key, err)
 		}
 		if err := insertNodeBudget(ctx, tx, runID, nodeKey, mapped.Budget); err != nil {

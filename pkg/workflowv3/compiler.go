@@ -141,6 +141,13 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		if _, err := compileBudgetClaim(node.Budget, spec.BudgetMaximum, budgetAccounts); err != nil {
 			return fmt.Errorf("node %q budget: %w", node.Key, err)
 		}
+		compiledIsolation, err := CompileIsolation(node.Isolation, spec.IsolationMaximum, spec.IsolationExecutorDigest)
+		if err != nil {
+			return fmt.Errorf("node %q isolation: %w", node.Key, err)
+		}
+		if RequiresRestrictedIsolation(spec.Modules) && compiledIsolation.Effective.Class != IsolationSubprocessRestricted {
+			return fmt.Errorf("node %q modules require restricted isolation", node.Key)
+		}
 		if node.Budget != nil && node.Budget.ApprovalGate != "" {
 			if _, ok := gateSchemas[node.Budget.ApprovalGate]; !ok {
 				return fmt.Errorf("node %q budget references unknown gate %q", node.Key, node.Budget.ApprovalGate)
@@ -220,6 +227,13 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		}
 		if _, err := compileBudgetClaim(mapped.Budget, spec.BudgetMaximum, budgetAccounts); err != nil {
 			return fmt.Errorf("map %q budget: %w", mapped.Key, err)
+		}
+		compiledIsolation, err := CompileIsolation(mapped.Isolation, spec.IsolationMaximum, spec.IsolationExecutorDigest)
+		if err != nil {
+			return fmt.Errorf("map %q isolation: %w", mapped.Key, err)
+		}
+		if RequiresRestrictedIsolation(spec.Modules) && compiledIsolation.Effective.Class != IsolationSubprocessRestricted {
+			return fmt.Errorf("map %q modules require restricted isolation", mapped.Key)
 		}
 		if mapped.Budget != nil && mapped.Budget.ApprovalGate != "" {
 			if _, ok := gateSchemas[mapped.Budget.ApprovalGate]; !ok {
@@ -303,6 +317,13 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		}
 		if _, err := compileBudgetClaim(reduced.Budget, spec.BudgetMaximum, budgetAccounts); err != nil {
 			return fmt.Errorf("reduction %q budget: %w", reduced.Key, err)
+		}
+		compiledIsolation, err := CompileIsolation(reduced.Isolation, spec.IsolationMaximum, spec.IsolationExecutorDigest)
+		if err != nil {
+			return fmt.Errorf("reduction %q isolation: %w", reduced.Key, err)
+		}
+		if RequiresRestrictedIsolation(spec.Modules) && compiledIsolation.Effective.Class != IsolationSubprocessRestricted {
+			return fmt.Errorf("reduction %q modules require restricted isolation", reduced.Key)
 		}
 		if reduced.Budget != nil && reduced.Budget.ApprovalGate != "" {
 			if _, ok := gateSchemas[reduced.Budget.ApprovalGate]; !ok {
@@ -440,6 +461,7 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 	for _, node := range ir.Nodes {
 		spec, _ := catalog.Lookup(node.Task)
 		budget, _ := compileBudgetClaim(node.Budget, spec.BudgetMaximum, budgetAccounts)
+		isolation, _ := CompileIsolation(node.Isolation, spec.IsolationMaximum, spec.IsolationExecutorDigest)
 		plan.Nodes = append(plan.Nodes, PlanNode{
 			Key:            node.Key,
 			Implementation: spec.Identity,
@@ -451,28 +473,31 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 			ResourceClass:  spec.ResourceClass,
 			Retry:          spec.Retry,
 			Budget:         budget,
+			Isolation:      &isolation,
 		})
 	}
 	for _, mapped := range ir.Maps {
 		spec, _ := catalog.Lookup(mapped.ItemTask)
 		budget, _ := compileBudgetClaim(mapped.Budget, spec.BudgetMaximum, budgetAccounts)
+		isolation, _ := CompileIsolation(mapped.Isolation, spec.IsolationMaximum, spec.IsolationExecutorDigest)
 		plan.Maps = append(plan.Maps, PlanMap{
 			Key: mapped.Key, Source: mapped.Source, Implementation: spec.Identity,
 			Bindings:     cloneBindings(mapped.Bindings),
 			InputSchemas: cloneStringMap(spec.Inputs), OutputSchemas: cloneStringMap(spec.Outputs),
 			Modules: append([]string(nil), spec.Modules...), ResourceClass: spec.ResourceClass,
-			Retry: spec.Retry, Policy: mapped.Policy, Budget: budget,
+			Retry: spec.Retry, Policy: mapped.Policy, Budget: budget, Isolation: &isolation,
 		})
 	}
 	for _, reduced := range ir.Reductions {
 		spec, _ := catalog.Lookup(reduced.PartitionTask)
 		budget, _ := compileBudgetClaim(reduced.Budget, spec.BudgetMaximum, budgetAccounts)
+		isolation, _ := CompileIsolation(reduced.Isolation, spec.IsolationMaximum, spec.IsolationExecutorDigest)
 		plan.Reductions = append(plan.Reductions, PlanReduce{
 			Key: reduced.Key, Source: reduced.Source, Implementation: spec.Identity,
 			Bindings:     cloneBindings(reduced.Bindings),
 			InputSchemas: cloneStringMap(spec.Inputs), OutputSchemas: cloneStringMap(spec.Outputs),
 			Modules: append([]string(nil), spec.Modules...), ResourceClass: spec.ResourceClass,
-			Retry: spec.Retry, Policy: reduced.Policy, Budget: budget,
+			Retry: spec.Retry, Policy: reduced.Policy, Budget: budget, Isolation: &isolation,
 		})
 	}
 	budgetGates := map[NodeKey]struct{}{}

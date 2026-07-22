@@ -351,6 +351,10 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 				b.ir.Nodes[index].Budget = budgetClaimFromValue(vm, option.Argument(0))
 				return jobBuilder
 			})
+			mustSet(vm, jobBuilder, "isolation", func(option goja.FunctionCall) goja.Value {
+				b.ir.Nodes[index].Isolation = isolationPolicyFromValue(vm, option.Argument(0))
+				return jobBuilder
+			})
 			if _, err := build(goja.Undefined(), jobBuilder); err != nil {
 				panic(err)
 			}
@@ -390,6 +394,7 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 			PageSize: 64, MaxItems: 10000, MaxMaterializedAhead: 128,
 		}
 		var budget *workflowv3.BudgetClaim
+		var isolation *workflowv3.IsolationPolicy
 		if configure, configureOK := goja.AssertFunction(call.Argument(3)); configureOK {
 			mapBuilder := vm.NewObject()
 			mustSet(vm, mapBuilder, "pageSize", func(option goja.FunctionCall) goja.Value {
@@ -408,13 +413,17 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 				budget = budgetClaimFromValue(vm, option.Argument(0))
 				return mapBuilder
 			})
+			mustSet(vm, mapBuilder, "isolation", func(option goja.FunctionCall) goja.Value {
+				isolation = isolationPolicyFromValue(vm, option.Argument(0))
+				return mapBuilder
+			})
 			if _, err := configure(goja.Undefined(), mapBuilder); err != nil {
 				panic(err)
 			}
 		}
 		b.ir.Maps = append(b.ir.Maps, workflowv3.IRMap{
 			Key: key, Source: source, ItemTask: invocation.key,
-			Bindings: invocation.bindings, Policy: policy, Budget: budget,
+			Bindings: invocation.bindings, Policy: policy, Budget: budget, Isolation: isolation,
 		})
 		spec, found := b.state.catalog.Lookup(invocation.key)
 		if !found || len(spec.Outputs) != 1 {
@@ -466,6 +475,7 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 		}
 		policy := workflowv3.ReducePolicy{FanIn: 16, MaxLevels: 8}
 		var budget *workflowv3.BudgetClaim
+		var isolation *workflowv3.IsolationPolicy
 		if configure, configureOK := goja.AssertFunction(call.Argument(3)); configureOK {
 			reduceBuilder := vm.NewObject()
 			mustSet(vm, reduceBuilder, "fanIn", func(option goja.FunctionCall) goja.Value {
@@ -480,13 +490,17 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 				budget = budgetClaimFromValue(vm, option.Argument(0))
 				return reduceBuilder
 			})
+			mustSet(vm, reduceBuilder, "isolation", func(option goja.FunctionCall) goja.Value {
+				isolation = isolationPolicyFromValue(vm, option.Argument(0))
+				return reduceBuilder
+			})
 			if _, err := configure(goja.Undefined(), reduceBuilder); err != nil {
 				panic(err)
 			}
 		}
 		b.ir.Reductions = append(b.ir.Reductions, workflowv3.IRReduce{
 			Key: key, Source: source, PartitionTask: invocation.key,
-			Bindings: invocation.bindings, Policy: policy, Budget: budget,
+			Bindings: invocation.bindings, Policy: policy, Budget: budget, Isolation: isolation,
 		})
 		spec, found := b.state.catalog.Lookup(invocation.key)
 		if !found || len(spec.Outputs) != 1 {
@@ -582,6 +596,39 @@ func (s *authoringState) mustWorkflow(vm *goja.Runtime, value goja.Value) workfl
 	return ir
 }
 
+func isolationPolicyFromValue(vm *goja.Runtime, value goja.Value) *workflowv3.IsolationPolicy {
+	if value == nil || goja.IsUndefined(value) || goja.IsNull(value) {
+		panic(vm.NewTypeError("isolation policy is required"))
+	}
+	object := value.ToObject(vm)
+	policy := &workflowv3.IsolationPolicy{
+		Class:            strings.TrimSpace(object.Get("class").String()),
+		WallTimeMillis:   safeIntegerProperty(vm, object, "wallTimeMillis"),
+		CPUTimeMillis:    safeIntegerProperty(vm, object, "cpuTimeMillis"),
+		MemoryBytes:      safeIntegerProperty(vm, object, "memoryBytes"),
+		MaxProcesses:     safeIntegerProperty(vm, object, "maxProcesses"),
+		MaxOutputBytes:   safeIntegerProperty(vm, object, "maxOutputBytes"),
+		MaxOutputFiles:   int(safeIntegerProperty(vm, object, "maxOutputFiles")),
+		MaxProtocolBytes: safeIntegerProperty(vm, object, "maxProtocolBytes"),
+	}
+	if err := workflowv3.ValidateIsolationPolicy(*policy); err != nil {
+		panic(vm.NewTypeError("invalid isolation policy: %s", err))
+	}
+	return policy
+}
+
+func safeIntegerProperty(vm *goja.Runtime, object *goja.Object, name string) int64 {
+	value := object.Get(name)
+	if value == nil || goja.IsUndefined(value) || goja.IsNull(value) {
+		return 0
+	}
+	number := value.ToFloat()
+	if number < 0 || number > 9007199254740991 || math.Trunc(number) != number {
+		panic(vm.NewTypeError("isolation %s must be a nonnegative safe integer", name))
+	}
+	return int64(number)
+}
+
 func budgetClaimFromValue(vm *goja.Runtime, value goja.Value) *workflowv3.BudgetClaim {
 	if value == nil || goja.IsUndefined(value) || goja.IsNull(value) {
 		panic(vm.NewTypeError("budget claim is required"))
@@ -665,23 +712,36 @@ func TypeScript() string {
     onExhausted: "fail-run" | "block" | "require-approval";
     approvalGate?: string;
   }
+  export interface IsolationPolicy {
+    class: "in-process.trusted" | "subprocess.restricted";
+    wallTimeMillis?: number;
+    cpuTimeMillis?: number;
+    memoryBytes?: number;
+    maxProcesses?: number;
+    maxOutputBytes?: number;
+    maxOutputFiles?: number;
+    maxProtocolBytes?: number;
+  }
   export interface GateBuilder {
     after(job: JobRef): GateBuilder;
   }
   export interface JobBuilder {
     after(job: JobRef): JobBuilder;
     budget(claim: BudgetClaim): JobBuilder;
+    isolation(policy: IsolationPolicy): JobBuilder;
   }
   export interface MapBuilder {
     pageSize(value: number): MapBuilder;
     maxItems(value: number): MapBuilder;
     maxMaterializedAhead(value: number): MapBuilder;
     budget(claim: BudgetClaim): MapBuilder;
+    isolation(policy: IsolationPolicy): MapBuilder;
   }
   export interface ReduceBuilder {
     fanIn(value: number): ReduceBuilder;
     maxLevels(value: number): ReduceBuilder;
     budget(claim: BudgetClaim): ReduceBuilder;
+    isolation(policy: IsolationPolicy): ReduceBuilder;
   }
   export interface PlanBuilder {
     budget(

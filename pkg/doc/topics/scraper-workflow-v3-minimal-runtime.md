@@ -1,7 +1,7 @@
 ---
-Title: Workflow V3 Runtime Slices 1–10
+Title: Workflow V3 Runtime Slices 1–11
 Slug: scraper-workflow-v3-minimal-runtime
-Short: "Explains executable workflow-v3 file, HTTP, dispatcher, database, map, reduction, registry, budget, projection, and approval-gate slices with durable privacy boundaries."
+Short: "Explains executable workflow-v3 file, HTTP, dispatcher, database, map, reduction, registry, budget, gate, and restricted-process slices with durable privacy boundaries."
 Topics:
 - scraper
 - runtime
@@ -17,14 +17,14 @@ ShowPerDefault: true
 SectionType: GeneralTopic
 ---
 
-Workflow v3 has ten executable vertical slices for trusted first-party
+Workflow v3 has eleven executable vertical slices for trusted and restricted
 JavaScript tasks: linear file processing, typed authoring, allowlisted HTTP,
 work-conserving resource dispatch, idempotent database synchronization,
 deterministic lazy maps, bounded reduction trees, immutable rolling registry
 generations, transactional budgets with authoritative operational projections,
-and durable lease-free approval gates. It remains intentionally separate from
-the existing v2 site and submission runtime while stronger isolation
-capabilities are added.
+durable lease-free approval gates, and exact bounded subprocess isolation. It
+remains intentionally separate from the existing v2 site and submission
+runtime while the integrated RAG/TTC workload is added.
 
 ## What runs today
 
@@ -218,6 +218,31 @@ Operational projections expose bounded/paginated status, version, waiting age,
 deadline remaining, role, decision code/time, and artifact presence; raw
 approval bodies remain external.
 
+## Restricted subprocess behavior
+
+Tasks compiled as `subprocess.restricted` run in a fresh static worker under
+Bubblewrap and delegated cgroup v2 controls. Plans and registry generations pin
+requested/effective limits plus the exact digest of worker, pre-exec launcher,
+Bubblewrap, protocol, and fixed allowlisted tool bytes. Retained rolling
+registry generations retain matching executors; latest-profile substitution is
+rejected.
+
+A static launcher joins the configured memory/process/CPU cgroup before
+Bubblewrap forks. The sandbox unshares user, PID, IPC, UTS, cgroup, and network
+namespaces, clears environment, exposes only read-only worker/bundle/input/tool
+mounts, and has writable attempt output and tmpfs. Parent cancellation or
+wall-time uses `cgroup.kill`. Broad `exec:allowlisted` tasks are compiler-denied
+outside this class and receive only fixed tool IDs—never shell strings,
+executable paths, environment, arbitrary cwd, or redirection.
+
+The child receives one bounded canonical request and returns one bounded
+canonical response. It has no workflow SQLite or artifact-store authority.
+Candidate output files are rechecked by the parent for exact ports/schemas,
+file/byte bounds, regular-file confinement, size, and digest before parent-side
+artifact publication and ordinary lease/cancellation fencing. Attempts and
+queue projections expose isolation class, policy/executor digests, and
+ready/active isolation counts.
+
 ## HTTP and database behavior
 
 The HTTP fixture snapshots at most eight explicitly supplied article URLs.
@@ -258,8 +283,9 @@ cd web && pnpm exec tsc --noEmit --skipLibCheck \
 The focused tests cover the 12,000-row file workflow, real local HTTP and
 SQLite target servers, a 1,807-item JavaScript lazy map, a 257-item multi-level
 JavaScript reduction, exact A/B registry generations, a real budget-reporting
-JavaScript task, and a real JavaScript approval workflow that waits across a
-store/dispatcher restart while an unrelated run completes. They prove typed
+JavaScript task, a real JavaScript approval workflow that waits across a store/dispatcher
+restart while an unrelated run completes, and real static Bubblewrap workers
+under cgroup limits. They prove typed
 retry, atomic activation,
 draining, quarantine without domain retry debt, database-scoped reservation,
 actual/conservative/zero settlement, exhaustion and CAS increase, lease-free
@@ -297,6 +323,8 @@ control persistence and the published output manifest.
   overage, reopen, and privacy workflow.
 - `pkg/testfixtures/workflowv3gate` — real wait, decision-artifact continuation,
   unrelated-run progress, dispatcher restart, and privacy workflow.
+- `pkg/testfixtures/workflowv3isolation` — restricted transform, spinning child,
+  allowlisted tool, worker-death retry, limits, cancellation, and privacy.
 
-Later slices add stronger process isolation. V3 does not translate or silently
-accept v2 raw operations.
+The final slice adds the integrated RAG/TTC production workload. V3 does not
+translate or silently accept v2 raw operations.

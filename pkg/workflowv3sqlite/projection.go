@@ -32,25 +32,28 @@ func queueSnapshot(
 	now time.Time,
 ) (workflowv3.QueueSnapshot, error) {
 	snapshot := workflowv3.QueueSnapshot{
-		ActiveByResource: map[string]int{},
-		BlockedByReason:  map[string]int{},
+		ActiveByResource:  map[string]int{},
+		ActiveByIsolation: map[string]int{},
+		ReadyByIsolation:  map[string]int{},
+		BlockedByReason:   map[string]int{},
 	}
 	rows, err := queryer.QueryContext(ctx, `
-SELECT run_id, resource_class, COUNT(*) FROM v3_nodes
-WHERE status = 'running' GROUP BY run_id, resource_class`)
+SELECT run_id, resource_class, isolation_class, COUNT(*) FROM v3_nodes
+WHERE status = 'running' GROUP BY run_id, resource_class, isolation_class`)
 	if err != nil {
 		return snapshot, err
 	}
 	for rows.Next() {
 		var runID workflowv3.RunID
-		var resource string
+		var resource, isolationClass string
 		var count int
-		if err := rows.Scan(&runID, &resource, &count); err != nil {
+		if err := rows.Scan(&runID, &resource, &isolationClass, &count); err != nil {
 			_ = rows.Close()
 			return snapshot, err
 		}
 		if runFilter == nil || runID == *runFilter {
 			snapshot.ActiveByResource[resource] += count
+			snapshot.ActiveByIsolation[isolationClass] += count
 		}
 	}
 	if err := rows.Close(); err != nil {
@@ -148,6 +151,7 @@ ORDER BY reduction.run_id, reduction.reduce_key`)
 SELECT n.run_id, n.task_kind, n.task_version, n.bundle_digest, n.entrypoint,
   n.task_abi, n.modules_json, n.resource_class, n.max_attempts,
   n.retry_backoff_ms, n.ready_at, n.budget_account,
+  n.isolation_policy_json,
   n.budget_on_exhausted,
   COALESCE((
     SELECT claim.dimension
@@ -185,7 +189,7 @@ WHERE n.status = 'pending' AND r.status = 'running'`)
 	for rows.Next() {
 		var runID workflowv3.RunID
 		var node workflowv3.PlanNode
-		var modules []byte
+		var modules, isolationBody []byte
 		var readyAt, budgetAccount, budgetPolicy sql.NullString
 		var exhaustedDimension string
 		var blockedByGate, blockedByDependency bool
@@ -202,6 +206,7 @@ WHERE n.status = 'pending' AND r.status = 'running'`)
 			&node.Retry.BackoffMillis,
 			&readyAt,
 			&budgetAccount,
+			&isolationBody,
 			&budgetPolicy,
 			&exhaustedDimension,
 			&blockedByGate,
@@ -215,6 +220,11 @@ WHERE n.status = 'pending' AND r.status = 'running'`)
 		if err := workflowv3.StrictDecode(modules, &node.Modules); err != nil {
 			return snapshot, err
 		}
+		var isolation workflowv3.PlanIsolation
+		if err := workflowv3.StrictDecode(isolationBody, &isolation); err != nil {
+			return snapshot, err
+		}
+		node.Isolation = &isolation
 		backoffBlocked := false
 		if readyAt.Valid {
 			deadline, err := time.Parse(time.RFC3339Nano, readyAt.String)
@@ -249,6 +259,7 @@ WHERE n.status = 'pending' AND r.status = 'running'`)
 		}
 		if reason == "" {
 			snapshot.Ready++
+			snapshot.ReadyByIsolation[isolation.Effective.Class]++
 		} else {
 			snapshot.BlockedByReason[reason]++
 		}

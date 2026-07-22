@@ -3,6 +3,8 @@
 all: test build
 
 BINARY ?= scraper
+ISOLATION_BINARY ?= workflowv3-task-worker
+ISOLATION_LAUNCHER ?= workflowv3-isolation-launcher
 VERSION ?= $(shell svu current 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS ?= -X main.version=$(VERSION)
 GORELEASER_ARGS ?= --skip=sign --snapshot --clean
@@ -38,6 +40,8 @@ build-go:
 	GOWORK=off go generate ./...
 	mkdir -p $(DIST_DIR)
 	GOWORK=off go build -tags "sqlite_fts5 embed" -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(BINARY) ./cmd/$(BINARY)
+	CGO_ENABLED=0 GOWORK=off go build -trimpath -o $(DIST_DIR)/$(ISOLATION_BINARY) ./cmd/$(ISOLATION_BINARY)
+	CGO_ENABLED=0 GOWORK=off go build -trimpath -o $(DIST_DIR)/$(ISOLATION_LAUNCHER) ./cmd/$(ISOLATION_LAUNCHER)
 
 build-web:
 	cd $(WEB_DIR) && pnpm build
