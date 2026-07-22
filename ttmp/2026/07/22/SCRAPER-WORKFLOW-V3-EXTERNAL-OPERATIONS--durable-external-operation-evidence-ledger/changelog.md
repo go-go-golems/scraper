@@ -105,3 +105,8 @@ Step 10: contained a fixture sweep timeout after provider instrumentation; rever
 
 Step 11: verified RAG fixture sweep exports 282 durable provider-operation records into per-cell JSONL/manifest custody
 
+
+## 2026-07-22
+
+Step 12: completed RAG per-cell operation custody and deterministic failed-cell reductions
+
