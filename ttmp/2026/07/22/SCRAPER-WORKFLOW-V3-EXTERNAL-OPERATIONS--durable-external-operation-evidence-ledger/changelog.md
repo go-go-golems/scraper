@@ -49,3 +49,12 @@ Step 4: added additive external-operation SQLite tables with WAL/FULL/foreign-ke
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/schema.sql — Durable ledger schema
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/store_test.go — Migration and PRAGMA regression coverage
 
+
+## 2026-07-22
+
+Step 5: implemented durable lease-fenced operation admission and ticket-fenced late immutable completion (commit e061769)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/external_operation.go — Begin/Finish operation evidence authority
+
