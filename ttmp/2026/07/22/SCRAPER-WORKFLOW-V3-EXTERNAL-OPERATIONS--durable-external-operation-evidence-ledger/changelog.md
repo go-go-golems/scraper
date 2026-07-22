@@ -145,3 +145,8 @@ Step 18: passed byte-level privacy canary over the fixture custody and researchc
 
 Step 19: added race-validated lease-loss fence and prior-ticket completion regression
 
+
+## 2026-07-22
+
+Step 20: recorded full lifecycle-suite audit and the unchanged runtime restart baseline failure
+

@@ -907,3 +907,14 @@ Ran a byte-level privacy canary against the complete 12-cell fixture sweep custo
 Added a lease-loss regression: admit an external operation under a one-millisecond lease, let a new lease fence the old attempt, prove the old lease cannot admit another operation, then finish the previously admitted ticket. The old lease returns `ErrStaleCompletion`; the prior ticket's completion remains durable and the operation projection is `1/1` admitted/completed. The same test passed under the race detector.
 
 This confirms the intended split: lease loss removes Workflow/node authority but does not erase post-call evidence authorized by a pre-existing ticket.
+
+## Step 20: Lifecycle suite audit and unrelated baseline failure
+
+The SQLite ledger package passed its full normal and race suites after the cancellation, lease-loss, reopen, idempotency, concurrency, and privacy coverage additions. The combined Workflow runtime suite still reproduces the pre-existing failure:
+
+```text
+TestDatabaseSyncCrashAfterSideEffectIsIdempotentAcrossRestart
+Error: "299008" is not less than "249777"
+```
+
+It occurs under the existing FULL-synchronous configuration and is outside the external-operation change set; no threshold was weakened. Because this unresolved runtime baseline failure prevents a clean full-package validation, lifecycle task closure remains deferred pending its independent repair or an explicit disposition.
