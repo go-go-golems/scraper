@@ -875,3 +875,11 @@ GOWORK=off go test -race ./pkg/workflowv3sqlite -run TestExternalOperationConcur
 ```
 
 This advances, but does not close, the lifecycle validation task: restart/process-death and broader cancellation/lease-loss privacy-corpus checks remain required.
+
+## Step 14: Researchctl custody seam reconnaissance
+
+I traced researchctl's existing `import-run` path before adding a domain adapter. The correct boundary is a canonical `lab.RunExport` bundle authored by RAG: `researchctl` verifies and stages referenced relative artifacts through `lab.StageImportedArtifacts`, validates checks, then atomically imports the generic export. Researchctl must not import RAG or Workflow packages.
+
+The RAG-side adapter must therefore create one completed external-run export whose artifacts include the sweep evidence, per-cell operation JSONL, and manifests, and whose scalar metrics are derived only from the compact evidence. It must receive a canonical researchctl specification, explicit operator-recorded timestamp, project/experiment import target, and stable external-run identity; inventing timestamps or using host paths would make repeat import identity non-deterministic or leak privacy-sensitive information.
+
+The next implementation slice is an RAG-owned exporter plus an import integration test that verifies artifact staging and scalar metrics via researchctl's public contracts. This reconnaissance made no code change and left task `a77h` open.
