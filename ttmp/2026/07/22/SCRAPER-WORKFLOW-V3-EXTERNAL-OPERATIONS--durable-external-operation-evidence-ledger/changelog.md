@@ -39,3 +39,13 @@ Step 3: defined validated privacy-safe external-operation descriptor spec comple
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/external_operation.go — Generic operation contract and validation
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/external_operation_test.go — Contract privacy and validation tests
 
+
+## 2026-07-22
+
+Step 4: added additive external-operation SQLite tables with WAL/FULL/foreign-key startup verification and migration coverage (commit 1542075)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/schema.sql — Durable ledger schema
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/store_test.go — Migration and PRAGMA regression coverage
+

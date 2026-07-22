@@ -23,10 +23,18 @@ RelatedFiles:
       Note: Parent lease owner and scoped recorder injection point
     - Path: repo://pkg/workflowv3runtime/modules.go
       Note: Trusted host module descriptor and recorder seam
+    - Path: repo://pkg/workflowv3sqlite/external_operation.go
+      Note: SQLite durability and external ledger invariant checks (commit 1542075)
     - Path: repo://pkg/workflowv3sqlite/schema.sql
-      Note: Current attempts and budget schema plus proposed additive operation tables
+      Note: |-
+        Current attempts and budget schema plus proposed additive operation tables
+        Additive admission completion and scalar evidence tables (commit 1542075)
     - Path: repo://pkg/workflowv3sqlite/store.go
-      Note: Lease admission completion fencing migration and transaction reference
+      Note: |-
+        Lease admission completion fencing migration and transaction reference
+        FULL SQLite durability request and startup reconciliation (commit 1542075)
+    - Path: repo://pkg/workflowv3sqlite/store_test.go
+      Note: Legacy migration and required durability setting regression (commit 1542075)
     - Path: ws://researchctl/pkg/lab/runtime.go
       Note: Researchctl downstream immutable observation boundary
 ExternalSources: []
@@ -35,6 +43,7 @@ LastUpdated: 2026-07-22T19:55:00-04:00
 WhatFor: Guide implementation of a generic Workflow V3 external-operation ledger and its RAG and researchctl integration without leaking payloads or weakening lease and budget authority.
 WhenToUse: Read before changing Workflow V3 persistence, task-module APIs, provider instrumentation, operation evidence exports, or researchctl custody for network, model, browser, database, or subprocess calls.
 ---
+
 
 
 
