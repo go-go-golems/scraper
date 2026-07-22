@@ -11,5 +11,5 @@
 - [ ] Add cancellation lease-loss retry restart concurrency and privacy tests <!-- t:nmzl -->
 - [x] Integrate RAG generation and embedding providers with the generic recorder <!-- t:qfpd -->
 - [x] Publish per-cell operation evidence and deterministic failed-cell reductions <!-- t:q293 -->
-- [ ] Map compact operation evidence into researchctl verified artifacts and metrics <!-- t:a77h -->
+- [x] Map compact operation evidence into researchctl verified artifacts and metrics <!-- t:a77h -->
 - [ ] Validate fixture and bounded real-provider workflows before production use <!-- t:stdm -->
