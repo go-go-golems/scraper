@@ -36,7 +36,7 @@ func TestExternalOperationAdmissionAndLateTicketCompletion(t *testing.T) {
 	lease, err := store.LeaseNext(ctx, registry, now, time.Minute)
 	require.NoError(t, err)
 	descriptor := operationDescriptor(t)
-	spec := workflowv3.ExternalOperationSpec{DescriptorDigest: descriptor.Digest, Reservation: []workflowv3.ExternalOperationCounter{{Name: "requests", Units: 1}}}
+	spec := workflowv3.ExternalOperationSpec{DescriptorDigest: descriptor.Digest}
 	ticket, err := store.BeginExternalOperation(ctx, *lease, descriptor, spec, now.Add(time.Millisecond))
 	require.NoError(t, err)
 	require.NotEmpty(t, ticket.OperationID)
@@ -93,6 +93,31 @@ func TestExternalOperationAdmissionAndLateTicketCompletion(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, firstJSONL, secondJSONL)
 	require.Equal(t, firstManifest, secondManifest)
+}
+
+func TestExternalOperationAllocationSettlesAttemptBudget(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := budgetStoreFixture(t, 1, 1)
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	now := time.Now().UTC()
+	createBudgetRun(t, store, plan, "operation-budget", now)
+	lease, err := store.LeaseNext(ctx, registry, now, time.Minute)
+	require.NoError(t, err)
+	descriptor := operationDescriptor(t)
+	spec := workflowv3.ExternalOperationSpec{DescriptorDigest: descriptor.Digest, Reservation: []workflowv3.ExternalOperationCounter{{Name: "requests", Units: 1}}}
+	ticket, err := store.BeginExternalOperation(ctx, *lease, descriptor, spec, now)
+	require.NoError(t, err)
+	_, err = store.BeginExternalOperation(ctx, *lease, descriptor, spec, now)
+	require.Error(t, err)
+	completion := workflowv3.ExternalOperationCompletion{ProviderStartedAt: now.UTC(), Outcome: workflowv3.ExternalOperationOutcomeSucceeded, AccountingMode: workflowv3.ExternalOperationAccountingActual, Counters: []workflowv3.ExternalOperationCounter{{Name: "requests", Units: 1}}}
+	require.NoError(t, store.FinishExternalOperation(ctx, ticket, descriptor, completion, now))
+	require.NoError(t, store.CompleteWithUsage(ctx, *lease, map[string]workflowv3.ArtifactRef{"output": artifactRef("output/v1", "operation-budget")}, nil, now))
+	budget, err := store.BudgetSnapshot(ctx, nil)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), budget[0].Used)
+	require.Zero(t, budget[0].Reserved)
 }
 
 func TestExternalOperationRejectsWrongCompletionTicket(t *testing.T) {

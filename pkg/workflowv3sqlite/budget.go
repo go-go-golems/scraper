@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"time"
@@ -198,6 +199,18 @@ ORDER BY dimension`, lease.RunID, lease.NodeKey, lease.Attempt)
 		actual[amount.Dimension] = amount.Units
 		previous = amount.Dimension
 	}
+	if mode == "actual" {
+		operationUsage, operationErr := operationActualUsage(ctx, tx, lease)
+		if operationErr != nil {
+			return operationErr
+		}
+		for dimension, units := range operationUsage {
+			if reported, exists := actual[dimension]; exists && reported != units {
+				return fmt.Errorf("%w: operation usage disagrees with task usage for %s", ErrBudgetUsageInvalid, dimension)
+			}
+			actual[dimension] = units
+		}
+	}
 	stamp := formatTime(now)
 	for _, reservation := range reservations {
 		settled := int64(0)
@@ -256,6 +269,50 @@ WHERE run_id = ? AND node_key = ? AND attempt_no = ? AND dimension = ?
 		return err
 	}
 	return nil
+}
+
+func operationActualUsage(ctx context.Context, tx *sql.Tx, lease workflowv3.Lease) (map[string]int64, error) {
+	rows, err := tx.QueryContext(ctx, `
+SELECT allocation.dimension,allocation.units,completion.accounting_mode,counter.units
+FROM v3_external_operation_allocations allocation
+JOIN v3_external_operations operation ON operation.operation_id=allocation.operation_id
+LEFT JOIN v3_external_operation_completions completion ON completion.operation_id=operation.operation_id
+LEFT JOIN v3_external_operation_counters counter ON counter.operation_id=operation.operation_id AND counter.name=allocation.dimension
+WHERE operation.run_id=? AND operation.node_key=? AND operation.attempt_no=?
+ORDER BY allocation.dimension,operation.ordinal`, lease.RunID, lease.NodeKey, lease.Attempt)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	usage := map[string]int64{}
+	for rows.Next() {
+		var dimension, accounting sql.NullString
+		var allocated int64
+		var observed sql.NullInt64
+		if err := rows.Scan(&dimension, &allocated, &accounting, &observed); err != nil {
+			return nil, err
+		}
+		settled := allocated
+		if accounting.Valid {
+			switch accounting.String {
+			case workflowv3.ExternalOperationAccountingActual:
+				if !observed.Valid || observed.Int64 < 0 || observed.Int64 > allocated {
+					return nil, fmt.Errorf("%w: external operation actual usage %s is invalid", ErrBudgetUsageInvalid, dimension.String)
+				}
+				settled = observed.Int64
+			case workflowv3.ExternalOperationAccountingConservative:
+			case workflowv3.ExternalOperationAccountingNone:
+				return nil, fmt.Errorf("%w: external operation allocation %s cannot have no accounting", ErrBudgetUsageInvalid, dimension.String)
+			default:
+				return nil, fmt.Errorf("%w: external operation accounting mode is invalid", ErrBudgetUsageInvalid)
+			}
+		}
+		if prior := usage[dimension.String]; settled > math.MaxInt64-prior {
+			return nil, fmt.Errorf("%w: external operation usage overflows", ErrBudgetUsageInvalid)
+		}
+		usage[dimension.String] += settled
+	}
+	return usage, rows.Err()
 }
 
 func settleConservativeWhere(
