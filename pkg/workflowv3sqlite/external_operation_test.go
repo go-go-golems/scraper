@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -118,6 +119,61 @@ func TestExternalOperationAllocationSettlesAttemptBudget(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), budget[0].Used)
 	require.Zero(t, budget[0].Reserved)
+}
+
+func TestExternalOperationConcurrentAdmissionAndCompletion(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := storeFixture(t, "first")
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	now := time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, store.CreateRun(ctx, "operation-concurrent", plan, map[string]workflowv3.ArtifactRef{"source": artifactRef("source/v1", "operation-concurrent")}, now))
+	lease, err := store.LeaseNext(ctx, registry, now, time.Minute)
+	require.NoError(t, err)
+	descriptor, err := workflowv3.NewExternalOperationDescriptor(workflowv3.ExternalOperationDescriptor{Kind: workflowv3.ExternalOperationKind{Name: "provider.generate", Version: "v1"}, AuthorityDigest: "sha256:" + strings.Repeat("f", 64), MaxPerAttempt: 16, Counters: []workflowv3.ExternalOperationCounterDescriptor{{Name: "requests", Unit: "requests", Roles: []workflowv3.ExternalOperationCounterRole{workflowv3.ExternalOperationCounterReservation, workflowv3.ExternalOperationCounterUsage}}}})
+	require.NoError(t, err)
+	tickets := make([]workflowv3.ExternalOperationTicket, 16)
+	errors := make(chan error, len(tickets))
+	var admissions sync.WaitGroup
+	for index := range tickets {
+		admissions.Add(1)
+		go func(index int) {
+			defer admissions.Done()
+			ticket, beginErr := store.BeginExternalOperation(ctx, *lease, descriptor, workflowv3.ExternalOperationSpec{DescriptorDigest: descriptor.Digest}, now.Add(time.Duration(index)*time.Microsecond))
+			if beginErr == nil {
+				tickets[index] = ticket
+			}
+			errors <- beginErr
+		}(index)
+	}
+	admissions.Wait()
+	close(errors)
+	for beginErr := range errors {
+		require.NoError(t, beginErr)
+	}
+	var completions sync.WaitGroup
+	completionErrors := make(chan error, len(tickets))
+	for index, ticket := range tickets {
+		completions.Add(1)
+		go func(index int, ticket workflowv3.ExternalOperationTicket) {
+			defer completions.Done()
+			completionErrors <- store.FinishExternalOperation(ctx, ticket, descriptor, workflowv3.ExternalOperationCompletion{ProviderStartedAt: now, ElapsedMicros: int64(index), Outcome: workflowv3.ExternalOperationOutcomeSucceeded, AccountingMode: workflowv3.ExternalOperationAccountingActual, Counters: []workflowv3.ExternalOperationCounter{{Name: "requests", Units: 1}}}, now.Add(time.Second))
+		}(index, ticket)
+	}
+	completions.Wait()
+	close(completionErrors)
+	for completionErr := range completionErrors {
+		require.NoError(t, completionErr)
+	}
+	operations, err := store.ExternalOperations(ctx, "operation-concurrent")
+	require.NoError(t, err)
+	require.Len(t, operations, len(tickets))
+	progress, err := store.ExternalOperationProgress(ctx, "operation-concurrent")
+	require.NoError(t, err)
+	require.Equal(t, len(tickets), progress.Admitted)
+	require.Equal(t, len(tickets), progress.Completed)
+	require.Zero(t, progress.Incomplete)
 }
 
 func TestExternalOperationRejectsWrongCompletionTicket(t *testing.T) {

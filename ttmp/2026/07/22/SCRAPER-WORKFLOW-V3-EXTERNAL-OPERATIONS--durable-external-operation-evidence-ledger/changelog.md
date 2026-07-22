@@ -110,3 +110,8 @@ Step 11: verified RAG fixture sweep exports 282 durable provider-operation recor
 
 Step 12: completed RAG per-cell operation custody and deterministic failed-cell reductions
 
+
+## 2026-07-22
+
+Step 13: added race-validated concurrent external-operation admission and completion regression
+
