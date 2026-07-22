@@ -18,7 +18,9 @@ RelatedFiles:
     - Path: repo://pkg/workflowv3/external_operation_test.go
       Note: Step 3 focused regression evidence (commit b637095)
     - Path: repo://pkg/workflowv3sqlite/external_operation.go
-      Note: Step 4 durability evidence (commit 1542075)
+      Note: |-
+        Step 4 durability evidence (commit 1542075)
+        Step 5 authoritative persistence implementation (commit e061769)
     - Path: repo://pkg/workflowv3sqlite/schema.sql
       Note: Step 4 schema implementation (commit 1542075)
     - Path: repo://pkg/workflowv3sqlite/store.go
@@ -31,6 +33,7 @@ LastUpdated: 2026-07-22T19:55:00-04:00
 WhatFor: Preserve the investigation path, evidence, failures, design decisions, validation, and continuation instructions for the external-operation ledger ticket.
 WhenToUse: Read before resuming design or implementation work on SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS.
 ---
+
 
 
 
@@ -481,3 +484,93 @@ v3_attempts
 ```
 
 The next API must write the admission transaction before submitting an effect and must never use a completion to mutate task/node/run state.
+
+## Step 5: Implement lease-fenced admission and ticket-fenced completion
+
+This step turned the schema into working durable behavior. `BeginExternalOperation` validates a host descriptor/spec, checks the active Workflow lease inside an immediate SQLite transaction, allocates an immutable operation ordinal and a random completion capability, persists admission/allocations/measures/events, and commits before returning. `FinishExternalOperation` uses only that capability—not the live lease—to append exactly one safe completion after cancellation or lease loss.
+
+This is the key semantic split required by the design: cancellation forbids a new external call, but it must not erase the safe completion evidence for a request that was admitted earlier. Completion remains incapable of changing task, node, run, output, or budget-terminal state.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 1)
+
+**Assistant interpretation:** Continue implementation with the durable ledger's central Begin/Finish authority and evidence semantics.
+
+**Inferred user intent:** Make failed/canceled external calls measurably auditable without allowing stale task execution to regain Workflow authority.
+
+**Commit (code):** `e061769` — "workflowv3: persist external operation evidence"
+
+### What I did
+
+- Implemented `Store.BeginExternalOperation` and `Store.FinishExternalOperation` in `pkg/workflowv3sqlite/external_operation.go`.
+- Generated 256-bit random completion keys, persisted only SHA-256 digests, and omitted raw keys from events/JSON.
+- Enforced current lease/cancel-epoch fencing only at Begin.
+- Enforced descriptor digest and constant-time completion-ticket checks at Finish.
+- Added exactly-once immutable completion with byte-identical completion digest idempotency and `ErrExternalOperationCompletionConflict` on conflict.
+- Persisted bounded admitted/completed events.
+- Added focused tests for admission, cancellation followed by successful late completion, idempotent finish, conflicting finish, stale Begin rejection, and wrong-ticket rejection.
+
+### Why
+
+The ledger cannot preserve provider-wall evidence unless it creates a durable pre-call record and can append the outcome even after the enclosing attempt becomes stale. Requiring the normal `checkFence` at Finish would incorrectly discard cancellation evidence; omitting it at Begin would permit unauthorized new effects.
+
+### What worked
+
+```text
+GOWORK=off go test ./pkg/workflowv3sqlite -run '^TestExternalOperation' -count=1
+ok   github.com/go-go-golems/scraper/pkg/workflowv3sqlite
+
+GOWORK=off go test -race ./pkg/workflowv3sqlite -run '^TestExternalOperation' -count=1
+ok   github.com/go-go-golems/scraper/pkg/workflowv3sqlite
+
+GOWORK=off golangci-lint run ./pkg/workflowv3sqlite/...
+0 issues.
+```
+
+The tests prove one operation/completion/counter row after a late completion and prove a stale canceled lease cannot admit a second operation.
+
+### What didn't work
+
+The initial focused test compile failed because of an unused import:
+
+```text
+pkg/workflowv3sqlite/external_operation_test.go:5:2: "errors" imported and not used
+FAIL github.com/go-go-golems/scraper/pkg/workflowv3sqlite [build failed]
+```
+
+I removed it and reran focused tests, race tests, lint, and diff checks successfully.
+
+### What I learned
+
+- Completion idempotency must compare the canonical completion digest, not merely operation ID; otherwise conflicting terminal facts could be silently accepted.
+- The completion capability is sufficient to associate a late return with a prior valid admission without reopening node/output authority.
+- Allocation-to-budget reconciliation is still intentionally deferred: this slice persists descriptor-authorized allocations but does not yet alter existing attempt settlement.
+
+### What was tricky to build
+
+SQLite's active lease fence correctly protects Begin but is deliberately inappropriate for Finish. The completion code instead reads only the admitted operation's descriptor/key digest, inserts the immutable terminal row, and emits safe evidence. This is the minimum authority required for a late observation.
+
+### What warrants a second pair of eyes
+
+- Review whether explicit operation IDs should use UUIDs or a digest-derived identifier; UUIDs avoid correlation disclosure but make deterministic exports rely on ordinal sorting.
+- Review error typing for an invalid completion key versus an operation that does not exist; both currently fail closed without revealing sensitive state.
+- Review the future finish context behavior in the runtime: it must be bounded and detached from cancellation only for evidence persistence.
+
+### What should be done in the future
+
+Implement task `ujto`: inject a recorder scoped to trusted host modules, without exposing it to JavaScript. Then add operation query/export APIs and budget reconciliation.
+
+### Code review instructions
+
+Review Begin's call ordering: validation, active lease fence, admission persistence, event, commit, then returned ticket. Review Finish's ticket-only authority and idempotent completion digest branch. Run the focused test/race/lint commands above.
+
+### Technical details
+
+```text
+active Workflow lease --Begin--> durable operation admission --ticket-->
+provider/tool call --Finish--> immutable completion
+
+canceled/stale lease --Begin--> rejected
+canceled/stale lease + prior ticket --Finish--> accepted safe evidence only
+```

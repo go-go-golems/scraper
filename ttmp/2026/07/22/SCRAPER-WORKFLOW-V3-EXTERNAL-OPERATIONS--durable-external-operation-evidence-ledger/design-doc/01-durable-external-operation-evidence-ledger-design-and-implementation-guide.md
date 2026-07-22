@@ -24,7 +24,11 @@ RelatedFiles:
     - Path: repo://pkg/workflowv3runtime/modules.go
       Note: Trusted host module descriptor and recorder seam
     - Path: repo://pkg/workflowv3sqlite/external_operation.go
-      Note: SQLite durability and external ledger invariant checks (commit 1542075)
+      Note: |-
+        SQLite durability and external ledger invariant checks (commit 1542075)
+        Lease-fenced admission and ticket-fenced immutable completion (commit e061769)
+    - Path: repo://pkg/workflowv3sqlite/external_operation_test.go
+      Note: Late completion idempotency stale lease and wrong ticket regression tests (commit e061769)
     - Path: repo://pkg/workflowv3sqlite/schema.sql
       Note: |-
         Current attempts and budget schema plus proposed additive operation tables
@@ -43,6 +47,7 @@ LastUpdated: 2026-07-22T19:55:00-04:00
 WhatFor: Guide implementation of a generic Workflow V3 external-operation ledger and its RAG and researchctl integration without leaking payloads or weakening lease and budget authority.
 WhenToUse: Read before changing Workflow V3 persistence, task-module APIs, provider instrumentation, operation evidence exports, or researchctl custody for network, model, browser, database, or subprocess calls.
 ---
+
 
 
 
