@@ -44,6 +44,11 @@ func TestProductHTTPReadModelsAndCancellation(t *testing.T) {
 	require.NoError(t, response.Body.Close())
 	require.Len(t, runs, 1)
 
+	response, err = http.Get(server.URL + "/api/v3/workflow/runs/api-run/observations")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusConflict, response.StatusCode)
+	require.NoError(t, response.Body.Close())
+
 	request, err := http.NewRequest(http.MethodPost, server.URL+"/api/v3/workflow/runs/api-run/cancel", nil)
 	require.NoError(t, err)
 	response, err = http.DefaultClient.Do(request)

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "scraper-workflow-execution/v1",
+  "schemaVersion": "scraper-workflow-execution/v2",
   "plan": {
     "schema": "scraper-workflow-plan/v3",
     "name": "research-runner-fixture",
