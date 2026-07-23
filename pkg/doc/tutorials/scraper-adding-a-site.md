@@ -175,7 +175,7 @@ Do not stop at parser unit tests. Add at least one test that exercises:
 
 1. `site <site> run <verb>`
 2. `engine status`
-3. `worker run`
+3. `legacy worker run`
 4. site DB assertions
 
 The strongest current examples are in `pkg/cmd/site_test.go`.

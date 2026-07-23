@@ -99,7 +99,7 @@ Run the worker against the same manifest set:
 ```bash
 go run ./cmd/scraper \
   --sites-manifest-dir ./sites \
-  worker run \
+  legacy worker run \
   --sites-dir /tmp/scraper-sites \
   --engine-db /tmp/engine.db
 ```

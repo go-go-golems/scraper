@@ -25,7 +25,7 @@ The central idea is simple and strict: an entrypoint creates the initial durable
 
 Use the workflow API when a Go application needs durable work orchestration inside its own process. The API is useful for services that already have their own lifecycle manager, tests that need deterministic scheduler cycles, and packages that want typed Go executors with access to scraper's engine store.
 
-Use the CLI/site-manifest path instead when operators should define site behavior from files under `sites/`, use JavaScript submit verbs, or run the standard `scraper worker run` process. Both paths share the same engine concepts, but they optimize for different authors.
+Use the CLI/site-manifest path instead when operators should define site behavior from files under `sites/`, use JavaScript submit verbs, or run the standard `scraper legacy worker run` process. Both paths share the same engine concepts, but they optimize for different authors.
 
 | Use case | Better fit | Reason |
 |----------|------------|--------|

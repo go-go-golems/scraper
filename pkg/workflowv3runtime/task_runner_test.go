@@ -5,14 +5,14 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3linear"
+	"github.com/go-go-golems/scraper/pkg/taskpackages/cookbooklinear"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 	"github.com/stretchr/testify/require"
 )
 
 func sealedLinearRegistry(t *testing.T) *workflowv3.SealedRegistry {
 	t.Helper()
-	registry, err := workflowv3linear.Registry()
+	registry, err := cookbooklinear.Registry()
 	require.NoError(t, err)
 	return registry
 }
@@ -111,7 +111,7 @@ func TestRunTaskPreservesTypedFailure(t *testing.T) {
 
 func TestRunTaskRejectsWrongOutputSchema(t *testing.T) {
 	ctx := context.Background()
-	base, err := workflowv3linear.Bundle()
+	base, err := cookbooklinear.Bundle()
 	require.NoError(t, err)
 	badSource := []byte(`
 const task = require("workflow/task");
@@ -155,7 +155,7 @@ exports.validateDataset = task.implementation(async ctx => {
 
 func TestRunTaskRejectsUnsupportedModuleProfile(t *testing.T) {
 	ctx := context.Background()
-	base, err := workflowv3linear.Bundle()
+	base, err := cookbooklinear.Bundle()
 	require.NoError(t, err)
 	manifest := base.Manifest()
 	manifest.Tasks[0].Modules = []string{"db:ambient"}

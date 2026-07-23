@@ -1,7 +1,7 @@
 ---
 Title: Scraper Architecture Overview
 Slug: scraper-architecture-overview
-Short: "High-level map of the durable engine, JS site layer, and filesystem-loaded site manifests."
+Short: "High-level map of Workflow V3 and the retained legacy site engine."
 Topics:
 - scraper
 - architecture
@@ -18,11 +18,11 @@ ShowPerDefault: true
 SectionType: GeneralTopic
 ---
 
-The `scraper` repository is a durable workflow engine for scraping tasks. Go owns persistence, scheduling, HTTP execution, leases, retries, queue policy, and CLI ergonomics. JavaScript owns most site-specific behavior: parsing HTML, deciding what work to emit next, and writing site-specific projections into each site database. That split is the main thing a new contributor needs to understand before reading code.
+The `scraper` repository's primary product is Workflow V3. Pure JavaScript authoring produces a canonical plan; versioned task packages supply pinned implementations; SQLite owns durable control state; a content-addressed store owns payloads; and workers use leases, append-only attempts, retry policies, cancellation fencing, budgets, gates, and isolation. Begin with `scraper help scraper-workflow-v3-product` and the packages `pkg/workflowv3`, `pkg/workflowv3product`, `pkg/workflowv3runtime`, and `pkg/workflowv3sqlite`.
 
-The current system is built around a small set of stable primitives. A workflow contains ops. Ops are persisted in the engine SQLite database. Workers poll for ready ops, lease them, execute them through a runner such as `js` or `http/fetch`, and persist results plus artifacts. Site manifests such as `js-demo`, `hackernews`, `slashdot`, and `nereval` live under the repo-level `sites/` directory and provide the JS scripts, submit verbs, fixtures, and per-site schema that sit on top of that engine.
+The repository also retains an older site-oriented engine while named downstream migrations remain open. Its workflows contain ops executed by `js` and `http/fetch` runners. Site manifests such as `js-demo`, `hackernews`, `slashdot`, and `nereval` live under `sites/`. The rest of this page documents that legacy system so maintainers can migrate it safely; it is not the extension path for new generic workflow features.
 
-## Core Layers
+## Legacy site-engine layers
 
 The engine layer is the durable runtime. It lives mainly in `pkg/engine/model/types.go`, `pkg/engine/scheduler/scheduler.go`, and `pkg/engine/store/sqlite/store.go`. It is responsible for turning "a graph of durable work" into repeatable execution with leases, retries, dependency tracking, queue policies, artifacts, and workflow state.
 
@@ -58,7 +58,7 @@ scraper site <site> run <verb>
   -> JS submit verb inserts initial durable ops
   -> CLI exits
 
-scraper worker run
+scraper legacy worker run
   -> polls engine DB
   -> leases ready ops
   -> runs http/fetch or js runners
@@ -94,7 +94,7 @@ The fastest way to get oriented is to use the CLI against the engine visibility 
 - `scraper engine migrations status`
 - `scraper --sites-manifest-dir ./sites site migrate js-demo`
 - `scraper --sites-manifest-dir ./sites site js-demo run seed --workflow-id demo-1`
-- `scraper --sites-manifest-dir ./sites worker run --max-cycles 16 --poll-interval 5ms`
+- `scraper --sites-manifest-dir ./sites legacy worker run --max-cycles 16 --poll-interval 5ms`
 - `scraper --sites-manifest-dir ./sites site hackernews run seed --max-pages 2`
 - `scraper --sites-manifest-dir ./sites site slashdot run seed --max-pages 2`
 - `scraper --sites-manifest-dir ./sites site nereval run seed --workflow-id nereval-test --max-pages 2`
@@ -105,7 +105,7 @@ Use `scraper help <slug>` for the detailed pages added in this help set.
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
-| `site <name> run <verb>` submits work but nothing happens | The worker is not polling the engine DB | Run `scraper worker run` against the same `--engine-db` and `--sites-dir` |
+| `site <name> run <verb>` submits work but nothing happens | The worker is not polling the engine DB | Run `scraper legacy worker run` against the same `--engine-db` and `--sites-dir` |
 | JS script cannot see a database | The runtime was not given `site-db` or `scraper-db` | Start by reviewing `pkg/js/runtime/databases.go` and the worker setup in `pkg/cmd/worker.go` |
 | Workflow looks stuck | Ready ops are not being leased or a dependency failed | Check `scraper engine status`, then inspect the scheduler/store path in `pkg/engine/scheduler/scheduler.go` |
 | A site parser seems wrong | The HTML fixture does not match the parser assumptions or the live site changed | Start with the fixture-backed tests for that site before changing runtime code |

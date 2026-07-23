@@ -15,7 +15,7 @@ func TestWorkerRunHelp(t *testing.T) {
 	var stdout bytes.Buffer
 	rootCmd.SetOut(&stdout)
 	rootCmd.SetErr(&stdout)
-	rootCmd.SetArgs([]string{"worker", "run", "--help"})
+	rootCmd.SetArgs([]string{"legacy", "worker", "run", "--help"})
 
 	err = rootCmd.Execute()
 	require.NoError(t, err)
@@ -35,7 +35,7 @@ func TestWorkerRunMaxCyclesInitializesEngineDB(t *testing.T) {
 	rootCmd.SetOut(&stdout)
 	rootCmd.SetErr(&stdout)
 	rootCmd.SetArgs([]string{
-		"worker", "run",
+		"legacy", "worker", "run",
 		"--engine-db", engineDB,
 		"--sites-dir", sitesDir,
 		"--worker-id", "test-worker",

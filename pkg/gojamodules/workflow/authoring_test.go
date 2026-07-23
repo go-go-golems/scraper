@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	workflowmodule "github.com/go-go-golems/scraper/pkg/gojamodules/workflow"
+	"github.com/go-go-golems/scraper/pkg/taskpackages/cookbooklinear"
 	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3database"
 	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3http"
-	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3linear"
 	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3map"
 	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3reduce"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
@@ -18,7 +18,7 @@ import (
 
 func linearCatalog(t *testing.T) *workflowv3.Catalog {
 	t.Helper()
-	registry, err := workflowv3linear.Registry()
+	registry, err := cookbooklinear.Registry()
 	require.NoError(t, err)
 	catalog, err := registry.Catalog()
 	require.NoError(t, err)
@@ -28,13 +28,13 @@ func linearCatalog(t *testing.T) *workflowv3.Catalog {
 func TestAuthorCompilesMinimalWorkflowToGoldens(t *testing.T) {
 	result, err := workflowmodule.Author(
 		context.Background(),
-		workflowv3linear.WorkflowSource(),
+		cookbooklinear.WorkflowSource(),
 		linearCatalog(t),
-		workflowv3linear.DescriptorModule(),
+		cookbooklinear.DescriptorModule(),
 	)
 	require.NoError(t, err)
 
-	bundle, err := workflowv3linear.Bundle()
+	bundle, err := cookbooklinear.Bundle()
 	require.NoError(t, err)
 	require.Equal(t, directLinearIR(), result.IR)
 	assertGolden(t, "linear-transform.ir.json", result.IR)
@@ -314,7 +314,7 @@ module.exports = workflow.compile(workflow.define("bad", p => {
   p.output("dataset", node.output("dataset"));
 }));`
 	_, err := workflowmodule.Author(
-		context.Background(), source, linearCatalog(t), workflowv3linear.DescriptorModule(),
+		context.Background(), source, linearCatalog(t), cookbooklinear.DescriptorModule(),
 	)
 	require.ErrorContains(t, err, "unknown input extra")
 }
@@ -348,7 +348,7 @@ module.exports = workflow.compile(workflow.define("budgeted", p => {
   p.output("dataset", node.output("dataset"));
 }));`
 	result, err := workflowmodule.Author(
-		context.Background(), source, catalog, workflowv3linear.DescriptorModule(),
+		context.Background(), source, catalog, cookbooklinear.DescriptorModule(),
 	)
 	require.NoError(t, err)
 	require.Equal(t, int64(40), result.Plan.Nodes[0].Budget.Effective[0].Units)
@@ -373,7 +373,7 @@ module.exports = workflow.compile(workflow.define("approval", p => {
   p.output("decision", decision);
 }));`
 	result, err := workflowmodule.Author(
-		context.Background(), source, linearCatalog(t), workflowv3linear.DescriptorModule(),
+		context.Background(), source, linearCatalog(t), cookbooklinear.DescriptorModule(),
 	)
 	require.NoError(t, err)
 	require.Len(t, result.IR.Gates, 1)

@@ -1,0 +1,7 @@
+{
+  "source": {
+    "path": "customers.jsonl",
+    "schema": "customer-jsonl-ref/v1",
+    "mediaType": "application/x-ndjson"
+  }
+}

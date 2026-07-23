@@ -34,7 +34,7 @@ HTTP API -> submit initial durable work
 worker run -> execute queued ops
 ```
 
-That split is the same one used by `scraper site <site> run <verb>` and `scraper worker run`. The HTTP layer is a thin host around the same services and submit-verb runtime.
+That split is the same one used by `scraper site <site> run <verb>` and `scraper legacy worker run`. The HTTP layer is a thin host around the same services and submit-verb runtime.
 
 ## Command
 
@@ -118,7 +118,7 @@ In another terminal, process the queued work:
 ```bash
 scraper \
   --sites-manifest-dir ./sites \
-  worker run \
+  legacy worker run \
   --engine-db /tmp/scraper-http-api/engine.db \
   --sites-dir /tmp/scraper-http-api/sites \
   --max-cycles 16 \
@@ -147,7 +147,7 @@ Start here if you need to change the implementation:
 
 ## Common Mistakes
 
-- Expecting the API server to run the scheduler itself by default. It does not. Start `scraper worker run` separately.
+- Expecting the API server to run the scheduler itself by default. It does not. Start `scraper legacy worker run` separately.
 - Forgetting to provide site manifest directories during bootstrap. If the API starts with no manifests loaded, the site/verb catalog will be empty.
 - Treating submit verbs like worker-side op scripts. Submit verbs seed workflows; scripts do the durable scraping later.
 - Posting arbitrary JSON fields that are not declared in the JS verb metadata. The API validates values against the generated Glazed schema and returns `400` on unknown or incompatible fields.

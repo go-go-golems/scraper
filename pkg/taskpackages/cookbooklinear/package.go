@@ -1,4 +1,4 @@
-package workflowv3linear
+package cookbooklinear
 
 import (
 	_ "embed"
@@ -6,6 +6,18 @@ import (
 	workflowmodule "github.com/go-go-golems/scraper/pkg/gojamodules/workflow"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 )
+
+const (
+	Name    = "cookbook-linear"
+	Version = "1.0.0"
+)
+
+type Package struct{}
+
+func New() Package { return Package{} }
+
+func (Package) Name() string    { return Name }
+func (Package) Version() string { return Version }
 
 //go:embed tasks.cjs
 var taskSource []byte
@@ -71,3 +83,11 @@ func DescriptorModule() workflowmodule.DescriptorModule {
 func WorkflowSource() string {
 	return workflowSource
 }
+
+func (Package) Bundle() (*workflowv3.Bundle, error) { return Bundle() }
+
+func (Package) DescriptorModules() []workflowmodule.DescriptorModule {
+	return []workflowmodule.DescriptorModule{DescriptorModule()}
+}
+
+func (Package) RequiredModules() []string { return []string{"fs:input"} }

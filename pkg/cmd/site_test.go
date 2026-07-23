@@ -204,7 +204,7 @@ func TestJSDemoSubmitThenWorkerRun(t *testing.T) {
 	require.Contains(t, statusBefore, "succeeded: 0")
 
 	workerOutput := runCommand(
-		"worker", "run",
+		"legacy", "worker", "run",
 		"--sites-dir", sitesDir,
 		"--engine-db", engineDB,
 		"--max-cycles", "16",
@@ -270,7 +270,7 @@ func TestJSDemoSubmitThenWorkerRunWithQueueRateLimit(t *testing.T) {
 	require.Contains(t, statusBefore, "succeeded: 0")
 
 	firstWorkerRun := runCommand(
-		"worker", "run",
+		"legacy", "worker", "run",
 		"--sites-dir", sitesDir,
 		"--engine-db", engineDB,
 		"--max-workers", "4",
@@ -286,7 +286,7 @@ func TestJSDemoSubmitThenWorkerRunWithQueueRateLimit(t *testing.T) {
 	require.Contains(t, statusMid, "ready: 2")
 
 	secondWorkerRun := runCommand(
-		"worker", "run",
+		"legacy", "worker", "run",
 		"--sites-dir", sitesDir,
 		"--engine-db", engineDB,
 		"--max-workers", "4",
@@ -326,7 +326,7 @@ func TestHackerNewsRunSeedCommand(t *testing.T) {
 	require.Contains(t, statusBefore, "succeeded: 0")
 
 	workerOutput := runRootCommand(t, nil,
-		"worker", "run",
+		"legacy", "worker", "run",
 		"--sites-dir", sitesDir,
 		"--engine-db", engineDB,
 		"--max-cycles", "16",
@@ -408,7 +408,7 @@ func TestHackerNewsRunSeedCommandWithQueueRateLimit(t *testing.T) {
 	require.Contains(t, submitOutput, "Submitted ops: 1")
 
 	firstWorkerRun := runRootCommand(t, registry,
-		"worker", "run",
+		"legacy", "worker", "run",
 		"--sites-dir", sitesDir,
 		"--engine-db", engineDB,
 		"--max-workers", "4",
@@ -422,7 +422,7 @@ func TestHackerNewsRunSeedCommandWithQueueRateLimit(t *testing.T) {
 	require.Contains(t, statusMid, "ready: 1")
 
 	secondWorkerRun := runRootCommand(t, registry,
-		"worker", "run",
+		"legacy", "worker", "run",
 		"--sites-dir", sitesDir,
 		"--engine-db", engineDB,
 		"--max-workers", "4",
@@ -499,7 +499,7 @@ func TestHackerNewsQueryOnlyNextPageUsesOrigin(t *testing.T) {
 	require.Contains(t, submitOutput, "Submitted ops: 1")
 
 	workerOutput := runRootCommand(t, registry,
-		"worker", "run",
+		"legacy", "worker", "run",
 		"--sites-dir", sitesDir,
 		"--engine-db", engineDB,
 		"--max-workers", "4",
@@ -553,7 +553,7 @@ func TestHackerNewsRunExtractFrontpageCommand(t *testing.T) {
 	require.Contains(t, submitOutput, `"submittedEntrypoint": "extract-frontpage"`)
 
 	workerOutput := runRootCommand(t, nil,
-		"worker", "run",
+		"legacy", "worker", "run",
 		"--sites-dir", sitesDir,
 		"--engine-db", engineDB,
 		"--max-cycles", "12",
@@ -598,7 +598,7 @@ func TestSlashdotRunSeedCommand(t *testing.T) {
 	require.Contains(t, submitOutput, `"submittedEntrypoint": "seed"`)
 
 	workerOutput := runRootCommand(t, nil,
-		"worker", "run",
+		"legacy", "worker", "run",
 		"--sites-dir", sitesDir,
 		"--engine-db", engineDB,
 		"--max-cycles", "16",
@@ -655,7 +655,7 @@ func TestSlashdotRunExtractFrontpageCommand(t *testing.T) {
 	require.Contains(t, submitOutput, `"submittedEntrypoint": "extract-frontpage"`)
 
 	workerOutput := runRootCommand(t, nil,
-		"worker", "run",
+		"legacy", "worker", "run",
 		"--sites-dir", sitesDir,
 		"--engine-db", engineDB,
 		"--max-cycles", "12",
@@ -733,7 +733,7 @@ func TestNerevalSubmitThenWorkerRun(t *testing.T) {
 	require.Contains(t, statusBefore, "succeeded: 0")
 
 	workerOutput := runCommand(
-		"worker", "run",
+		"legacy", "worker", "run",
 		"--sites-dir", sitesDir,
 		"--engine-db", engineDB,
 		"--max-cycles", "24",

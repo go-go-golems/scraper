@@ -10,7 +10,7 @@ import (
 	"time"
 
 	workflowmodule "github.com/go-go-golems/scraper/pkg/gojamodules/workflow"
-	"github.com/go-go-golems/scraper/pkg/testfixtures/workflowv3linear"
+	"github.com/go-go-golems/scraper/pkg/taskpackages/cookbooklinear"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 	"github.com/go-go-golems/scraper/pkg/workflowv3sqlite"
 	"github.com/stretchr/testify/require"
@@ -24,15 +24,15 @@ func TestEngineRunsAuthoredWorkflowAcrossRestartWithoutPersistingSource(t *testi
 	privateCanary := "PRIVATE-SOURCE-CANARY-7e6ec43c"
 	secretToken := "TOP-SECRET-TOKEN-4f73d312"
 
-	registry, err := workflowv3linear.Registry()
+	registry, err := cookbooklinear.Registry()
 	require.NoError(t, err)
 	catalog, err := registry.Catalog()
 	require.NoError(t, err)
 	authored, err := workflowmodule.Author(
 		ctx,
-		workflowv3linear.WorkflowSource(),
+		cookbooklinear.WorkflowSource(),
 		catalog,
-		workflowv3linear.DescriptorModule(),
+		cookbooklinear.DescriptorModule(),
 	)
 	require.NoError(t, err)
 
@@ -116,15 +116,15 @@ func TestEngineRunsAuthoredWorkflowAcrossRestartWithoutPersistingSource(t *testi
 
 func TestEnginePersistsTypedTaskFailureWithoutTaskMessage(t *testing.T) {
 	ctx := context.Background()
-	registry, err := workflowv3linear.Registry()
+	registry, err := cookbooklinear.Registry()
 	require.NoError(t, err)
 	catalog, err := registry.Catalog()
 	require.NoError(t, err)
 	authored, err := workflowmodule.Author(
 		ctx,
-		workflowv3linear.WorkflowSource(),
+		cookbooklinear.WorkflowSource(),
 		catalog,
-		workflowv3linear.DescriptorModule(),
+		cookbooklinear.DescriptorModule(),
 	)
 	require.NoError(t, err)
 	artifacts, err := workflowv3.NewFileArtifactStore(t.TempDir(), 1<<20)

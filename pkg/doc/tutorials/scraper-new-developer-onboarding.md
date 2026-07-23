@@ -97,7 +97,7 @@ You should see one workflow and ready work, but not a completed workflow yet. No
 ```bash
 go run ./cmd/scraper \
   --sites-manifest-dir ./sites \
-  worker run \
+  legacy worker run \
   --sites-dir "$tmpdir/sites" \
   --engine-db "$tmpdir/engine.db" \
   --max-cycles 16 \
@@ -130,7 +130,7 @@ Then run the worker to execute the queued ops:
 ```bash
 go run ./cmd/scraper \
   --sites-manifest-dir ./sites \
-  worker run \
+  legacy worker run \
   --sites-dir "$tmpdir/sites" \
   --engine-db "$tmpdir/engine.db" \
   --max-cycles 32 \
@@ -171,7 +171,7 @@ The minimum useful operator debugging set is:
 scraper engine status
 scraper engine migrations status
 scraper site migrate <site>
-scraper worker run --max-cycles 1
+scraper legacy worker run --max-cycles 1
 scraper help <slug>
 ```
 
@@ -197,7 +197,7 @@ Read these if you need deeper implementation history (search for these ticket ID
 | Problem | Cause | Solution |
 |---------|-------|----------|
 | `go test ./...` fails immediately | Workspace dependencies or generated docs are not loading | Fix the environment before debugging scraper logic |
-| `site js-demo run seed` works but nothing completes | The worker was never run | Use `worker run` against the same temp DBs |
+| `site js-demo run seed` works but nothing completes | The worker was never run | Use `legacy worker run` against the same temp DBs |
 | `site js-demo run seed` is missing entirely | scraper did not load the site manifests during bootstrap | Pass `--sites-manifest-dir ./sites`, set `SCRAPER_SITES_MANIFEST_DIRS`, or configure `~/.scraper/config.yaml` |
 | You do not know whether a bug is engine or site specific | Too many layers are being changed at once | Reproduce first on `js-demo`, then on `hackernews` or `slashdot`, then on `nereval` |
 | `nereval` feels too big to start with | You skipped the simpler sites | Go back to `js-demo` and one HTTP site first |
