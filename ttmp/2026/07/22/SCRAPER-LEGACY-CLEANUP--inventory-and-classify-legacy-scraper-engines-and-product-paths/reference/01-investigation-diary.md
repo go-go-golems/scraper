@@ -130,3 +130,53 @@ Workflow V3 is canonical for the future, but cleanup must first provide a produc
 ### Technical details
 - Baseline tests: all passing; V3 runtime tests took about 113 seconds.
 - Setup commit: `5bcfd05861d9eae1bcc23d76cead4c93c938c298`.
+
+## Step 3: Validate, commit, and stop before deletion
+
+The inventory document, detailed task state, related-file evidence, and cross-ticket navigation were validated and committed. This is the requested stopping point: disposition is complete, but no removal tranche has been executed.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 1)
+
+**Assistant interpretation:** Stop after classification and leave destructive tasks open for review.
+
+**Inferred user intent:** Make deletion a deliberate reviewed follow-up rather than an uninterrupted audit-and-delete operation.
+
+**Commit (code):** `7543603ef3eec1c24a1401805a763100b1d31696` — cleanup inventory and classification documentation.
+
+### What I did
+- Checked the first seven inventory/classification tasks.
+- Left review, immediate deletion, and deferred hard-cut tasks open.
+- Ran docmgr doctor successfully.
+- Cross-linked the cleanup report to key source files, the umbrella, sibling cleanup tickets, and replacement tickets.
+
+### Why
+- The remove-now list needs review before destructive edits.
+
+### What worked
+- Docmgr validation passed.
+- Baseline test result: all packages passed.
+
+### What didn't work
+- No additional failure beyond those recorded in Step 2.
+
+### What I learned
+- Repository-local classifications can share one common umbrella without hiding different readiness levels.
+
+### What was tricky to build
+- The stopping point had to preserve enough evidence for a later agent to execute cleanup without rerunning the entire investigation. File references, deletion gates, exact commands, and open tasks provide that continuation state.
+
+### What warrants a second pair of eyes
+- Approve the remove-now table and any stated assumption about external users or disposable state.
+
+### What should be done in the future
+- After review, check the review task, execute only the immediate tranche, run validation, and commit it separately. Deferred paths remain until their named replacement tickets pass.
+
+### Code review instructions
+- Read the report's executive summary, immediate removal section, deferred removal section, and review checklist.
+- Confirm tasks 8–10 remain open.
+
+### Technical details
+- Ticket: `SCRAPER-LEGACY-CLEANUP`.
+- Stop condition reached: classification complete; deletion not started.

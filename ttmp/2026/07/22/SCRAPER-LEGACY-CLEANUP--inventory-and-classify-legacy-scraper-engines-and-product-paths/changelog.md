@@ -11,3 +11,7 @@ Completed evidence-backed inventory: no active Go deletion is safe before Workfl
 ### Related Files
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/22/SCRAPER-LEGACY-CLEANUP--inventory-and-classify-legacy-scraper-engines-and-product-paths/design-doc/01-scraper-legacy-cleanup-inventory-and-disposition-plan.md — Cleanup disposition and replacement gates
+
+## 2026-07-22
+
+Reached requested stop condition: inventory and classification committed; review and deletion tasks remain open
