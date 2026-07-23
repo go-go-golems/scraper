@@ -188,7 +188,13 @@ func newWorkflowSubmitCommand(options *workflowV3Options, execute bool) *cobra.C
 			if err != nil {
 				return err
 			}
-			return writeWorkflowJSON(cmd.OutOrStdout(), view)
+			if err := writeWorkflowJSON(cmd.OutOrStdout(), view); err != nil {
+				return err
+			}
+			if view.Snapshot.Status != "succeeded" {
+				return fmt.Errorf("workflow run %s finished with status %s", submission.RunID, view.Snapshot.Status)
+			}
+			return nil
 		},
 	}
 	command.Flags().StringVar(&inputsPath, "inputs", "", "JSON staged-input manifest path")
