@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -24,6 +25,7 @@ import (
 const defaultMaxRequestBytes int64 = 32 << 20
 
 var artifactNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+var domainObservationNamePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+){0,15}$`)
 
 type Config struct {
 	StateRoot             string
@@ -36,6 +38,7 @@ type Config struct {
 	MaxRequestBytes       int64
 	MaxExportBytes        int64
 	AvailableTaskPackages []workflowv3product.TaskPackage
+	DomainProjector       DomainProjector
 }
 
 func DefaultConfig() Config {
@@ -425,6 +428,8 @@ func exportTerminal(ctx context.Context, app *workflowv3product.Application, exe
 	if err := emitObservations(observations, emit, config); err != nil {
 		return err
 	}
+	domainOutputs := make(map[string]DomainOutput, len(view.Snapshot.Outputs))
+	var domainOutputBytes int64
 	if execution.Observation.ExportOutputs {
 		names := make([]string, 0, len(view.Snapshot.Outputs))
 		for name := range view.Snapshot.Outputs {
@@ -440,10 +445,24 @@ func exportTerminal(ctx context.Context, app *workflowv3product.Application, exe
 			if err != nil || int64(len(body)) > config.MaxExportBytes {
 				return infrastructureError("RUNNER_OUTPUT_READ")
 			}
+			domainOutputBytes += int64(len(body))
+			if domainOutputBytes > config.MaxExportBytes {
+				return infrastructureError("RUNNER_DOMAIN_OUTPUT_LIMIT")
+			}
+			domainOutputs[name] = DomainOutput{Name: name, SchemaVersion: ref.Schema, MediaType: ref.MediaType, Digest: ref.Digest, Data: append([]byte(nil), body...)}
 			metadata := mustJSON(map[string]any{"digest": ref.Digest, "sizeBytes": ref.Size, "workflowRunId": runID, "planDigest": view.Snapshot.PlanDigest})
 			if err := emit.frame(Frame{Type: "artifact", Artifact: &Artifact{Role: "workflow-output", Kind: "scraper-workflow-output", ID: name, Name: "workflow-output-" + name + ".json", SchemaVersion: ref.Schema, MediaType: ref.MediaType, Metadata: metadata, Data: body}}); err != nil {
 				return err
 			}
+		}
+	}
+	if config.DomainProjector != nil && view.Snapshot.Status == "succeeded" {
+		projection, err := config.DomainProjector.Project(ctx, DomainProjectionInput{WorkflowRunID: string(runID), PlanDigest: view.Snapshot.PlanDigest, Outputs: domainOutputs})
+		if err != nil {
+			return infrastructureError("RUNNER_DOMAIN_PROJECTION")
+		}
+		if err := emitDomainProjection(projection, emit, config.MaxExportBytes); err != nil {
+			return err
 		}
 	}
 	if execution.Observation.ExportExternalOperations {
@@ -454,6 +473,40 @@ func exportTerminal(ctx context.Context, app *workflowv3product.Application, exe
 	finished := time.Now().UTC()
 	payload := mustJSON(map[string]any{"schemaVersion": "scraper-workflow-result/v1", "workflowRunId": runID, "planDigest": view.Snapshot.PlanDigest, "status": view.Snapshot.Status, "attempts": len(view.Snapshot.Attempts), "retries": view.Operations.RetryAttempts})
 	return emit.frame(Frame{Type: "complete", Complete: &Complete{Status: view.Snapshot.Status, ProducerFinishedAt: finished.Format(time.RFC3339Nano), Payload: payload}})
+}
+
+func emitDomainProjection(projection DomainProjection, emit emitter, maxBytes int64) error {
+	if len(projection.Metrics) > 4096 || len(projection.Traces) > 4096 {
+		return contractError("RUNNER_DOMAIN_PROJECTION_LIMIT")
+	}
+	var projectedBytes int64
+	for _, metric := range projection.Metrics {
+		projectedBytes += int64(len(metric.Value) + len(metric.Metadata))
+		if projectedBytes > maxBytes {
+			return contractError("RUNNER_DOMAIN_PROJECTION_LIMIT")
+		}
+		if !domainObservationNamePattern.MatchString(metric.Name) || strings.HasPrefix(metric.Name, "workflow.") || len(metric.Scope) > 128 || len(metric.Unit) > 64 || len(metric.Value) == 0 || int64(len(metric.Value)+len(metric.Metadata)) > maxBytes || !json.Valid(metric.Value) || (len(metric.Metadata) > 0 && !json.Valid(metric.Metadata)) || (metric.NumericProjection != nil && (math.IsNaN(*metric.NumericProjection) || math.IsInf(*metric.NumericProjection, 0))) {
+			return contractError("RUNNER_DOMAIN_PROJECTION_INVALID")
+		}
+		current := metric
+		if err := emit.frame(Frame{Type: "metric", Metric: &current}); err != nil {
+			return err
+		}
+	}
+	for _, trace := range projection.Traces {
+		projectedBytes += int64(len(trace.Value))
+		if projectedBytes > maxBytes {
+			return contractError("RUNNER_DOMAIN_PROJECTION_LIMIT")
+		}
+		if !domainObservationNamePattern.MatchString(trace.Kind) || strings.HasPrefix(trace.Kind, "workflow.") || len(trace.Value) == 0 || int64(len(trace.Value)) > maxBytes || !json.Valid(trace.Value) {
+			return contractError("RUNNER_DOMAIN_PROJECTION_INVALID")
+		}
+		current := trace
+		if err := emit.frame(Frame{Type: "trace", Trace: &current}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func emitObservations(observations workflowv3observations.ObservationSet, emit emitter, config Config) error {
