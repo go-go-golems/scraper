@@ -20,7 +20,7 @@ func TestDynamicItemsAreNotCountedAsRetriesAndLeaseLossIsVisible(t *testing.T) {
 			{NodeKey: "reduce:0:0", Origin: "reduction-partition"},
 		},
 		Attempts: []AttemptSource{
-			{NodeKey: "map:one", Number: 1, Status: "lease_lost", StartedAt: base.Add(10 * time.Millisecond), FinishedAt: base.Add(20 * time.Millisecond), Failure: &FailureSource{Class: "infrastructure", Code: "LEASE_EXPIRED", Retryable: true}},
+			{NodeKey: "map:one", Number: 1, Status: "lease_lost", StartedAt: base.Add(10 * time.Millisecond), FinishedAt: base.Add(20 * time.Millisecond), Failure: &FailureSource{Class: "execution", Code: "LEASE_EXPIRED", Retryable: true}},
 			{NodeKey: "map:one", Number: 2, Status: "succeeded", StartedAt: base.Add(40 * time.Millisecond), FinishedAt: base.Add(50 * time.Millisecond)},
 			{NodeKey: "map:two", Number: 1, Status: "succeeded", StartedAt: base.Add(10 * time.Millisecond), FinishedAt: base.Add(30 * time.Millisecond)},
 			{NodeKey: "reduce:0:0", Number: 1, Status: "succeeded", StartedAt: base.Add(60 * time.Millisecond), FinishedAt: base.Add(70 * time.Millisecond)},

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -136,9 +137,22 @@ func validateSource(source SourceSnapshot) error {
 		}
 		seenAttempts[key] = true
 		switch attempt.Status {
-		case "succeeded", "failed", "lease_lost", "canceled":
+		case "succeeded":
+			if attempt.Failure != nil {
+				return fmt.Errorf("successful observation source attempt has failure")
+			}
+		case "failed", "lease_lost":
+			if attempt.Failure == nil {
+				return fmt.Errorf("failed observation source attempt lacks failure")
+			}
+		case "canceled":
 		default:
 			return fmt.Errorf("observation source attempt status is invalid")
+		}
+		if attempt.Failure != nil {
+			if err := workflowv3.ValidateFailure(workflowv3.Failure{Class: attempt.Failure.Class, Code: attempt.Failure.Code}); err != nil {
+				return fmt.Errorf("observation source attempt failure is invalid: %w", err)
+			}
 		}
 		if attempt.FinishedAt.IsZero() || attempt.FinishedAt.Location() != time.UTC || attempt.FinishedAt.Before(attempt.StartedAt) {
 			return fmt.Errorf("terminal observation source contains incomplete attempt")
@@ -147,12 +161,38 @@ func validateSource(source SourceSnapshot) error {
 	seenOperations := map[string]bool{}
 	for _, operation := range source.Operations {
 		attemptKey := fmt.Sprintf("%s\x00%d", operation.NodeKey, operation.Attempt)
-		if operation.RunID != source.Run.RunID || operation.OperationID == "" || seenOperations[operation.OperationID] || !seenAttempts[attemptKey] || operation.AdmittedAt.IsZero() || operation.AdmittedAt.Location() != time.UTC {
+		if operation.RunID != source.Run.RunID || operation.OperationID == "" || operation.Ordinal < 1 || seenOperations[operation.OperationID] || !seenAttempts[attemptKey] || operation.AdmittedAt.IsZero() || operation.AdmittedAt.Location() != time.UTC {
 			return fmt.Errorf("observation source operation identity is invalid")
 		}
 		seenOperations[operation.OperationID] = true
-		if operation.Completion != nil && operation.Completion.ElapsedMicros < 0 {
+		if operation.Completion != nil && (operation.Completion.ElapsedMicros < 0 || operation.Completion.ElapsedMicros > math.MaxInt64/int64(time.Microsecond)) {
 			return fmt.Errorf("observation source operation timing is invalid")
+		}
+		if operation.Completion != nil {
+			switch operation.Completion.Outcome {
+			case workflowv3.ExternalOperationOutcomeSucceeded, workflowv3.ExternalOperationOutcomeUnknown:
+				if operation.Completion.Failure != nil {
+					return fmt.Errorf("observation source operation outcome has invalid failure")
+				}
+			case workflowv3.ExternalOperationOutcomeFailed, workflowv3.ExternalOperationOutcomeCanceled, workflowv3.ExternalOperationOutcomeTimedOut:
+				if operation.Completion.Failure == nil {
+					return fmt.Errorf("observation source operation outcome lacks failure")
+				}
+			default:
+				return fmt.Errorf("observation source operation outcome is invalid")
+			}
+			if operation.Completion.Failure != nil {
+				if err := workflowv3.ValidateFailure(workflowv3.Failure{Class: operation.Completion.Failure.Class, Code: operation.Completion.Failure.Code}); err != nil {
+					return fmt.Errorf("observation source operation failure is invalid: %w", err)
+				}
+			}
+		}
+		if operation.Completion != nil {
+			switch operation.Completion.AccountingMode {
+			case workflowv3.ExternalOperationAccountingActual, workflowv3.ExternalOperationAccountingConservative, workflowv3.ExternalOperationAccountingNone:
+			default:
+				return fmt.Errorf("observation source operation accounting mode is invalid")
+			}
 		}
 		if operation.Completion != nil && (operation.Completion.ProviderStartedAt.IsZero() || operation.Completion.CompletedAt.IsZero() || operation.Completion.ProviderStartedAt.Location() != time.UTC || operation.Completion.CompletedAt.Location() != time.UTC) {
 			return fmt.Errorf("observation source operation timing is invalid")
@@ -160,7 +200,7 @@ func validateSource(source SourceSnapshot) error {
 	}
 	seenArtifacts := map[string]bool{}
 	for _, artifact := range source.Artifacts {
-		if artifact.Name == "" || seenArtifacts[artifact.Name] || artifact.Digest == "" || artifact.Schema == "" || artifact.SizeBytes < 0 {
+		if artifact.Name == "" || seenArtifacts[artifact.Name] || !observationDigest(artifact.Digest) || artifact.Schema == "" || artifact.SizeBytes < 0 {
 			return fmt.Errorf("observation source artifact identity is invalid")
 		}
 		seenArtifacts[artifact.Name] = true
@@ -313,7 +353,7 @@ func queueWait(source SourceSnapshot, attemptsByNode map[workflowv3.NodeKey][]At
 		node, known := nodes[key]
 		for index, attempt := range attempts {
 			var eligible time.Time
-			if index > 0 {
+			if index > 0 && known && !node.HasGate && !node.HasBudget {
 				eligible = attempts[index-1].FinishedAt.Add(time.Duration(node.RetryBackoffMillis) * time.Millisecond)
 			} else if known && node.Origin == "static" && !node.HasGate && !node.HasBudget {
 				eligible = source.Run.CreatedAt

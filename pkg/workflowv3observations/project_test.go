@@ -141,6 +141,14 @@ func TestObservationContractRejectsUnknownFieldsTamperingAndNonterminalSources(t
 	_, err = Decode(body)
 	require.ErrorContains(t, err, "unknown field")
 	observations.Metrics[0].Boundary = "changed"
+	require.ErrorContains(t, Validate(observations), "strictly sorted and canonical")
+	observations, err = ProjectSnapshot(observationFixture(), DefaultProjectOptions())
+	require.NoError(t, err)
+	for index := range observations.Metrics {
+		if observations.Metrics[index].Name == "workflow.elapsed" {
+			observations.Metrics[index].Value = json.RawMessage(`1`)
+		}
+	}
 	require.ErrorContains(t, Validate(observations), "digest mismatch")
 	source := observationFixture()
 	source.Run.Status = "running"
