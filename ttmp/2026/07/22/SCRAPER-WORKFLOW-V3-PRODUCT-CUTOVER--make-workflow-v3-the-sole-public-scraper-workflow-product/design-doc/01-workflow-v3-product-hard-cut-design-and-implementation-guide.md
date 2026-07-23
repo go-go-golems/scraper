@@ -13,20 +13,29 @@ DocType: design-doc
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: repo://pkg/cmd/workflow_v3.go
+      Note: Implemented public product commands
     - Path: repo://pkg/engine/model/types.go
       Note: Superseded engine surface to inventory
     - Path: repo://pkg/gojamodules/workflow/authoring.go
       Note: Pure JavaScript workflow authoring
+    - Path: repo://pkg/taskpackages/cookbooklinear/package.go
+      Note: Implemented versioned task package
     - Path: repo://pkg/workflowv3/types.go
       Note: Canonical Workflow V3 values
+    - Path: repo://pkg/workflowv3product/application.go
+      Note: Implemented production composition root
     - Path: repo://pkg/workflowv3runtime/engine.go
       Note: Workflow V3 runtime
+    - Path: repo://ttmp/2026/07/22/SCRAPER-WORKFLOW-V3-PRODUCT-CUTOVER--make-workflow-v3-the-sole-public-scraper-workflow-product/analysis/01-product-cutover-acceptance-and-deletion-gates.md
+      Note: Implemented deletion boundary evidence
 ExternalSources: []
-Summary: Intern guide for productizing Workflow V3 as Scraper's sole public workflow engine and deleting superseded engines.
+Summary: Implemented guide for Workflow V3's primary public product surface, explicit legacy-worker cut, and evidence-gated later deletion of downstream-dependent engine packages.
 LastUpdated: 2026-07-22T23:15:00-04:00
 WhatFor: Turn a strong Workflow V3 library into the canonical Scraper CLI, worker, storage, and extension product.
 WhenToUse: Read before adding workflow features to Scraper or integrating Scraper with Researchctl.
 ---
+
 
 
 # Workflow V3 product hard-cut design and implementation guide
@@ -37,9 +46,18 @@ This ticket is part of **EXPERIMENT-PLATFORM-CONVERGENCE** in the Researchctl re
 
 ## Executive summary
 
-Scraper currently contains an older site-oriented engine in `pkg/engine`, historical workflow code in `pkg/workflow`, and the newer Workflow V3 stack. Workflow V3 already has the right general-purpose concepts: canonical plans, durable runs, leases, retries, map/reduce, gates, budgets, isolation, content-addressed artifacts, external operations, and pure JS authoring. The missing work is to make it the product rather than another internal subsystem.
+Scraper contains an older site-oriented engine in `pkg/engine`, historical workflow code in exact `pkg/workflow`, and the newer Workflow V3 stack. Workflow V3 is now the primary general-purpose product: canonical plans, durable runs, leases, retries, map/reduce, gates, budgets, isolation, content-addressed artifacts, external operations, pure JS authoring, production task packages, public commands, a restartable worker, and operator read/control models.
 
-This ticket creates first-class CLI and worker surfaces around Workflow V3, defines task-package registration, adds operator inspection, updates documentation, and removes the superseded engine paths. Compatibility is explicitly not required.
+This ticket created the first-class CLI, worker, service, HTTP, configuration, task-package, documentation, and fixture surfaces around Workflow V3. The canonical `scraper worker run` name is now V3; the old worker is explicitly `scraper legacy worker run`. Remaining site/API/engine packages are not wrapped for compatibility and are not targets for new work, but their destructive deletion is blocked by evidenced current Scraper and RAG callers assigned to later convergence tickets.
+
+## Implementation status
+
+- `pkg/workflowv3product` is the production composition root and service/read-model boundary.
+- `pkg/taskpackages/cookbooklinear` is a versioned production JavaScript task package.
+- `pkg/cmd/workflow_v3.go` implements validate, explain, compile, submit, run, worker, list, show, follow, cancel, package inspection, and operator API commands.
+- `examples/workflowv3/cookbook-linear` is the runnable user fixture.
+- `analysis/01-product-cutover-acceptance-and-deletion-gates.md` and `scripts/01-check-product-cutover.sh` make the retained/deleted boundary executable.
+- Core implementation commit: `3746f37`.
 
 ## Architecture orientation
 
@@ -67,6 +85,7 @@ scraper workflow run workflow.js --inputs inputs.json
 scraper workflow runs list
 scraper workflow runs show <run-id>
 scraper workflow runs cancel <run-id>
+scraper workflow serve
 scraper worker run
 scraper task-packages list
 ```
@@ -130,16 +149,16 @@ inputs -> CAS -> create run -> scheduler -> lease -> task runtime
                                               terminal snapshot
 ```
 
-## Hard-cut plan
+## Hard-cut and deletion-gate plan
 
-Create a feature inventory before deleting anything. Each surviving capability must be classified:
+The public generic command cut is implemented: Workflow V3 owns `workflow`, `worker`, and `task-packages`; the old worker is namespaced as legacy. Create and maintain a feature inventory before deleting any remaining old package. Each surviving capability must be classified:
 
 - generic workflow capability to reimplement in V3;
 - domain/site package to port as tasks;
 - frontend/operator feature to point at V3 read models;
 - obsolete capability to delete.
 
-Do not wrap the old engine behind a V3 interface. After operator parity is demonstrated, remove:
+Do not wrap the old engine behind a V3 interface. After each named downstream replacement demonstrates parity and the import guard reaches zero, remove:
 
 - old scheduler/store/runner packages;
 - old JS execution semantics that duplicate task packages;
@@ -149,32 +168,32 @@ Do not wrap the old engine behind a V3 interface. After operator parity is demon
 
 ## Decisions
 
-### Decision: Workflow V3 is the only workflow model
+### Decision: Workflow V3 is the canonical generic workflow model
 
-- **Context:** Multiple engines make every integration choose a generation.
-- **Decision:** Product commands, workers, API, and observability use Workflow V3 exclusively.
+- **Context:** Multiple engines make every new integration choose a generation.
+- **Decision:** New generic authoring, execution, worker, task-package, and operator surfaces use Workflow V3 exclusively. Retained site/API commands are labeled migration-bound legacy rather than exposed through V3 adapters.
 - **Rationale:** Workflow V3 has stronger identities, durability, isolation, budgeting, and effect custody.
-- **Consequences:** Existing sites must be ported or deleted; no compatibility adapter is created.
-- **Status:** accepted.
+- **Consequences:** Existing sites and RAG consumers must be ported or deleted before their old packages can be removed; no compatibility adapter is created.
+- **Status:** implemented.
 
 ### Decision: task packages, not site manifests, are the extension unit
 
 - **Decision:** A package supplies canonical task specs, JS descriptors, and implementations.
 - **Consequences:** Scraping becomes one possible domain package alongside RAG, simulation, or robotics.
-- **Status:** proposed.
+- **Status:** implemented for the cookbook package contract.
 
 ## Implementation phases
 
-1. Add stable application configuration and dependency construction for V3.
-2. Add validate/explain/compile commands with pure JS loading.
-3. Add run submission and input staging.
-4. Add long-running worker command and graceful shutdown.
-5. Add run list/show/cancel operator commands.
-6. Add task-package registry and one fixture package.
-7. Point API/read models and runtime events at V3.
-8. Port only explicitly retained site functionality.
-9. Delete old engines, commands, migrations, and documentation.
-10. Run dependency scans proving no production import of superseded packages.
+1. **Completed:** stable application configuration and dependency construction for V3.
+2. **Completed:** validate/explain/compile commands with pure JS loading.
+3. **Completed:** run submission and strict relative input staging.
+4. **Completed:** long-running worker command, graceful shutdown, and restart recovery.
+5. **Completed:** run list/show/follow/cancel operator commands.
+6. **Completed:** deterministic task-package registry and one production cookbook package.
+7. **Completed for generic V3 consumers:** stable service/read models and a bearer-protected operator HTTP surface.
+8. **Successor work:** port only explicitly retained site and RAG functionality in their owning tickets.
+9. **Deletion gated:** remove old engines, commands, migrations, frontend clients, and documentation only after the successor imports reach zero.
+10. **Completed and executable:** dependency scans reject legacy imports from the new surface and record current local/downstream blockers.
 
 ## Testing strategy
 
@@ -194,9 +213,11 @@ Do not wrap the old engine behind a V3 interface. After operator parity is demon
 
 Do not start by deleting `pkg/engine`. First produce a command-level V3 fixture that survives restart. Use the existing Workflow V3 integration tests as the behavioral source, not the old CLI. Keep Cobra/Glazed wiring thin: service constructors should accept the store, artifact store, registry, and capacities explicitly. Once the new path supports submission, execution, and inspection, perform deletion in one focused change and let compilation reveal residual dependencies.
 
-## Completion criteria
+## Completion criteria and evidence
 
-A new user can author, validate, run, resume, inspect, and cancel a Workflow V3 JS workflow using the main Scraper binary. No production command imports the old engine or old workflow packages, and the README teaches V3 first.
+A new user can author, validate, compile, submit, run, recover after process restart, inspect, follow, and cancel a Workflow V3 JavaScript workflow using the main Scraper binary. `pkg/cmd/workflow_v3_test.go` proves the command lifecycle; `pkg/workflowv3product/application_test.go` proves process restart, typed failure, cancellation, strict inputs, deterministic package identity, and pure authoring; the README and embedded product guide teach V3 first.
+
+No Workflow V3 product, task-package, or new command file imports the old engine or exact old workflow package. The canonical worker command is V3. Remaining old production commands are explicitly inventoried as migration-bound callers rather than misrepresented as already deleted; the guard and successor gates prevent both new dependencies and premature removal.
 
 ## Technology primer: plan, run, node, lease, and artifact
 

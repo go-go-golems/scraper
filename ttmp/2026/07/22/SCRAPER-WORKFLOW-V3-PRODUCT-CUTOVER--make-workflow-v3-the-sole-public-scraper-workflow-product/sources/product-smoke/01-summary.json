@@ -1,0 +1,9 @@
+{
+  "authorizedCancelStatus": "canceled",
+  "followLines": 1,
+  "planDigest": "sha256:14bf6794a6b40e363e6d1a7a7d2ff680544f7ac71c1fbbd7a25e14ef5ecbb676",
+  "restartRunAttempts": 2,
+  "restartRunStatus": "succeeded",
+  "unauthorizedCancelStatus": 403,
+  "validationOK": true
+}
