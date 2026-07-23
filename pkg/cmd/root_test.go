@@ -99,7 +99,20 @@ func TestRootHelpLoadsResearchctlRunnerGuide(t *testing.T) {
 	err = rootCmd.Execute()
 	require.NoError(t, err)
 	require.Contains(t, stdout.String(), "Researchctl Workflow V3 Runner")
-	require.Contains(t, stdout.String(), "external-operation counts")
+	require.Contains(t, stdout.String(), "canonical retry-aware")
+}
+
+func TestRootHelpLoadsWorkflowObservationGuide(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"help", "scraper-workflow-v3-observations"})
+	require.NoError(t, rootCmd.Execute())
+	require.Contains(t, stdout.String(), "Workflow V3 Canonical Observations")
+	require.Contains(t, stdout.String(), "completion_coverage")
+	require.Contains(t, stdout.String(), "Troubleshooting")
 }
 
 func TestRootHelpLoadsEmbeddedHTTPAPIDoc(t *testing.T) {
