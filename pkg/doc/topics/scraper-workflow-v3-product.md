@@ -116,6 +116,7 @@ scraper workflow --workflow-db "$root/workflow.db" \
 
 curl http://127.0.0.1:8081/api/v3/workflow/runs
 curl http://127.0.0.1:8081/api/v3/workflow/runs/cookbook-1
+curl http://127.0.0.1:8081/api/v3/workflow/runs/cookbook-1/observations
 curl -X POST -H "Authorization: Bearer $SCRAPER_WORKFLOW_OPERATOR_TOKEN" \
   http://127.0.0.1:8081/api/v3/workflow/runs/cookbook-1/cancel
 curl http://127.0.0.1:8081/api/v3/workflow/task-packages

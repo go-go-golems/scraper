@@ -12,13 +12,24 @@ Topics:
 DocType: reference
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: repo://pkg/researchrunner/runner.go
+      Note: Researchctl canonical projection (commits e818676 and 8a47500)
+    - Path: repo://pkg/workflowv3observations/project.go
+      Note: Canonical pure projector and metric formulas (commit e818676)
+    - Path: repo://pkg/workflowv3sqlite/observations.go
+      Note: Stable privacy-safe source transaction (commit e818676)
+    - Path: repo://ttmp/2026/07/22/SCRAPER-WORKFLOW-OBSERVATIONS--publish-canonical-workflow-v3-telemetry-and-experiment-observations/scripts/01-smoke-canonical-observations.sh
+      Note: Cross-repository acceptance smoke
+    - Path: ws://researchctl/examples/lab/scraper-workflow-plan.js
+      Note: Multi-case replicate contract v2 fixture (commit fbc9be9)
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-07-22T19:25:19.621967166-04:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # Investigation diary
 
@@ -176,3 +187,87 @@ The ticket passed docmgr validation and its guide was included in the ordered te
 
 ### Technical details
 - Remote destination: `/ai/2026/07/22/EXPERIMENT-PLATFORM-CONVERGENCE`.
+
+## Step 4: Implement the canonical projector and hard-cut runner v2
+
+This step implemented the first complete production slice. The observation package now owns strict source and output contracts, pure interval and retry algorithms, exact coverage semantics, critical-path and failure traces, source/observation digests, and bounded output lineage. SQLite reads all sources in one read transaction. Product, CLI, HTTP, and Researchctl runner surfaces call the same projector.
+
+The runner domain contract moved from `scraper-workflow-execution/v1` to v2 because requiring canonical observations is a breaking contract change. No v1 compatibility decoder remains. Researchctl's canonical JavaScript fixture was regenerated to v2.
+
+### Prompt Context
+
+**User prompt (verbatim):** "SCRAPER-WORKFLOW-OBSERVATIONS"
+
+**Continuation prompt (verbatim excerpt):** "Continue working toward the active thread goal. ... Avoid repeating work that is already done. Choose the next concrete action toward the objective."
+
+**Assistant interpretation:** Implement and fully validate the accepted observations ticket rather than stopping at its existing design guide.
+
+**Inferred user intent:** Establish one retry-aware source of truth before RAG lowering and experiment analysis consume telemetry.
+
+**Scraper commits:**
+- `e8186762316220caa353894f01c46e36800f86db` — `feat: publish canonical Workflow V3 observations`
+- `8a47500` — `feat: require observations in runner contract v2`
+
+**Researchctl commits:**
+- `6108609` — `test: require canonical Scraper observations`
+- `fbc9be9` — `test: adopt Scraper execution contract v2`
+
+### What I did
+- Added `pkg/workflowv3observations` with a closed v1 schema, 22 metrics, 3 traces, exact ratios, source/observation digests, strict decode, and record bounds.
+- Added pure half-open interval sum/union/peak/clipping and logical-node retry accounting.
+- Added static dependency-weighted critical path, closed failure trace, artifact lineage, explicit queue/critical/operation/accounting coverage, cancellation and lease-loss evidence, and terminal classification.
+- Added `Store.ObservationSnapshot` over one read-only SQLite transaction without payloads, capabilities, arbitrary messages, or artifact locators.
+- Added Application, CLI, read-only HTTP, and Researchctl runner projection surfaces.
+- Replaced the runner's ad-hoc attempt metrics/trace with canonical frames and a verified observation artifact.
+- Added deterministic, permutation, historical 21.472-second failed-operation, zero-operation, map/reduce identity, lease-loss, restart, failure, cancellation, HTTP, CLI, strict-contract, privacy, and process projection tests.
+- Built a ticket-local cross-repository smoke and committed its stable summary.
+
+### Why
+- Persisted aggregate counters would create a second authority and drift across crashes.
+- Failed operations must participate in inclusive timing, while success-specific counts remain separately named.
+- Missing scheduling and dynamic dependency boundaries must lower coverage rather than become guessed timestamps.
+- Requiring a new field in v1 would violate versioning; a hard v2 cut keeps the contract honest.
+
+### What worked
+- Focused tests passed across observations, SQLite, product, runner, and CLI.
+- Fresh-process reprojection matched all four Researchctl-custodied observation artifacts.
+- The timeout database produced a deterministic canceled observation after restart.
+- The smoke retained one internal retry and one failed external operation inside each selected Researchctl attempt.
+
+### What didn't work
+- The first runner test dereferenced `NumericProjection` for every metric. `workflow.terminal_status` is intentionally textual and has no numeric projection, causing a nil-pointer panic at `runner_test.go:110`. The test now records numeric values only when the pointer is present and selects the failure trace by kind rather than assuming trace order.
+- The first hand-calculated queue-wait assertion expected 600,000 microseconds. It omitted the root node's 100,000-microsecond admission-to-first-start interval. Recalculation showed 100,000 initial + 100,000 retry + 500,000 dependency wait = 700,000; the fixture expectation was corrected.
+- The first lint run failed with `nonamedreturns` for the interval helper and staticcheck `S1016` for a same-shape artifact conversion. The helper now uses local result variables and the lineage code uses a direct type conversion.
+- The first adapted cross-repository smoke failed at the old three-artifact assertion because canonical observations correctly add a fourth artifact. After updating that custody expectation, it passed.
+- The first reproducibility diff still varied because `researchAttemptCounts` reflected concurrent result ordering. Assertions already sorted the list, but the summary did not. The summary now writes the sorted list, making ticket evidence stable.
+
+### What I learned
+- Completion coverage, accounting coverage, and operation wall-time coverage answer different questions and require separate names.
+- Queue eligibility is only exact for a subset of current durable records; explicit observed/total coverage is safer than deriving from provider gaps.
+- Dynamic map and reduction node keys are sufficient for retry identity but not for dependency critical-path edges.
+- Exact rational values should remain canonical even when Researchctl receives a floating projection for analysis.
+
+### What was tricky to build
+- The same projection must remain pure enough for deterministic tests while reading a relational source atomically and mapping into a process protocol that supports both raw values and numeric projections.
+- Cancellation occurs before the runner can publish terminal frames, so acceptance reopens the durably canceled subordinate database and projects it in a fresh Scraper process.
+
+### What warrants a second pair of eyes
+- Review the v1 queue eligibility boundaries and static-only critical path against future gate/map/reduction telemetry requirements.
+- Review whether the 100,000 source-record limits are appropriate for the first large RAG workload; they are explicit contract bounds, not silent truncation.
+- Review rational metric handling in the next Researchctl analysis ticket so it does not discard exact numerator/denominator custody.
+
+### What should be done in the future
+- RAG packages should emit domain measurements as separate artifacts and operations; they must not add RAG fields to the canonical Workflow observation contract.
+- If profiling justifies a cache, key it by derivation version and source digest rather than persisting mutable counters.
+
+### Code review instructions
+- Read `analysis/01-observation-contract-acceptance-and-coverage-audit.md` before reviewing formulas.
+- Review pure interval/retry tests, then SQLite source custody, then runner mapping.
+- Run the focused commands and ticket-local smoke listed in the acceptance report.
+
+### Technical details
+- Observation schema: `scraper-workflow-observations/v1`.
+- Derivation: `workflow-observations/v1`.
+- Runner domain: `scraper-workflow-execution/v2`.
+- Privacy class: `bounded-identifiers-digests-integers`.
+- Acceptance evidence: `sources/smoke/01-summary.json`.

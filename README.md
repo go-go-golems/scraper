@@ -100,10 +100,25 @@ export SCRAPER_WORKFLOW_OPERATOR_TOKEN="$(openssl rand -hex 32)"
 curl http://127.0.0.1:8081/api/v3/workflow/health
 curl http://127.0.0.1:8081/api/v3/workflow/runs
 curl http://127.0.0.1:8081/api/v3/workflow/runs/durable-1
+curl http://127.0.0.1:8081/api/v3/workflow/runs/durable-1/observations
 curl -X POST -H "Authorization: Bearer $SCRAPER_WORKFLOW_OPERATOR_TOKEN" \
   http://127.0.0.1:8081/api/v3/workflow/runs/durable-1/cancel
 curl http://127.0.0.1:8081/api/v3/workflow/task-packages
 ```
+
+## Canonical Workflow observations
+
+Derive deterministic retry-aware metrics, traces, coverage, and output lineage from any terminal run:
+
+```bash
+./dist/scraper workflow \
+  --workflow-db "$root/workflow.db" \
+  --artifact-root "$root/artifacts" \
+  observations durable-1 > "$root/observations.json"
+./dist/scraper help scraper-workflow-v3-observations
+```
+
+Observations include failed external operations, separate elapsed sum and interval union, exact rational coverage values, task retry grouping, peak activity, bounded failure evidence, and an explicit critical-path coverage boundary. They are re-derived from one stable read transaction and never persisted as a second mutable authority.
 
 ## Researchctl integration runner
 
@@ -117,7 +132,7 @@ The `scraper-workflow-runner` binary executes one Workflow V3 run as one Researc
   --out /tmp/scraper-workflow-execution.json
 ```
 
-The runner preserves Researchctl run/attempt IDs and an opaque Scraper run ID, keeps task retries inside Scraper, copies verified final outputs and external-operation evidence into Researchctl, and propagates cancellation before forced process termination. See:
+The v2 runner contract preserves Researchctl run/attempt IDs and an opaque Scraper run ID, keeps task retries inside Scraper, copies verified final outputs, canonical observations, and external-operation evidence into Researchctl, and propagates cancellation before forced process termination. See:
 
 ```bash
 ./dist/scraper help scraper-researchctl-runner
@@ -129,7 +144,8 @@ The runner preserves Researchctl run/attempt IDs and an opaque Scraper run ID, k
 - `cmd/scraper-workflow-runner/` — Researchctl NDJSON integration executable;
 - `pkg/workflowv3/` — canonical plans, identities, registries, artifacts, and policies;
 - `pkg/gojamodules/workflow/` — pure descriptor-only JavaScript authoring;
-- `pkg/workflowv3sqlite/` — durable control state and projections;
+- `pkg/workflowv3sqlite/` — durable control state and stable source snapshots;
+- `pkg/workflowv3observations/` — canonical retry-aware observation contract and pure projector;
 - `pkg/workflowv3runtime/` — dispatcher, task execution, modules, and isolation;
 - `pkg/workflowv3product/` — production configuration, dependency construction, service/read models, and HTTP handler;
 - `pkg/researchrunner/` — strict execution contract, lineage, observation projection, and cancellation bridge;
