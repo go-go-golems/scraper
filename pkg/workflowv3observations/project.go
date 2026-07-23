@@ -147,14 +147,14 @@ func validateSource(source SourceSnapshot) error {
 	seenOperations := map[string]bool{}
 	for _, operation := range source.Operations {
 		attemptKey := fmt.Sprintf("%s\x00%d", operation.NodeKey, operation.Attempt)
-		if operation.RunID != source.Run.RunID || operation.OperationID == "" || seenOperations[operation.OperationID] || !seenAttempts[attemptKey] || operation.AdmittedAt.Location() != time.UTC {
+		if operation.RunID != source.Run.RunID || operation.OperationID == "" || seenOperations[operation.OperationID] || !seenAttempts[attemptKey] || operation.AdmittedAt.IsZero() || operation.AdmittedAt.Location() != time.UTC {
 			return fmt.Errorf("observation source operation identity is invalid")
 		}
 		seenOperations[operation.OperationID] = true
 		if operation.Completion != nil && operation.Completion.ElapsedMicros < 0 {
 			return fmt.Errorf("observation source operation timing is invalid")
 		}
-		if operation.Completion != nil && (operation.Completion.ProviderStartedAt.Location() != time.UTC || operation.Completion.CompletedAt.Location() != time.UTC) {
+		if operation.Completion != nil && (operation.Completion.ProviderStartedAt.IsZero() || operation.Completion.CompletedAt.IsZero() || operation.Completion.ProviderStartedAt.Location() != time.UTC || operation.Completion.CompletedAt.Location() != time.UTC) {
 			return fmt.Errorf("observation source operation timing is invalid")
 		}
 	}

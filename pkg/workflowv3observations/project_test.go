@@ -67,6 +67,8 @@ func TestProjectRetryInclusiveDeterministicAndPrivacySafe(t *testing.T) {
 	source := observationFixture()
 	first, err := ProjectSnapshot(source, DefaultProjectOptions())
 	require.NoError(t, err)
+	require.Equal(t, "sha256:5ab0ca105f9161765c51b63f3f7abf94d7f2e8cf9999e08d2091b33faea5b0d2", first.SourceDigest)
+	require.Equal(t, "sha256:00dc6910f089c85d022145398659694abad054096b532e998450d8c6e0c83cc9", first.Digest)
 	require.Equal(t, int64(4), integerValue(t, metricByName(t, first, "workflow.job_attempts")))
 	require.Equal(t, int64(1), integerValue(t, metricByName(t, first, "workflow.retries")))
 	require.Equal(t, int64(1), integerValue(t, metricByName(t, first, "workflow.failed_job_attempts")))
@@ -78,6 +80,17 @@ func TestProjectRetryInclusiveDeterministicAndPrivacySafe(t *testing.T) {
 	require.Equal(t, Ratio{Numerator: 2, Denominator: 3}, ratioValue(t, metricByName(t, first, "workflow.external_operations.completion_coverage")))
 	require.Equal(t, CountCoverage{Observed: 3, Total: 4}, first.Coverage.QueueWaits)
 	require.Equal(t, CountCoverage{Observed: 2, Total: 3}, first.Coverage.CriticalPath)
+	var critical struct {
+		Entries []criticalPathEntry `json:"entries"`
+	}
+	for _, trace := range first.Traces {
+		if trace.Kind == "workflow.critical_path" {
+			require.NoError(t, json.Unmarshal(trace.Value, &critical))
+		}
+	}
+	require.Len(t, critical.Entries, 2)
+	require.Equal(t, workflowv3.NodeKey("b"), critical.Entries[1].NodeKey)
+	require.Equal(t, int64(3_200_000), critical.Entries[1].CumulativeMicros)
 	require.Equal(t, "result", first.ArtifactLineage[0].Name)
 	body, err := workflowv3.CanonicalJSON(first)
 	require.NoError(t, err)
