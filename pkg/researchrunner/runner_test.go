@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -183,6 +184,19 @@ func TestRunnerRequiresCanonicalObservationProjection(t *testing.T) {
 	frames, err := runRequest(t, context.Background(), request, config)
 	require.NoError(t, err)
 	require.Equal(t, "RUNNER_OBSERVATIONS_REQUIRED", frames[len(frames)-1].Error.Code)
+}
+
+func TestDomainProjectionRejectsWorkflowNamesAndNonfiniteValues(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	emit := emitter{encoder: json.NewEncoder(&output)}
+	value := 1.0
+	require.NoError(t, emitDomainProjection(DomainProjection{Metrics: []Metric{{Name: "rag.mrr", Scope: "rag.query.q1", Value: json.RawMessage(`1`), NumericProjection: &value, Unit: "ratio", Metadata: json.RawMessage(`{}`)}}}, emit, 1024))
+	require.Contains(t, output.String(), `"name":"rag.mrr"`)
+	require.Error(t, emitDomainProjection(DomainProjection{Metrics: []Metric{{Name: "workflow.elapsed", Value: json.RawMessage(`1`)}}}, emit, 1024))
+	notFinite := math.Inf(1)
+	require.Error(t, emitDomainProjection(DomainProjection{Metrics: []Metric{{Name: "rag.mrr", Value: json.RawMessage(`1`), NumericProjection: &notFinite}}}, emit, 1024))
+	require.ErrorContains(t, emitDomainProjection(DomainProjection{Traces: []Trace{{Kind: "rag.query", Value: json.RawMessage(`{"value":"1234"}`)}, {Kind: "rag.query", Value: json.RawMessage(`{"value":"5678"}`)}}}, emit, 20), "RUNNER_DOMAIN_PROJECTION_LIMIT")
 }
 
 func TestRunnerStagesBoundedSetInputArchive(t *testing.T) {

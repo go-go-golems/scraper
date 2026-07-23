@@ -3,6 +3,7 @@
 package researchrunner
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
@@ -174,6 +175,29 @@ type Complete struct {
 	Status             string          `json:"status"`
 	ProducerFinishedAt string          `json:"producerFinishedAt,omitempty"`
 	Payload            json.RawMessage `json:"payload"`
+}
+
+type DomainOutput struct {
+	Name          string `json:"name"`
+	SchemaVersion string `json:"schemaVersion"`
+	MediaType     string `json:"mediaType"`
+	Digest        string `json:"digest"`
+	Data          []byte `json:"data"`
+}
+
+type DomainProjectionInput struct {
+	WorkflowRunID string                  `json:"workflowRunId"`
+	PlanDigest    string                  `json:"planDigest"`
+	Outputs       map[string]DomainOutput `json:"outputs"`
+}
+
+type DomainProjection struct {
+	Metrics []Metric `json:"metrics"`
+	Traces  []Trace  `json:"traces"`
+}
+
+type DomainProjector interface {
+	Project(context.Context, DomainProjectionInput) (DomainProjection, error)
 }
 
 type RunnerError struct {
