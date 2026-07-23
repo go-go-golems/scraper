@@ -211,7 +211,7 @@ func TestServerSubmitThenWorkerAndInspectWorkflow(t *testing.T) {
 	rootCmd.SetOut(&workerStdout)
 	rootCmd.SetErr(&workerStdout)
 	rootCmd.SetArgs([]string{
-		"worker", "run",
+		"legacy", "worker", "run",
 		"--sites-dir", sitesDir,
 		"--engine-db", engineDB,
 		"--max-cycles", "16",
