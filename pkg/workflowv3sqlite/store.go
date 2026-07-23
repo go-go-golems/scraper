@@ -513,6 +513,30 @@ WHERE r.run_id = ? AND n.node_key = ?
 	return count == 1, err
 }
 
+// RenewLease extends an active lease without changing attempt identity. It
+// returns false after cancellation, terminal transition, token replacement, or
+// expiry; callers must stop provider/task work when authority cannot be renewed.
+func (s *Store) RenewLease(ctx context.Context, lease workflowv3.Lease, now, expires time.Time) (bool, error) {
+	if !expires.After(now) {
+		return false, fmt.Errorf("lease renewal expiry must be after now")
+	}
+	result, err := s.db.ExecContext(ctx, `
+UPDATE v3_nodes
+SET lease_expires_at = ?
+WHERE run_id = ? AND node_key = ? AND status = 'running'
+  AND lease_token = ? AND lease_cancel_epoch = ?
+  AND julianday(lease_expires_at) >= julianday(?)
+  AND EXISTS (
+    SELECT 1 FROM v3_runs r
+    WHERE r.run_id = v3_nodes.run_id AND r.status = 'running' AND r.cancel_epoch = ?
+  )`, formatTime(expires), lease.RunID, lease.NodeKey, lease.Token, lease.CancelEpoch, formatTime(now), lease.CancelEpoch)
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	return rows == 1, err
+}
+
 func (s *Store) ResolveInputs(ctx context.Context, lease workflowv3.Lease) (map[string]workflowv3.ArtifactRef, error) {
 	ret := make(map[string]workflowv3.ArtifactRef, len(lease.PlanNode.Bindings))
 	for port, binding := range lease.PlanNode.Bindings {

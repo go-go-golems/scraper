@@ -447,6 +447,8 @@ func (e *Engine) watchLease(
 ) {
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
+	expiresAt := lease.ExpiresAt
+	renewAfter := expiresAt.Add(-e.leaseDuration() / 2)
 	for {
 		select {
 		case <-ctx.Done():
@@ -455,7 +457,21 @@ func (e *Engine) watchLease(
 		case <-done:
 			return
 		case <-ticker.C:
-			valid, err := e.Store.LeaseValid(ctx, lease, e.now())
+			now := e.now()
+			if !now.Before(renewAfter) {
+				newExpiry := now.Add(e.leaseDuration())
+				renewed, err := e.Store.RenewLease(ctx, lease, now, newExpiry)
+				if err == nil && renewed {
+					expiresAt = newExpiry
+					renewAfter = expiresAt.Add(-e.leaseDuration() / 2)
+					continue
+				}
+				if err == nil || !now.Before(expiresAt) {
+					cancel()
+					return
+				}
+			}
+			valid, err := e.Store.LeaseValid(ctx, lease, now)
 			if err == nil && !valid {
 				cancel()
 				return
