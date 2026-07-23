@@ -74,11 +74,12 @@ func runMapDigest(t *testing.T, capacity int) string {
 	t.Cleanup(cancel)
 	done := make(chan error, 1)
 	go func() { done <- dispatcher.Run(dispatchCtx) }()
-	// The serial fixture executes 65 fresh Goja runtimes and can exceed 20
-	// seconds on shared validation hosts without violating any workflow lease.
-	timeout := 40 * time.Second
+	// The serial fixture executes 65 fresh Goja runtimes. Full repository runs
+	// execute packages concurrently, so allow shared validation hosts enough
+	// wall time without weakening the terminal-state assertion.
+	timeout := 90 * time.Second
 	if raceDetectorEnabled {
-		timeout = 90 * time.Second
+		timeout = 180 * time.Second
 	}
 	require.Eventually(t, func() bool {
 		snapshot, snapshotErr := engine.Snapshot(ctx, "digest-run")

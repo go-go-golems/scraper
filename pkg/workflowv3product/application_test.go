@@ -19,7 +19,7 @@ func productConfig(root string) workflowv3product.Config {
 	config.DatabasePath = filepath.Join(root, "control", "workflow.db")
 	config.ArtifactRoot = filepath.Join(root, "artifacts")
 	config.PollInterval = 5 * time.Millisecond
-	config.LeaseDuration = 100 * time.Millisecond
+	config.LeaseDuration = 5 * time.Second
 	config.Capacities = map[string]int{workflowv3.ResourceCPUDefault: 2}
 	return config
 }
