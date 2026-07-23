@@ -261,3 +261,33 @@ func (*stubArtifactStore) Put(context.Context, string, string, []byte) (workflow
 func (*stubArtifactStore) Open(context.Context, workflowv3.ArtifactRef) (io.ReadCloser, error) {
 	return nil, errors.New("not implemented")
 }
+
+func TestWatchLeaseRenewsLongRunningAttemptAuthority(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	artifacts, err := workflowv3.NewFileArtifactStore(filepath.Join(root, "artifacts"), 1<<20)
+	require.NoError(t, err)
+	target := openSyncTarget(t, filepath.Join(root, "target.db"))
+	registry, err := workflowv3database.Registry()
+	require.NoError(t, err)
+	store, err := workflowv3sqlite.Open(ctx, filepath.Join(root, "workflow.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	engine, dispatcher := databaseEngine(t, store, registry, artifacts, target)
+	engine.LeaseDuration = 40 * time.Millisecond
+	input := putJSONArtifact(t, artifacts, "database-sync-dataset-ref/v1", map[string]any{"expectedCount": 1, "rows": databaseRows("heartbeat", 1)})
+	require.NoError(t, engine.Submit(ctx, "lease-heartbeat", authoredDatabasePlan(t, registry).Plan, map[string]workflowv3.ArtifactRef{"dataset": input}))
+	lease, err := dispatcher.DispatchOnce(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, lease)
+	attemptCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go engine.watchLease(ctx, *lease, cancel, done)
+	time.Sleep(130 * time.Millisecond)
+	require.NoError(t, attemptCtx.Err())
+	valid, err := store.LeaseValid(ctx, *lease, time.Now().UTC())
+	require.NoError(t, err)
+	require.True(t, valid)
+	close(done)
+	cancel()
+}
