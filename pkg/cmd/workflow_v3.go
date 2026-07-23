@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-go-golems/scraper/pkg/researchrunner"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 	"github.com/go-go-golems/scraper/pkg/workflowv3product"
 	"github.com/spf13/cobra"
@@ -32,6 +34,7 @@ func newWorkflowV3Command() *cobra.Command {
 	command.AddCommand(newWorkflowValidateCommand(options))
 	command.AddCommand(newWorkflowExplainCommand(options))
 	command.AddCommand(newWorkflowCompileCommand(options))
+	command.AddCommand(newWorkflowResearchctlConfigCommand(options))
 	command.AddCommand(newWorkflowSubmitCommand(options, false))
 	command.AddCommand(newWorkflowSubmitCommand(options, true))
 	command.AddCommand(newWorkflowRunsCommand(options))
@@ -148,6 +151,61 @@ func newWorkflowCompileCommand(options *workflowV3Options) *cobra.Command {
 		},
 	}
 	command.Flags().StringVarP(&output, "out", "o", "-", "Output plan path, or - for stdout")
+	return command
+}
+
+func newWorkflowResearchctlConfigCommand(options *workflowV3Options) *cobra.Command {
+	var bindingsPath, output string
+	command := &cobra.Command{
+		Use: "researchctl-config <workflow.js>", Short: "Compile a Workflow V3 script into a scraper-workflow-execution/v1 domain config", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if bindingsPath == "" {
+				return fmt.Errorf("--bindings is required")
+			}
+			source, err := os.ReadFile(args[0])
+			if err != nil {
+				return fmt.Errorf("read workflow script: %w", err)
+			}
+			environment, err := workflowv3product.NewAuthoringEnvironment(options.config.TaskPackages)
+			if err != nil {
+				return err
+			}
+			authored, err := environment.Author(cmd.Context(), string(source))
+			if err != nil {
+				return err
+			}
+			body, err := os.ReadFile(bindingsPath)
+			if err != nil {
+				return fmt.Errorf("read Researchctl input bindings: %w", err)
+			}
+			decoder := json.NewDecoder(bytes.NewReader(body))
+			decoder.DisallowUnknownFields()
+			var bindings map[string]researchrunner.InputBinding
+			if err := decoder.Decode(&bindings); err != nil {
+				return fmt.Errorf("decode Researchctl input bindings: %w", err)
+			}
+			var trailing any
+			if err := decoder.Decode(&trailing); err != io.EOF {
+				return fmt.Errorf("decode Researchctl input bindings: trailing JSON content")
+			}
+			execution, err := researchrunner.BuildExecution(authored.Plan, environment.Packages, bindings, researchrunner.ObservationPolicy{ExportOutputs: true, ExportExternalOperations: true})
+			if err != nil {
+				return err
+			}
+			encoded, err := json.MarshalIndent(execution, "", "  ")
+			if err != nil {
+				return err
+			}
+			encoded = append(encoded, '\n')
+			if output == "" || output == "-" {
+				_, err = cmd.OutOrStdout().Write(encoded)
+				return err
+			}
+			return writeFileAtomic(output, encoded)
+		},
+	}
+	command.Flags().StringVar(&bindingsPath, "bindings", "", "Strict JSON map from workflow input names to Researchctl artifact selectors")
+	command.Flags().StringVarP(&output, "out", "o", "-", "Output domain-config path, or - for stdout")
 	return command
 }
 

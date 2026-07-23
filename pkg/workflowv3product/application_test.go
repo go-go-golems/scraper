@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-go-golems/scraper/pkg/taskpackages/cookbooklinear"
+	"github.com/go-go-golems/scraper/pkg/taskpackages/researchfixture"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 	"github.com/go-go-golems/scraper/pkg/workflowv3product"
 	"github.com/stretchr/testify/require"
@@ -70,6 +71,44 @@ func TestProductExecutesAuthoredWorkflowAcrossProcessRestart(t *testing.T) {
 	require.Equal(t, workflowv3.RunID("restart-run"), runs[0].RunID)
 }
 
+func TestProductResearchFixtureRetainsRetryAndFailedOperation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	root := t.TempDir()
+	config := productConfig(root)
+	config.TaskPackages = []string{researchfixture.Name}
+	app, err := workflowv3product.Open(ctx, config)
+	require.NoError(t, err)
+	defer func() { _ = app.Close() }()
+	authored, err := app.Authoring.Author(ctx, researchfixture.WorkflowSource())
+	require.NoError(t, err)
+	inputPath := filepath.Join(root, "source.json")
+	require.NoError(t, os.WriteFile(inputPath, []byte(`{"value":"runner fixture"}`), 0o600))
+	_, err = app.Submit(ctx, authored.Plan, map[string]workflowv3product.StagedInput{
+		"source": {Path: inputPath, Schema: "fixture-source/v1", MediaType: "application/json"},
+	}, root, "research-fixture")
+	require.NoError(t, err)
+	view, err := app.RunUntilTerminal(ctx, "research-fixture")
+	require.NoError(t, err)
+	require.Equal(t, "succeeded", view.Snapshot.Status)
+	require.Len(t, view.Snapshot.Attempts, 3)
+	var transientFailures int
+	for _, attempt := range view.Snapshot.Attempts {
+		if attempt.Failure != nil && attempt.Failure.Code == "FIXTURE_OPERATION_TRANSIENT" {
+			transientFailures++
+		}
+	}
+	require.Equal(t, 1, transientFailures)
+	require.Equal(t, 1, view.Operations.RetryAttempts)
+	require.NotNil(t, view.Operations.ExternalOperations)
+	require.Equal(t, 2, view.Operations.ExternalOperations.Admitted)
+	require.Equal(t, 1, view.Operations.ExternalOperations.Outcomes[workflowv3.ExternalOperationOutcomeFailed])
+	require.Equal(t, 1, view.Operations.ExternalOperations.Outcomes[workflowv3.ExternalOperationOutcomeSucceeded])
+	body, err := workflowv3.ReadArtifact(ctx, app.Artifacts, view.Snapshot.Outputs["result"])
+	require.NoError(t, err)
+	require.JSONEq(t, `{"published":true,"value":"RUNNER FIXTURE"}`, string(body))
+}
+
 func TestProductPersistsTypedTaskFailure(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -119,10 +158,10 @@ func TestProductAuthoringIsPureAndPackageGenerationIsDeterministic(t *testing.T)
 	ctx := context.Background()
 	first, err := workflowv3product.NewAuthoringEnvironment(nil)
 	require.NoError(t, err)
-	second, err := workflowv3product.NewAuthoringEnvironment([]string{"cookbook-linear"})
+	second, err := workflowv3product.NewAuthoringEnvironment([]string{"cookbook-linear", "research-runner-fixture"})
 	require.NoError(t, err)
 	require.Equal(t, first.Packages.Registry().Generation(), second.Packages.Registry().Generation())
-	require.Len(t, first.Packages.Info(), 1)
+	require.Len(t, first.Packages.Info(), 2)
 	_, err = first.Author(ctx, `if (typeof process !== "undefined") throw new Error("process leaked"); module.exports = process;`)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "process is not defined")

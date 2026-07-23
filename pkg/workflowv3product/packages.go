@@ -7,6 +7,7 @@ import (
 
 	workflowmodule "github.com/go-go-golems/scraper/pkg/gojamodules/workflow"
 	"github.com/go-go-golems/scraper/pkg/taskpackages/cookbooklinear"
+	"github.com/go-go-golems/scraper/pkg/taskpackages/researchfixture"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 	"github.com/go-go-golems/scraper/pkg/workflowv3runtime"
 )
@@ -36,7 +37,7 @@ type PackageSet struct {
 }
 
 func BuiltinPackages() []TaskPackage {
-	return []TaskPackage{cookbooklinear.New()}
+	return []TaskPackage{cookbooklinear.New(), researchfixture.New()}
 }
 
 func BuildPackageSet(selected []string, available ...TaskPackage) (*PackageSet, error) {
@@ -154,6 +155,8 @@ func builtinModuleFactory(alias string) (workflowv3runtime.TaskModuleFactory, er
 	switch alias {
 	case "fs:input":
 		return workflowv3runtime.FSInputModule(), nil
+	case researchfixture.OperationModuleAlias:
+		return fixtureOperationModule(), nil
 	default:
 		return workflowv3runtime.TaskModuleFactory{}, fmt.Errorf("required runtime module %q is not available", alias)
 	}
