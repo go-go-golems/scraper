@@ -180,3 +180,22 @@ The inventory document, detailed task state, related-file evidence, and cross-ti
 ### Technical details
 - Ticket: `SCRAPER-LEGACY-CLEANUP`.
 - Stop condition reached: classification complete; deletion not started.
+
+## Step 4: Execute the approved Scraper no-delete tranche
+
+The user approved the remove-now tables. Scraper's table contained no active production deletion, so execution consisted of reconfirming the dependency boundary and validating the repository without manufacturing a deletion.
+
+### What I did
+- Preserved all old-engine product code because no V3 replacement product exists yet.
+- Ran the full test suite and built all three Go binaries.
+- Ran lint in module mode.
+- Reverted unrelated `go mod tidy` direct/indirect movement for `golang.org/x/sys`.
+
+### Validation and failure trace
+- `GOWORK=off go test ./... -count=1` passed.
+- `make build-go` passed.
+- The first `make lint` ran in workspace mode and failed while type-checking a local `go-go-goja` dependency because `goja_nodejs` expected `goja.IsNumber`, `goja.IsBigInt`, and `goja.IsString`. This did not involve changed Scraper code.
+- `GOWORK=off .bin/golangci-lint run -v ./cmd/... ./pkg/...` passed with zero issues, matching the repository's test/build module isolation.
+
+### Review guidance
+Confirm the repository has no implementation diff beyond this ticket update. The next destructive operation remains the separately gated V3 product hard cut.

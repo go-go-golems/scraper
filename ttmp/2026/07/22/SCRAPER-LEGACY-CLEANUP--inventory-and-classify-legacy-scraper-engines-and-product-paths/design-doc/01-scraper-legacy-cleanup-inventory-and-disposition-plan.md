@@ -13,21 +13,28 @@ Intent: long-term
 Owners: []
 RelatedFiles:
     - Path: repo://pkg/cmd/root.go
-      Note: Current old-engine product command tree
+      Note: |-
+        Current old-engine product command tree
+        Current old-engine product command tree retained
     - Path: repo://pkg/cmd/runtime_helpers.go
-      Note: Current old store scheduler and runner construction
+      Note: |-
+        Current old store scheduler and runner construction
+        Current old store scheduler and runner construction retained
     - Path: repo://pkg/engine/scheduler/scheduler.go
       Note: Active legacy scheduler
     - Path: repo://pkg/gojamodules/workflow/authoring.go
       Note: Canonical Workflow V3 JavaScript authoring
     - Path: repo://pkg/workflowv3runtime/engine.go
-      Note: Canonical replacement runtime
+      Note: |-
+        Canonical replacement runtime
+        Canonical replacement runtime awaiting product cutover
 ExternalSources: []
 Summary: Evidence-backed disposition of Scraper's active legacy engine, site runtime, APIs, and canonical Workflow V3 packages.
 LastUpdated: 2026-07-22T23:45:00-04:00
 WhatFor: Prevent blind deletion while planning a hard cut from the active site engine to Workflow V3.
 WhenToUse: Read before SCRAPER-WORKFLOW-V3-PRODUCT-CUTOVER and before deleting any old engine package.
 ---
+
 
 
 # Scraper legacy cleanup inventory and disposition plan
@@ -40,7 +47,7 @@ Consequently, no large old-engine package is safe to delete immediately. The aud
 
 The correct cleanup is therefore staged but decisive. Immediate work should remove no active engine code. Freeze it, inventory behaviors, and build the smallest Workflow V3 product slice in `SCRAPER-WORKFLOW-V3-PRODUCT-CUTOVER`. Once submission, worker execution, inspection, API projections, and retained task packages exist, delete the old cluster atomically. No compatibility adapter should remain.
 
-This report stops at classification. No production code has been deleted.
+The approved no-delete tranche has been completed and freshly validated. No production code was deleted because no active path met the approved safety criteria.
 
 ## Program navigation
 
@@ -113,7 +120,7 @@ Retain:
 
 Retain generated protobuf/runtime event infrastructure only where the V3 product design explicitly reuses it; do not assume old event schemas are canonical merely because they are generated.
 
-## Remove immediately
+## Immediate cleanup completed
 
 ### Production Go code: none
 
@@ -205,6 +212,20 @@ rg -n 'scraper/pkg/(engine|workflow)(/|")' --glob '*.go' --glob '!ttmp/**' .
 ```
 
 The final search must return no production imports. Historical ticket docs can remain.
+
+## Implementation result: approved no-delete tranche completed
+
+The approved remove-now result for Scraper is complete: no active production code was deleted. Fresh source inspection still shows the old engine is the root CLI, worker, API, site, service, metric, and event implementation, while Workflow V3 remains a library/worker foundation without an equivalent primary product surface. Deleting the old cluster would violate behavior preservation.
+
+Fresh verification:
+
+- the working tree remained unchanged by the cleanup implementation;
+- `GOWORK=off go test ./... -count=1` passed;
+- `make build-go` passed for `scraper`, `workflowv3-task-worker`, and `workflowv3-isolation-launcher`;
+- lint passed with zero issues when run with `GOWORK=off`;
+- `go mod tidy` proposed only an unrelated direct/indirect classification change for `golang.org/x/sys`, which was discarded so this no-delete cleanup introduced no module churn.
+
+The initially attempted workspace-mode lint exposed an existing local-workspace dependency mismatch between `goja_nodejs` and `goja`. Rerunning the repository validation in its tested module mode (`GOWORK=off`, matching the test/build convention) passed. The old-engine deletion remains gated by `SCRAPER-WORKFLOW-V3-PRODUCT-CUTOVER`.
 
 ## Risks
 
