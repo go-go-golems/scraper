@@ -82,6 +82,21 @@ func TestWorkflowV3CLIValidateCompileRunInspectAndCancel(t *testing.T) {
 	require.Contains(t, packages, `"name": "cookbook-linear"`)
 }
 
+func TestWorkflowV3CLIRunReturnsFailureAfterWritingTerminalEvidence(t *testing.T) {
+	fixture := newWorkflowCLIFixture(t)
+	require.NoError(t, os.WriteFile(filepath.Join(fixture.root, "customers.jsonl"), []byte("{\"id\":\"1\",\"email\":\"a@example.com\"}\n{\"id\":\"1\",\"email\":\"b@example.com\"}\n"), 0o600))
+	root, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(&output)
+	root.SetArgs(append([]string{"workflow"}, append(fixture.flags(), "run", fixture.script, "--inputs", fixture.inputs, "--run-id", "cli-failure")...))
+	err = root.Execute()
+	require.ErrorContains(t, err, "finished with status failed")
+	require.Contains(t, output.String(), `"status": "failed"`)
+	require.Contains(t, output.String(), "CUSTOMER_DUPLICATE_ID")
+}
+
 func TestWorkflowV3CLIWorkerRecoversSubmittedRunAfterRestart(t *testing.T) {
 	fixture := newWorkflowCLIFixture(t)
 	ctx := context.Background()
