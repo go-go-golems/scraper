@@ -50,3 +50,11 @@ Acceptance: guard records 52 local and 15 downstream legacy callers while reject
 ## 2026-07-23
 
 Ticket closed
+
+## 2026-07-23
+
+Follow-up: added Scraper half of EXPERIMENT-PLATFORM-SCRAPER-RUNNER with strict contract fixture observations and cancellation (commit 917e5b6)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/researchrunner/runner.go — Cross-repository runner
