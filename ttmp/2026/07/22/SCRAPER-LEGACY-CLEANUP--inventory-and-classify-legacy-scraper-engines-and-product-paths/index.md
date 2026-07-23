@@ -23,7 +23,17 @@ WhenToUse: ""
 
 ## Overview
 
-<!-- Provide a brief overview of the ticket, its goals, and current status -->
+This ticket inventories Scraper legacy and canonical paths before destructive cleanup. It stops after classifying immediate removals and deferred removals with explicit replacement gates.
+
+## Program navigation
+
+- **Umbrella:** `EXPERIMENT-PLATFORM-CONVERGENCE`
+- **Cleanup workstreams:** `RESEARCHCTL-LEGACY-CLEANUP`, `SCRAPER-LEGACY-CLEANUP`, `RAG-EVAL-LEGACY-CLEANUP`
+- **Primary replacement ticket:** `SCRAPER-WORKFLOW-V3-PRODUCT-CUTOVER`
+- **Cleanup report:** see the `analysis/` or `design-doc/` directory
+- **Chronological evidence:** `reference/01-investigation-diary.md`
+
+The umbrella and Researchctl cleanup live under `/home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/researchctl/ttmp/2026/07/22/`. Scraper cleanup lives under the sibling `scraper/ttmp/2026/07/22/`. RAG cleanup lives under `/home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/ttmp/2026/07/22/`.
 
 ## Key Links
 
