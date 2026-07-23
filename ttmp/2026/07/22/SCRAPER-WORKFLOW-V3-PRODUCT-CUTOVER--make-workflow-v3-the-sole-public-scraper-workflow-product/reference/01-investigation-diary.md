@@ -13,6 +13,8 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: repo://pkg/api/server/server_test.go
+      Note: Legacy API acceptance follows explicit worker namespace (commit d9bcb68)
     - Path: repo://pkg/cmd/workflow_v3.go
       Note: Public Workflow V3 commands and worker (commit 3746f37)
     - Path: repo://pkg/cmd/workflow_v3_test.go
@@ -29,12 +31,19 @@ RelatedFiles:
       Note: Versioned task-package registry (commit 3746f37)
     - Path: repo://pkg/workflowv3product/service.go
       Note: Submission staging execution and read models (commit 3746f37)
+    - Path: repo://pkg/workflowv3runtime/map_integration_test.go
+      Note: Shared-host timeout stabilization without weakened assertion (commit d9bcb68)
+    - Path: repo://ttmp/2026/07/22/SCRAPER-WORKFLOW-V3-PRODUCT-CUTOVER--make-workflow-v3-the-sole-public-scraper-workflow-product/analysis/01-product-cutover-acceptance-and-deletion-gates.md
+      Note: Acceptance and deletion inventory
+    - Path: repo://ttmp/2026/07/22/SCRAPER-WORKFLOW-V3-PRODUCT-CUTOVER--make-workflow-v3-the-sole-public-scraper-workflow-product/scripts/02-smoke-workflow-v3-product.sh
+      Note: Reproducible cross-process smoke
 ExternalSources: []
 Summary: ""
 LastUpdated: 2026-07-22T19:25:19.11458645-04:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 
 # Investigation diary
@@ -266,3 +275,77 @@ The retained site engine remains available for named downstream migrations, but 
 - Product commands use structured JSON; `runs follow` emits changed snapshots as NDJSON.
 - Input paths resolve relative to their strict JSON manifest and are staged into the existing CAS.
 - Default state is `state/workflow-v3.db` plus `state/workflow-v3-artifacts`; exact paths and capacities remain host flags.
+
+## Step 5: Add executable cutover guards and complete full validation
+
+This step converted the product/legacy boundary from prose into an executable acceptance contract. It added a local and optional cross-repository import guard, documented every retained cluster and successor gate, made terminal CLI failures return a nonzero status after printing evidence, stabilized full-suite validation under shared-host load, and ran the real binary across separate submit, worker, inspection, API, and cancellation processes.
+
+The final evidence distinguishes “Workflow V3 is the primary generic product” from “all historical consumers have migrated.” New product code is clean of legacy imports; current old site and RAG imports are counted and block premature deletion until their owning tickets pass.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 4)
+
+**Assistant interpretation:** Finish phase 2 with hard evidence, full repository validation, cross-repository safety, and an auditable deletion boundary.
+
+**Inferred user intent:** Deliver a trustworthy product cutover that is immediately usable without breaking consumers scheduled for later phases.
+
+**Commit (code):** `e54caa7d58654adbb26d2955b2a7cb1ae100c9b9` — `fix: fail command on terminal workflow failure`
+
+**Commit (code):** `d9bcb68c0640c7f3288e5bbf8ba359803d9d96fb` — `test: stabilize Workflow V3 product validation`
+
+### What I did
+- Added a terminal failure test and changed `workflow run` to print the complete failed snapshot and then return an error.
+- Added `scripts/01-check-product-cutover.sh`, which rejects legacy imports from the new product, verifies command ownership, runs focused acceptance, and counts local/downstream deletion blockers.
+- Added the acceptance/deletion report with current local and RAG caller inventories and successor gates.
+- Added a reproducible tmux-backed smoke script for separate submit/worker restart, terminal follow, operator API reads, unauthorized cancellation, and authorized cancellation.
+- Ran RAG's current `internal/workflow` and `internal/preparationworkflow` tests against the workspace Scraper tree.
+- Ran module tidiness, full Go tests, focused race tests, web tests/type-check/build, all binary builds, lint, logcopter generation checks, `make validate`, and the real smoke.
+
+### Why
+- A command that exits successfully for a failed workflow is ambiguous in automation even if its JSON says `failed`.
+- “Do not delete yet” needs exact callers and named gates; otherwise it becomes undocumented coexistence.
+- Full repository execution exposed timing assumptions that focused tests did not.
+
+### What worked
+- The cutover guard passed with 52 local legacy-importing files and 15 RAG files, while finding zero forbidden imports in the Workflow V3 product surface.
+- RAG's focused downstream tests both passed.
+- The real smoke produced plan digest `sha256:14bf6794a6b40e363e6d1a7a7d2ff680544f7ac71c1fbbd7a25e14ef5ecbb676`, recovered a submitted run in another worker process, completed two attempts, followed one terminal snapshot, rejected an unauthenticated HTTP cancel with 403, and accepted an authorized cancel.
+- `make validate` passed the full Go suite, four web unit tests, TypeScript build, Vite production build, generated Go build, and all three binaries.
+- Focused race tests, module-mode lint, and logcopter checks passed.
+
+### What didn't work
+- `go mod tidy` moved `golang.org/x/sys` from indirect to direct because the new signal-aware command imports `syscall` support through that module. The initial no-diff assertion correctly failed; I inspected and committed the explained classification change.
+- The first full suite found one old API-server test still calling `worker run --sites-dir`; it failed with `unknown flag: --sites-dir`. I moved that invocation to `legacy worker run`.
+- Under full package concurrency, the product typed-failure test's 100 ms lease expired while a Goja task was executing, adding a valid `lease_lost` attempt before the final typed failure. I changed the product fixture lease to five seconds; dedicated lease-expiry tests remain responsible for short-lease behavior.
+- A subsequent full suite hit the existing lazy-map shared-host timeout at exactly 40 seconds: `Condition never satisfied`. The same test passed alone in 14.28 seconds. I retained the terminal assertion and increased only its wall-time allowance to 90 seconds (180 under race), with an explanatory comment. The next full suite and `make validate` passed.
+- Plain workspace-mode `make lint` previously failed in Step 4 because workspace goja and goja-nodejs versions disagree. `GOWORK=off make lint` is the repository's module-authoritative validation and passed after real lint findings were fixed.
+- A wildcard used before the ticket's `sources/` directory existed was not expanded and created a literal `SCRAPER-WORKFLOW-V3-PRODUCT-CUTOVER--*` directory. That also made three `docmgr doc relate` calls fail with `doc not found`. I moved the smoke summary into the real ticket directory, removed the literal directory, and reran every relation with exact paths successfully.
+
+### What I learned
+- Command-name cutovers must update tests outside `pkg/cmd`, including API integration tests that construct the root binary.
+- Very short leases test lease loss, not ordinary product execution; fixture timeouts and workflow lease semantics should not be conflated.
+- Cross-repository acceptance can prove both compatibility and incompleteness: green RAG tests preserve current behavior, while import counts prove deletion is not yet allowed.
+
+### What was tricky to build
+- The guard must reject exact `pkg/workflow` imports without falsely matching `pkg/workflowv3*`. Its regular expression requires either a slash or closing quote after the legacy package name.
+- The smoke needed true process boundaries. It submits first, starts a worker in tmux against persisted paths, kills it after terminal state, then starts a separate API process and tests both authorization outcomes.
+
+### What warrants a second pair of eyes
+- Confirm the 52/15 deletion inventory matches the intended successor-ticket ownership.
+- Review whether the V3 operator API should eventually share an authentication middleware with the broader Scraper API rather than its minimal bearer boundary.
+- Review the lazy-map timeout increase as validation-host accommodation; the state assertion and fixture cardinality are unchanged.
+
+### What should be done in the future
+- `EXPERIMENT-PLATFORM-SCRAPER-RUNNER` should consume the V3 product service or command contract without importing SQLite internals.
+- Site and RAG successor tickets should reduce the guard counts to zero, then perform focused package deletion rather than extending the legacy namespace.
+
+### Code review instructions
+- Run both ticket scripts with `RAG_EVAL_REPO` set, then inspect the acceptance report.
+- Review commits `3746f37`, `e54caa7`, and `d9bcb68` in order.
+- Run `make validate`, `GOWORK=off make lint`, and `make logcopter-check`.
+
+### Technical details
+- Smoke evidence: `sources/product-smoke/01-summary.json`.
+- Deletion evidence: `analysis/01-product-cutover-acceptance-and-deletion-gates.md`.
+- No runtime database or artifact payload was committed; the smoke script recreates all state in a temporary directory and cleans tmux sessions on exit.

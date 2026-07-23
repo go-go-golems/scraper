@@ -1,7 +1,7 @@
 ---
 Title: Make Workflow V3 the sole public Scraper workflow product
 Ticket: SCRAPER-WORKFLOW-V3-PRODUCT-CUTOVER
-Status: active
+Status: complete
 Topics:
     - scraper
     - workflow-v3
@@ -15,10 +15,11 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-07-22T19:25:04.495815214-04:00
+LastUpdated: 2026-07-23T11:54:17.628483365-04:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # Make Workflow V3 the sole public Scraper workflow product
 
