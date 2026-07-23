@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-go-golems/scraper/pkg/researchrunner"
 	"github.com/go-go-golems/scraper/pkg/taskpackages/cookbooklinear"
+	"github.com/go-go-golems/scraper/pkg/taskpackages/researchfixture"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
 	"github.com/go-go-golems/scraper/pkg/workflowv3product"
 	"github.com/stretchr/testify/require"
@@ -95,6 +97,20 @@ func TestWorkflowV3CLIRunReturnsFailureAfterWritingTerminalEvidence(t *testing.T
 	require.ErrorContains(t, err, "finished with status failed")
 	require.Contains(t, output.String(), `"status": "failed"`)
 	require.Contains(t, output.String(), "CUSTOMER_DUPLICATE_ID")
+}
+
+func TestWorkflowV3CLICompilesResearchctlDomainConfig(t *testing.T) {
+	root := t.TempDir()
+	script := filepath.Join(root, "workflow.js")
+	bindings := filepath.Join(root, "bindings.json")
+	require.NoError(t, os.WriteFile(script, []byte(researchfixture.WorkflowSource()), 0o600))
+	require.NoError(t, os.WriteFile(bindings, []byte(`{"source":{"role":"workflow-input","kind":"fixture-source","id":"source"}}`), 0o600))
+	output := executeScraper(t, context.Background(), "workflow", "--task-package", researchfixture.Name, "researchctl-config", script, "--bindings", bindings)
+	var execution researchrunner.WorkflowExecution
+	require.NoError(t, json.Unmarshal([]byte(output), &execution))
+	require.Equal(t, researchrunner.DomainSchemaVersion, execution.SchemaVersion)
+	require.Equal(t, execution.Plan.CatalogDigest, execution.TaskCatalog.Digest)
+	require.Equal(t, researchfixture.Name, execution.TaskCatalog.Packages[0].Name)
 }
 
 func TestWorkflowV3CLIWorkerRecoversSubmittedRunAfterRestart(t *testing.T) {
