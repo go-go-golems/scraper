@@ -13,20 +13,35 @@ DocType: design-doc
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: repo://pkg/cmd/workflow_v3.go
+      Note: CLI inspection command
+    - Path: repo://pkg/doc/topics/scraper-workflow-v3-observations.md
+      Note: Operator documentation
     - Path: repo://pkg/workflowv3/external_operation.go
       Note: Canonical operation evidence records
     - Path: repo://pkg/workflowv3/types.go
       Note: Run and attempt snapshots
+    - Path: repo://pkg/workflowv3observations/critical_path.go
+      Note: Coverage-aware static critical path
+    - Path: repo://pkg/workflowv3observations/intervals.go
+      Note: Half-open interval algorithms
+    - Path: repo://pkg/workflowv3observations/types.go
+      Note: Implemented v1 contract
+    - Path: repo://pkg/workflowv3product/service.go
+      Note: Product service entry point
     - Path: repo://pkg/workflowv3runtime/dispatcher.go
       Note: Lease and dispatch timing semantics
     - Path: repo://pkg/workflowv3sqlite/external_operation.go
       Note: Durable operation storage and queries
+    - Path: repo://ttmp/2026/07/22/SCRAPER-WORKFLOW-OBSERVATIONS--publish-canonical-workflow-v3-telemetry-and-experiment-observations/analysis/01-observation-contract-acceptance-and-coverage-audit.md
+      Note: Acceptance and boundary audit
 ExternalSources: []
 Summary: Design for deterministic retry-aware metrics and traces derived from Workflow V3 durable state.
 LastUpdated: 2026-07-22T23:15:00-04:00
 WhatFor: Give every downstream experiment one canonical definition of elapsed time, retries, operations, concurrency, and failure coverage.
 WhenToUse: Use when adding Workflow V3 metrics, exports, or Researchctl observation mappings.
 ---
+
 
 
 # Canonical workflow observations design and implementation guide
@@ -41,6 +56,12 @@ Workflow V3 records detailed jobs, attempts, artifacts, and external operations.
 
 The projector emits bounded metrics and structured traces. It does not store a second authoritative timeline. Every value includes its boundary, unit, coverage, and derivation version.
 
+## Implemented status
+
+The design is implemented in `pkg/workflowv3observations`, with its stable read adapter in `pkg/workflowv3sqlite/observations.go`. `workflowv3product.Application.Observations` is the sole product service entry point. The CLI exposes `scraper workflow observations <run-id>`, the read-only HTTP API exposes `GET /api/v3/workflow/runs/{runID}/observations`, and `scraper-workflow-execution/v2` requires the Researchctl runner to publish the same canonical set as metrics, traces, and a verified `workflow-observations.json` artifact.
+
+The v2 domain contract is a deliberate hard cut from v1: v1 allowed the bridge to emit its own small ad-hoc projection, while v2 requires `exportCanonicalObservations: true`. The runner does not accept v1 and contains no compatibility decoder. Regenerate configs with `scraper workflow researchctl-config`.
+
 ## Evidence sources
 
 - `pkg/workflowv3/types.go`: run/node snapshot structures.
@@ -53,44 +74,59 @@ The projector emits bounded metrics and structured traces. It does not store a s
 
 ```go
 type ObservationSet struct {
-    SchemaVersion     string
-    RunID             workflowv3.RunID
-    DerivationVersion string
-    SourceDigest      string
-    Metrics           []Metric
-    Traces            []Trace
-    Coverage          Coverage
+    SchemaVersion, DerivationVersion, PrivacyClass string
+    RunID       workflowv3.RunID
+    RunStatus   string
+    PlanDigest  string
+    EventSequence int64
+    SourceDigest string
+    Metrics      []Metric
+    Traces       []Trace
+    Coverage     Coverage
+    ArtifactLineage []ArtifactLineage
+    Digest       string
 }
 
 type Metric struct {
-    Name       string
-    Scope      string
-    ValueKind  string
-    Value      json.RawMessage
-    Unit       string
-    Boundary   string
-    Metadata   json.RawMessage
+    Name, Scope, ValueKind, Unit, Boundary string
+    Value, Metadata json.RawMessage
+}
+
+type Trace struct {
+    Kind, SchemaVersion string
+    Value json.RawMessage
+    Truncated bool
 }
 ```
 
-Initial stable names:
+Stable v1 metric names:
 
 ```text
-workflow.elapsed                         microseconds
-workflow.job_attempts                    count
-workflow.failed_job_attempts             count
-workflow.retries                         count
-workflow.queue_wait                      microseconds
-workflow.external_operations.admitted   count
-workflow.external_operations.succeeded  count
-workflow.external_operations.failed     count
-workflow.external_operations.elapsed     microseconds
-workflow.external_operations.coverage   ratio
-workflow.attempt_peak_active             count
-workflow.operation_peak_active           count
-workflow.critical_path                   structured trace
-workflow.accounting.coverage             ratio
+workflow.elapsed                                      microseconds
+workflow.job_attempts                                 count
+workflow.failed_job_attempts                          count
+workflow.canceled_job_attempts                        count
+workflow.lease_losses                                 count
+workflow.retries                                      count
+workflow.queue_wait                                   microseconds
+workflow.node_throughput                              nodes/second
+workflow.external_operations.admitted                count
+workflow.external_operations.succeeded               count
+workflow.external_operations.failed                  count
+workflow.external_operations.canceled                count
+workflow.external_operations.timed_out               count
+workflow.external_operations.unknown                 count
+workflow.external_operations.elapsed_sum             microseconds
+workflow.external_operations.elapsed_union           microseconds
+workflow.external_operations.coverage                ratio of run wall time
+workflow.external_operations.completion_coverage     completed/admitted ratio
+workflow.attempt_peak_active                          count
+workflow.operation_peak_active                        count
+workflow.accounting.coverage                          accounted/admitted ratio
+workflow.terminal_status                              closed status
 ```
+
+Stable v1 trace kinds are `workflow.artifact_lineage`, `workflow.critical_path`, and `workflow.failures`. The set is closed: adding or removing a v1 metric or trace is rejected by contract validation and requires an explicit schema decision.
 
 ## Boundary definitions
 
@@ -161,17 +197,17 @@ Allowed failure fields are bounded class and code values. Domain packages may em
 - **Decision:** Inclusive timing and operation counts include failed, canceled, timed-out, and unknown admitted operations unless the metric name explicitly selects success.
 - **Status:** accepted.
 
-## Implementation phases
+## Implemented phases
 
-1. Inventory durable source tables and define a stable read transaction.
-2. Implement canonical attempt grouping and retry identity.
-3. Implement interval union and peak overlap with table-driven tests.
-4. Implement run, attempt, queue, and operation metrics.
-5. Implement critical-path structured trace.
-6. Add coverage and missing-data metadata.
-7. Add JSON export and Researchctl frame mapping.
-8. Add CLI inspection: `scraper workflow observations <run-id>`.
-9. Add verified cache only if profiling proves necessary.
+1. `ObservationSnapshot` reads the run, exact plan, persisted nodes and dependencies, closed attempts, external operations, named output references, and event watermark in one read-only SQLite transaction.
+2. Retry identity groups persisted logical node keys. Static, map-item, and reduction-partition origins are closed values; separate map items are not retries.
+3. Pure half-open interval functions derive sums, unions, clipping, and peak overlap and are permutation-tested.
+4. The projector emits the closed metric vocabulary above, including failed operations and explicit completion/accounting denominators.
+5. The dependency-weighted critical path covers static plan nodes. Dynamically materialized map/reduction nodes are deliberately reflected as uncovered rather than assigned invented dependency edges.
+6. Queue wait covers only reconstructable eligibility boundaries: unconstrained static plan nodes and retry backoff boundaries. Gate-, budget-, and dynamically materialized first-attempt boundaries remain uncovered.
+7. Canonical JSON, source digest, observation digest, strict decode, bounded records, redacted failure fields, and artifact lineage are implemented.
+8. Product service, CLI, read-only HTTP, Researchctl frame mapping, and a verified observation artifact all consume the same projector.
+9. No cache was added because current fixture evidence does not justify a second derived store. A future cache is valid only when keyed by derivation and source digests.
 
 ## Test strategy
 
@@ -192,9 +228,11 @@ Allowed failure fields are bounded class and code values. Domain packages may em
 
 Implement interval and retry logic as pure functions before touching SQLite. Use integer microseconds and UTC timestamps. Document whether every duration is wall-clock union, sum of operation durations, or critical-path duration. They answer different questions. Never call a single metric `utilization` without a denominator and interval boundary.
 
-## Completion criteria
+## Completion criteria and accepted evidence
 
-For any terminal Workflow V3 run, one command returns deterministic, versioned, privacy-safe observations whose retry-aware timing agrees with the underlying operation ledger. Researchctl can record those values without domain-specific code.
+For any terminal Workflow V3 run, one command returns deterministic, versioned, privacy-safe observations whose retry-aware timing agrees with the underlying operation ledger. Researchctl records those values without domain-specific code.
+
+The acceptance smoke uses two cases and two replicates, one internal task retry, one failed and one successful operation per selected attempt, a runner crash and Researchctl retry, full resume, timeout cancellation, and fresh-process reprojection. Each selected Researchctl attempt receives 22 metrics, 3 traces, one canonical observation artifact, one workflow output, and two external-operation evidence artifacts. The fixture's operation elapsed sum and union are both 2,000 microseconds and include its failed retry. See `sources/smoke/01-summary.json` and `scripts/01-smoke-canonical-observations.sh`.
 
 ## Technology primer: events, intervals, counters, and projections
 

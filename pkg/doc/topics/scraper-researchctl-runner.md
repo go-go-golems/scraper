@@ -20,7 +20,7 @@ SectionType: GeneralTopic
 `scraper-workflow-runner` is the canonical process boundary between Researchctl
 experiment custody and Scraper Workflow V3 execution. Researchctl sends one
 `researchctl-runner-stdio/v1` request. The runner validates the strict
-`scraper-workflow-execution/v1` domain config, verifies input digests and the
+`scraper-workflow-execution/v2` domain config, verifies input digests and the
 exact task-package catalog, creates one Workflow V3 run, dispatches it to a
 terminal state, and emits bounded events, metrics, traces, and copied artifacts.
 
@@ -66,7 +66,7 @@ Bindings map plan input names to exact Researchctl artifact selectors:
 ```
 
 The generated config pins the plan digest, catalog digest, package name,
-package version, bundle digest, input bindings, and observation policy. It does
+package version, bundle digest, input bindings, and required canonical-observation policy. It does
 not contain a database path, artifact root, executable path, secret, or worker
 capacity. Those are host authority supplied to the runner process.
 
@@ -105,10 +105,10 @@ A successful fixture attempt records:
 
 - `workflow.submitted` lineage before dispatch;
 - `workflow.terminal` with plan and run identities;
-- attempt and retry counts;
-- admitted, failed, and succeeded external-operation counts;
-- a sanitized attempt trace containing closed failure class/code fields;
+- all 22 canonical retry-aware metrics with exact values and display projections;
+- artifact-lineage, critical-path, and closed-failure traces;
 - each final Workflow output as a Researchctl-verified artifact;
+- a verified `scraper-workflow-observations/v1` artifact;
 - canonical external-operation JSONL and manifest artifacts;
 - a terminal `scraper-workflow-result/v1` payload.
 
@@ -137,9 +137,17 @@ against freshly compiled Scraper output, kills one runner after
 `workflow.submitted`, proves the Researchctl retry creates a fifth Workflow run,
 executes four desired runs, verifies retries/failed operations/artifacts,
 resumes all four without execution, and confirms timeout propagation cancels
-the subordinate Workflow.
+the subordinate Workflow. The observations acceptance additionally compares
+every selected artifact with a fresh-process projection and derives a canonical
+canceled observation after timeout.
 
 ```bash
-cd researchctl
-ttmp/2026/07/22/EXPERIMENT-PLATFORM-SCRAPER-RUNNER--*/scripts/01-smoke-scraper-workflow-runner.sh
+cd scraper
+ttmp/2026/07/22/SCRAPER-WORKFLOW-OBSERVATIONS--*/scripts/01-smoke-canonical-observations.sh
 ```
+
+## See Also
+
+- `scraper help scraper-workflow-v3-observations`
+- `scraper help scraper-workflow-v3-product`
+- `scraper workflow researchctl-config --help`

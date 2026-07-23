@@ -1,0 +1,38 @@
+{
+  "contractFixtureMatched": true,
+  "matrix": {
+    "executed": 4,
+    "researchAttemptCounts": [
+      1,
+      1,
+      1,
+      2
+    ],
+    "scheduled": 4,
+    "workflowRunsIncludingCrashedAttempt": 5
+  },
+  "observations": {
+    "derivationVersion": "workflow-observations/v1",
+    "metricsPerRun": 22,
+    "restartReprojectionMatched": true,
+    "retryAwareOperationElapsedMicros": 2000,
+    "runnerDomainSchemaVersion": "scraper-workflow-execution/v2",
+    "schemaVersion": "scraper-workflow-observations/v1",
+    "tracesPerRun": 3
+  },
+  "resume": {
+    "executed": 0,
+    "resumed": 4
+  },
+  "timeout": {
+    "durableCanceledObservation": true,
+    "researchFailureKind": "timeout",
+    "researchStatus": "failed",
+    "workflowStatus": "canceled"
+  },
+  "workflowPerAttempt": {
+    "artifacts": 4,
+    "failedExternalOperations": 1,
+    "retries": 1
+  }
+}

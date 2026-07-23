@@ -18,7 +18,7 @@ ShowPerDefault: true
 SectionType: GeneralTopic
 ---
 
-The `scraper` repository's primary product is Workflow V3. Pure JavaScript authoring produces a canonical plan; versioned task packages supply pinned implementations; SQLite owns durable control state; a content-addressed store owns payloads; and workers use leases, append-only attempts, retry policies, cancellation fencing, budgets, gates, and isolation. Begin with `scraper help scraper-workflow-v3-product` and the packages `pkg/workflowv3`, `pkg/workflowv3product`, `pkg/workflowv3runtime`, and `pkg/workflowv3sqlite`.
+The `scraper` repository's primary product is Workflow V3. Pure JavaScript authoring produces a canonical plan; versioned task packages supply pinned implementations; SQLite owns durable control state; a content-addressed store owns payloads; and workers use leases, append-only attempts, retry policies, cancellation fencing, budgets, gates, and isolation. Begin with `scraper help scraper-workflow-v3-product` and the packages `pkg/workflowv3`, `pkg/workflowv3product`, `pkg/workflowv3runtime`, `pkg/workflowv3sqlite`, and `pkg/workflowv3observations`. The observation package derives retry-aware analysis evidence from one stable SQLite source snapshot without persisting a second timeline.
 
 The repository also retains an older site-oriented engine while named downstream migrations remain open. Its workflows contain ops executed by `js` and `http/fetch` runners. Site manifests such as `js-demo`, `hackernews`, `slashdot`, and `nereval` live under `sites/`. The rest of this page documents that legacy system so maintainers can migrate it safely; it is not the extension path for new generic workflow features.
 
