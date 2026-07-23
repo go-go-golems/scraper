@@ -55,14 +55,23 @@ func newRootCommand(version string, siteRegistry *siteregistry.Registry, manifes
 	}
 	helpcmd.SetupCobraRootCommand(helpSystem, rootCmd)
 
+	rootCmd.AddCommand(newWorkflowV3Command())
+	rootCmd.AddCommand(newWorkflowV3WorkerCommand())
+	rootCmd.AddCommand(newTaskPackagesCommand())
+
 	rootCmd.AddCommand(newEngineCommand())
-	rootCmd.AddCommand(newWorkerCommand(siteRegistry))
 	rootCmd.AddCommand(newAPICommand(version, siteRegistry))
 	siteCmd, err := newSiteCommand(siteRegistry)
 	if err != nil {
 		return nil, err
 	}
 	rootCmd.AddCommand(siteCmd)
+	legacy := &cobra.Command{
+		Use:   "legacy",
+		Short: "Legacy engine commands pending downstream Workflow V3 cutovers",
+	}
+	legacy.AddCommand(newWorkerCommand(siteRegistry))
+	rootCmd.AddCommand(legacy)
 	rootCmd.AddCommand(newVersionCommand(version))
 
 	return rootCmd, nil

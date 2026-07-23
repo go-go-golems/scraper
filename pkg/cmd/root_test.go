@@ -53,7 +53,24 @@ func TestRootAPIServeHelp(t *testing.T) {
 	require.Contains(t, stdout.String(), "--sites-dir")
 }
 
-func TestRootWorkerRunHelpIncludesHTTPProxyFlag(t *testing.T) {
+func TestRootLegacyWorkerRunHelpIncludesHTTPProxyFlag(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"legacy", "worker", "run", "--help"})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "--http-proxy")
+	require.Contains(t, stdout.String(), "--http-timeout")
+	require.Contains(t, stdout.String(), "--metrics-address")
+	require.Contains(t, stdout.String(), "--metrics-path")
+}
+
+func TestRootWorkflowWorkerHelpUsesV3Configuration(t *testing.T) {
 	rootCmd, err := NewRootCommand("test-version")
 	require.NoError(t, err)
 
@@ -64,10 +81,10 @@ func TestRootWorkerRunHelpIncludesHTTPProxyFlag(t *testing.T) {
 
 	err = rootCmd.Execute()
 	require.NoError(t, err)
-	require.Contains(t, stdout.String(), "--http-proxy")
-	require.Contains(t, stdout.String(), "--http-timeout")
-	require.Contains(t, stdout.String(), "--metrics-address")
-	require.Contains(t, stdout.String(), "--metrics-path")
+	require.Contains(t, stdout.String(), "--workflow-db")
+	require.Contains(t, stdout.String(), "--artifact-root")
+	require.Contains(t, stdout.String(), "--task-package")
+	require.NotContains(t, stdout.String(), "--engine-db")
 }
 
 func TestRootHelpLoadsEmbeddedHTTPAPIDoc(t *testing.T) {

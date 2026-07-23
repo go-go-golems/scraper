@@ -1,194 +1,156 @@
 # scraper
 
-`scraper` is a durable workflow-driven scraping engine.
+`scraper` is a durable, JavaScript-authored workflow engine. Workflow V3 is the
+primary product surface: canonical plans, SQLite-backed runs and leases,
+append-only attempts, deterministic retries, cancellation fencing,
+content-addressed artifacts, typed task packages, bounded dispatch, and pure
+JavaScript authoring.
 
-Go owns:
-- workflow persistence
-- scheduling and leases
-- retries and queue policies
-- worker runners (`js`, `http/fetch`)
-- CLI and HTTP API hosts
+The older site-oriented engine remains available only while downstream site and
+RAG cutovers are completed. Its worker is explicitly namespaced as
+`scraper legacy worker run`; new generic workflow code must use Workflow V3.
 
-JavaScript owns most site-specific behavior:
-- submit verbs under `sites/<site>/verbs/`
-- durable op scripts under `sites/<site>/scripts/`
-- site-specific SQL projections under `sites/<site>/migrations/`
+## Workflow V3 quickstart
 
-Site definitions are loaded from filesystem manifest directories during **bootstrap**, before the Cobra command tree is built. That is why commands such as `site js-demo run seed` only exist when scraper knows where the site manifests live.
+Build the binaries:
+
+```bash
+make build-go
+```
+
+Create an isolated state directory and use the bundled cookbook task package:
+
+```bash
+root=$(mktemp -d)
+cp examples/workflowv3/cookbook-linear/* "$root/"
+
+./dist/scraper workflow validate "$root/workflow.js"
+./dist/scraper workflow explain "$root/workflow.js"
+./dist/scraper workflow compile "$root/workflow.js" --out "$root/plan.json"
+
+./dist/scraper workflow \
+  --workflow-db "$root/workflow.db" \
+  --artifact-root "$root/artifacts" \
+  run "$root/workflow.js" \
+  --inputs "$root/inputs.json" \
+  --run-id cookbook-1
+```
+
+The example executes two versioned JavaScript tasks: normalize newline-delimited
+customer JSON and validate unique IDs. Input paths are resolved relative to the
+inputs manifest, staged into the content-addressed store, and represented in
+SQLite only by typed immutable references.
+
+## Separate submit and worker processes
+
+Submission does not require a running worker:
+
+```bash
+./dist/scraper workflow \
+  --workflow-db "$root/workflow.db" \
+  --artifact-root "$root/artifacts" \
+  submit "$root/workflow.js" \
+  --inputs "$root/inputs.json" \
+  --run-id durable-1
+```
+
+A worker may start in a later process or after a machine restart:
+
+```bash
+./dist/scraper worker \
+  --workflow-db "$root/workflow.db" \
+  --artifact-root "$root/artifacts" \
+  --capacity cpu.default=4 \
+  run
+```
+
+Stop workers with SIGINT or SIGTERM. Pending work, retry deadlines, leases,
+attempt history, and cancellation epochs remain durable. Restarting a worker is
+the recovery operation; do not resubmit the same scientific execution under a
+new identity merely because a worker stopped.
+
+## Inspect and control runs
+
+```bash
+./dist/scraper workflow --workflow-db "$root/workflow.db" \
+  --artifact-root "$root/artifacts" runs list
+./dist/scraper workflow --workflow-db "$root/workflow.db" \
+  --artifact-root "$root/artifacts" runs show durable-1
+./dist/scraper workflow --workflow-db "$root/workflow.db" \
+  --artifact-root "$root/artifacts" runs follow durable-1
+./dist/scraper workflow --workflow-db "$root/workflow.db" \
+  --artifact-root "$root/artifacts" runs cancel durable-1
+./dist/scraper task-packages list
+```
+
+All command output is structured JSON. `runs follow` emits NDJSON only when the
+snapshot changes and exits at a terminal state.
+
+## Operator HTTP API
+
+Serve the same stable product read models and cancellation operation:
+
+```bash
+export SCRAPER_WORKFLOW_OPERATOR_TOKEN="$(openssl rand -hex 32)"
+./dist/scraper workflow \
+  --workflow-db "$root/workflow.db" \
+  --artifact-root "$root/artifacts" \
+  serve --address 127.0.0.1:8081
+
+curl http://127.0.0.1:8081/api/v3/workflow/health
+curl http://127.0.0.1:8081/api/v3/workflow/runs
+curl http://127.0.0.1:8081/api/v3/workflow/runs/durable-1
+curl -X POST -H "Authorization: Bearer $SCRAPER_WORKFLOW_OPERATOR_TOKEN" \
+  http://127.0.0.1:8081/api/v3/workflow/runs/durable-1/cancel
+curl http://127.0.0.1:8081/api/v3/workflow/task-packages
+```
 
 ## Repository layout
 
-- `cmd/scraper/` — main CLI entrypoint
-- `pkg/cmd/` — root command, bootstrap config, worker/api/site commands
-- `pkg/engine/` — durable engine model, scheduler, runner registry, SQLite store
-- `pkg/js/runtime/` — goja runtime and JS host APIs
-- `pkg/sites/manifest/` — `site.yaml` loading and validation
-- `sites/` — default site manifests, JS verbs/scripts, migrations, fixtures
-- `pkg/doc/` — embedded help pages
-- `web/` — frontend
+- `cmd/scraper/` — main product binary;
+- `pkg/workflowv3/` — canonical plans, identities, registries, artifacts, and policies;
+- `pkg/gojamodules/workflow/` — pure descriptor-only JavaScript authoring;
+- `pkg/workflowv3sqlite/` — durable control state and projections;
+- `pkg/workflowv3runtime/` — dispatcher, task execution, modules, and isolation;
+- `pkg/workflowv3product/` — production configuration, dependency construction, service/read models, and HTTP handler;
+- `pkg/taskpackages/` — versioned production task packages;
+- `examples/workflowv3/` — runnable authoring and input examples;
+- `pkg/doc/` — embedded operator and architecture help;
+- `pkg/engine/`, `pkg/workflow/`, `pkg/sites/`, `pkg/js/runtime/` — retained legacy system awaiting explicit downstream deletion gates;
+- `web/` — current frontend.
 
-## Bootstrap site loading
+## Legacy site workflows
 
-Scraper discovers site manifests from three sources, in this order:
-
-1. app config file (`~/.scraper/config.yaml`)
-2. environment variable (`SCRAPER_SITES_MANIFEST_DIRS`)
-3. bootstrap CLI flags (`--sites-manifest-dir`)
-
-Example config:
-
-```yaml
-sitesManifestDirs:
-  - /absolute/path/to/sites
-  - /another/path/to/sites
-```
-
-Example environment variable:
+Existing site commands and API remain available during the migration:
 
 ```bash
-export SCRAPER_SITES_MANIFEST_DIRS="/path/to/sites-a:/path/to/sites-b"
+./dist/scraper --sites-manifest-dir ./sites site js-demo run seed --help
+./dist/scraper api serve --help
+./dist/scraper legacy worker run --help
+./dist/scraper engine status --help
 ```
 
-Example CLI usage:
+They are not the extension path for new generic workflows. Deletion requires
+the named site and RAG replacement tickets to pass their acceptance fixtures;
+no Workflow V3 compatibility adapter wraps the old engine.
+
+## Development and validation
 
 ```bash
-go run ./cmd/scraper --sites-manifest-dir ./sites site js-demo run seed --help
+make test
+make build
+make lint
+make logcopter-check
 ```
 
-## Dev environment with devctl
+The complete local stack remains available through `devctl up`; it currently
+hosts legacy API/frontend consumers until their separate cutover gates pass.
 
-From the `scraper/` directory, start the full local development stack with:
+Useful embedded documentation:
 
 ```bash
-devctl up
+./dist/scraper help scraper-workflow-v3-product
+./dist/scraper help scraper-workflow-v3-minimal-runtime
+./dist/scraper help scraper-architecture-overview
+./dist/scraper help scraper-new-developer-onboarding
 ```
-
-This launches:
-
-- `redis` via Docker on `127.0.0.1:6379` for cross-process runtime event transport;
-- the scraper API on `http://127.0.0.1:8080`;
-- a scraper worker connected to the same engine/site state;
-- the Vite frontend on `http://127.0.0.1:5173`.
-
-Useful commands:
-
-```bash
-devctl plugins list
-devctl validate
-devctl plan
-devctl status --tail-lines 10
-devctl logs --service api --follow
-devctl logs --service web --follow
-devctl down
-```
-
-Devctl stores local runtime databases under `state/devctl/` and process logs under `.devctl/logs/`; both are ignored by git.
-
-## Quickstart
-
-### 1. Run the test suite
-
-```bash
-go test ./... -count=1
-```
-
-### 2. Submit a simple workflow
-
-```bash
-tmpdir=$(mktemp -d)
-
-go run ./cmd/scraper \
-  --sites-manifest-dir ./sites \
-  site js-demo run seed \
-  --sites-dir "$tmpdir/sites" \
-  --engine-db "$tmpdir/engine.db" \
-  --workflow-id demo-1 \
-  --count 3 \
-  --multiplier 4 \
-  --prefix smoke
-```
-
-### 3. Run the worker
-
-```bash
-go run ./cmd/scraper \
-  --sites-manifest-dir ./sites \
-  worker run \
-  --sites-dir "$tmpdir/sites" \
-  --engine-db "$tmpdir/engine.db" \
-  --max-cycles 16 \
-  --poll-interval 5ms
-```
-
-### 4. Inspect engine state
-
-```bash
-go run ./cmd/scraper engine status --engine-db "$tmpdir/engine.db"
-```
-
-## HTTP API quickstart
-
-Start the API server:
-
-```bash
-go run ./cmd/scraper \
-  --sites-manifest-dir ./sites \
-  api serve \
-  --address 127.0.0.1:8080 \
-  --engine-db /tmp/scraper-http-api/engine.db \
-  --sites-dir /tmp/scraper-http-api/sites
-```
-
-Submit a workflow:
-
-```bash
-curl -X POST http://127.0.0.1:8080/api/v1/sites/js-demo/verbs/seed:submit \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "workflowID": "demo-http-001",
-    "values": {
-      "count": 3,
-      "multiplier": 4,
-      "prefix": "http"
-    }
-  }'
-```
-
-Then run the worker against the same engine/site DBs:
-
-```bash
-go run ./cmd/scraper \
-  --sites-manifest-dir ./sites \
-  worker run \
-  --engine-db /tmp/scraper-http-api/engine.db \
-  --sites-dir /tmp/scraper-http-api/sites \
-  --max-cycles 16 \
-  --poll-interval 5ms
-```
-
-## Help topics
-
-Useful embedded help pages:
-
-```bash
-go run ./cmd/scraper --sites-manifest-dir ./sites help scraper-architecture-overview
-go run ./cmd/scraper --sites-manifest-dir ./sites help scraper-runtime-model
-go run ./cmd/scraper --sites-manifest-dir ./sites help scraper-bootstrap-config-and-site-manifest-loading
-go run ./cmd/scraper --sites-manifest-dir ./sites help scraper-new-developer-onboarding
-go run ./cmd/scraper --sites-manifest-dir ./sites help scraper-adding-a-declarative-site
-```
-
-## Current default site set
-
-The repo currently ships a small progressive default set under `sites/`:
-
-- `js-demo` — pure JS workflow path
-- `hackernews` — JS + HTTP + JS
-- `slashdot` — alternate HTML shape and pagination
-- `nereval` — more complex fan-out and normalized projections
-
-## Notes
-
-- `--sites-dir` is the runtime directory for per-site SQLite databases.
-- `--sites-manifest-dir` is the bootstrap directory for site definitions.
-- If `site <name> run <verb>` is missing, scraper probably did not load the right manifest directories during bootstrap.

@@ -1,0 +1,22 @@
+const workflow = require("workflow");
+const tasks = require("cookbook-linear-transform-tasks");
+
+const definition = workflow.define("linear-transform", (plan) => {
+  const source = plan.input("source", {schema: "customer-jsonl-ref/v1"});
+  const normalized = plan.task(
+    "normalize",
+    tasks.normalizeCustomers({source}),
+  );
+  const validated = plan.task(
+    "validate",
+    tasks.validateDataset({dataset: normalized.output("dataset")}),
+    (job) => job.after(normalized),
+  );
+  plan.output("dataset", validated.output("validatedDataset"));
+});
+
+const validation = workflow.validate(definition);
+if (!validation.ok) {
+  throw new Error(validation.errors.join("\n"));
+}
+module.exports = workflow.compile(definition);

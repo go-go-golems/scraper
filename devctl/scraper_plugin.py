@@ -203,7 +203,7 @@ def launch_plan(ctx: Dict[str, Any]) -> Dict[str, Any]:
                     "--noprofile",
                     "--norc",
                     "-lc",
-                    f"{mkdir_state}; exec {scraper_global} worker run "
+                    f"{mkdir_state}; exec {scraper_global} legacy worker run "
                     f"--engine-db {json.dumps(engine_db)} "
                     f"--sites-dir {json.dumps(sites_dir)} "
                     f"--worker-id scraper-devctl-worker "

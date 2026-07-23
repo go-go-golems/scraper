@@ -64,7 +64,7 @@ The execution path is implemented in:
 
 ## Workers, Runners, and Scheduling
 
-The worker process runs `scraper worker run`. It opens the engine store, builds the runner registry, opens site DBs on demand, and loops over ready queues. The scheduler is responsible for dependency refresh, lease recovery, queue policy resolution, and calling the appropriate runner.
+The worker process runs `scraper legacy worker run`. It opens the engine store, builds the runner registry, opens site DBs on demand, and loops over ready queues. The scheduler is responsible for dependency refresh, lease recovery, queue policy resolution, and calling the appropriate runner.
 
 The runner registry (`pkg/engine/runner/runner.go`) maps op kinds to runner implementations. The two built-in runners are registered at startup:
 
@@ -111,7 +111,7 @@ For example, the NEREVAL workflow looks like this:
 scraper --sites-manifest-dir ./sites site nereval run seed
   -> verb emits js seed op
 
-worker run
+legacy worker run
   -> js seed emits list fetch + list extract
   -> list extract emits detail fetches and page-2 fetch
   -> detail extractors write normalized property tables into nereval.db
@@ -148,7 +148,7 @@ Then read one site directory under `sites/` end to end.
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
-| You expected `site <site> run <verb>` to do the whole scrape | Submit verbs only seed work | Run `scraper --sites-manifest-dir ./sites worker run` against the same DBs |
+| You expected `site <site> run <verb>` to do the whole scrape | Submit verbs only seed work | Run `scraper --sites-manifest-dir ./sites legacy worker run` against the same DBs |
 | JS script cannot find dependency output | The dependency op ID is wrong or the dependency was never emitted | Check the workflow graph in the emitting script and the dependency read in the consumer script |
 | A site writes nothing to its DB | The worker never opened that site DB or the script returned an error early | Start with the command-path tests in `pkg/cmd/site_test.go` |
 | `site <site> run <verb>` is missing entirely | The site manifests were not resolved before the command tree was built | Pass `--sites-manifest-dir`, set `SCRAPER_SITES_MANIFEST_DIRS`, or configure `~/.scraper/config.yaml` so bootstrap can load the site directories |

@@ -17,14 +17,14 @@ ShowPerDefault: true
 SectionType: GeneralTopic
 ---
 
-Workflow v3 has eleven executable vertical slices for trusted and restricted
-JavaScript tasks: linear file processing, typed authoring, allowlisted HTTP,
-work-conserving resource dispatch, idempotent database synchronization,
-deterministic lazy maps, bounded reduction trees, immutable rolling registry
-generations, transactional budgets with authoritative operational projections,
-durable lease-free approval gates, and exact bounded subprocess isolation. It
-remains intentionally separate from the existing v2 site and submission
-runtime while the integrated RAG/TTC workload is added.
+Workflow V3 is the primary public workflow product and has eleven executable
+vertical slices for trusted and restricted JavaScript tasks: linear file
+processing, typed authoring, allowlisted HTTP, work-conserving resource
+dispatch, idempotent database synchronization, deterministic lazy maps, bounded
+reduction trees, immutable rolling registry generations, transactional budgets
+with authoritative operational projections, durable lease-free approval gates,
+and exact bounded subprocess isolation. Use `scraper workflow`, `scraper worker`,
+and `scraper task-packages`; the retained site engine is explicitly legacy.
 
 ## What runs today
 
