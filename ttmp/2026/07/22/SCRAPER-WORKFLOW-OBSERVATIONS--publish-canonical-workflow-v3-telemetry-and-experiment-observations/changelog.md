@@ -26,3 +26,16 @@ Step 4: implemented canonical Workflow V3 observations and hard-cut Researchctl 
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3observations/project.go — Canonical projector
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/observations.go — Stable source transaction
+
+## 2026-07-23
+
+Step 5: hardened exact observation invariants and passed complete Scraper Researchctl downstream and cross-process acceptance (Scraper 1fab49a and 8181f61; Researchctl 296bab2)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3observations/contract.go — Strict canonical validation
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/ttmp/2026/07/22/SCRAPER-WORKFLOW-OBSERVATIONS--publish-canonical-workflow-v3-telemetry-and-experiment-observations/sources/smoke/01-summary.json — Stable final smoke evidence
+
+## 2026-07-23
+
+Ticket closed

@@ -1,7 +1,7 @@
 ---
 Title: Publish canonical Workflow V3 telemetry and experiment observations
 Ticket: SCRAPER-WORKFLOW-OBSERVATIONS
-Status: active
+Status: complete
 Topics:
     - scraper
     - workflow-v3
@@ -15,10 +15,11 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-07-22T19:25:04.611188535-04:00
+LastUpdated: 2026-07-23T14:13:06.672273113-04:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # Publish canonical Workflow V3 telemetry and experiment observations
 

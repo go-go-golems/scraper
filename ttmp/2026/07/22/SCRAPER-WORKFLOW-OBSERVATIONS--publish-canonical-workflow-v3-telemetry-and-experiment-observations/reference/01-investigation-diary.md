@@ -13,14 +13,22 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: repo://pkg/cmd/root_test.go
+      Note: Help discoverability (commit 1fab49a)
     - Path: repo://pkg/researchrunner/runner.go
       Note: Researchctl canonical projection (commits e818676 and 8a47500)
+    - Path: repo://pkg/workflowv3observations/contract.go
+      Note: Exact semantic contract validation (commit 8181f61)
     - Path: repo://pkg/workflowv3observations/project.go
       Note: Canonical pure projector and metric formulas (commit e818676)
     - Path: repo://pkg/workflowv3sqlite/observations.go
       Note: Stable privacy-safe source transaction (commit e818676)
+    - Path: repo://ttmp/2026/07/22/SCRAPER-WORKFLOW-OBSERVATIONS--publish-canonical-workflow-v3-telemetry-and-experiment-observations/analysis/01-observation-contract-acceptance-and-coverage-audit.md
+      Note: Final formula and custody audit (commit 2d5cc74)
     - Path: repo://ttmp/2026/07/22/SCRAPER-WORKFLOW-OBSERVATIONS--publish-canonical-workflow-v3-telemetry-and-experiment-observations/scripts/01-smoke-canonical-observations.sh
       Note: Cross-repository acceptance smoke
+    - Path: ws://researchctl/cmd/researchctl/doc/scraper-workflow-runner.md
+      Note: Researchctl custody guide (commit 296bab2)
     - Path: ws://researchctl/examples/lab/scraper-workflow-plan.js
       Note: Multi-case replicate contract v2 fixture (commit fbc9be9)
 ExternalSources: []
@@ -29,6 +37,7 @@ LastUpdated: 2026-07-22T19:25:19.621967166-04:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 
 # Investigation diary
@@ -271,3 +280,73 @@ The runner domain contract moved from `scraper-workflow-execution/v1` to v2 beca
 - Runner domain: `scraper-workflow-execution/v2`.
 - Privacy class: `bounded-identifiers-digests-integers`.
 - Acceptance evidence: `sources/smoke/01-summary.json`.
+
+## Step 5: Harden invariants and complete repository-wide acceptance
+
+The completion audit reviewed the projector as an untrusted contract boundary rather than relying only on trusted SQLite input. It tightened exact metric kind/unit/boundary descriptors, exact trace schemas, digest syntax, terminal status, coverage ranges, rational values, artifact identities, source plan/node/dependency identity, operation-to-attempt lineage, operation outcome/accounting semantics, UTC timing, overflow bounds, and closed failure vocabularies. It also corrected critical-path coverage for unattempted nodes and removed queue-wait coverage where gates or budgets make retry eligibility unknowable.
+
+### Prompt Context
+
+**User prompt (verbatim):** "SCRAPER-WORKFLOW-OBSERVATIONS"
+
+**Assistant interpretation:** Audit every goal requirement against fresh evidence and keep fixing discovered weaknesses until both repositories are clean.
+
+**Inferred user intent:** Complete a dependable platform primitive, not merely a passing fixture implementation.
+
+**Scraper commits:**
+- `1fab49acee603374b70ea7a1777b5794e22adf6b` — `test: harden observation identity and product coverage`
+- `8181f61b157e3e90b9ce16ba618c04f427d9fc8c` — `fix: enforce canonical observation invariants`
+- `2d5cc74c72cb1952c441ab90391b5e1f77b6e787` — `docs: document canonical Workflow observations`
+
+**Researchctl commit:**
+- `296bab24cfd0d464b1c3f85b065821a373752efe` — `docs: document canonical Scraper observation custody`
+
+### What I did
+- Added exact contract validation rather than accepting any self-digested metric vocabulary.
+- Added fixed source/observation digest regression values and explicit critical-path cumulative-time assertions.
+- Added read-only HTTP nonterminal rejection and embedded-help discoverability coverage.
+- Updated both repositories' operator help, README, architecture, runner guide, acceptance report, cross-ticket links, and contract migration guidance.
+- Ran Scraper's full tests, race tests, all binary builds, web tests/type-check/build, lint, module tidy, generation, logcopter, help, cutover, privacy, neutrality, import, placeholder, and cross-repository smoke checks.
+- Ran Researchctl's full tests, focused races, build, lint, module tidy, generation, help checks, and docmgr validation.
+- Ran the existing RAG workflow and preparation-workflow packages against the workspace.
+
+### Why
+- A digest proves bytes are stable; it does not prove a producer obeyed the closed v1 formula contract. Exact descriptors and semantic validation close that gap.
+- A canceled-before-dispatch run has no attempted critical path; reporting all static nodes as covered would be misleading.
+- Gate and budget state can delay retries beyond backoff, so backoff alone is not a known eligibility boundary for those nodes.
+
+### What worked
+- Full Scraper Go and web validation passed, including four web tests and the production Vite build.
+- Focused race tests passed for observations, SQLite, product, and Researchctl runner packages.
+- Full Researchctl validation and downstream RAG tests passed.
+- The final built-binary smoke reproduced the committed JSON exactly after the hardening changes.
+- Existing Workflow V3 cutover guards passed and still report the separately governed 52 local legacy callers.
+
+### What didn't work
+- After changing a metric boundary in the strict-contract test, validation now correctly failed early with `workflow observation metrics must be strictly sorted and canonical` rather than the older expected `digest mismatch`. The test was split: one assertion verifies descriptor rejection, and a second changes a valid integer value to verify digest rejection.
+- The synthetic lease-loss fixture used failure class `infrastructure`, which is not in Workflow V3's closed failure vocabulary. It was corrected to the supported `execution` class; this confirmed the new validation was enforcing production vocabulary.
+- The first final deletion guard used `pkg/(engine|workflow|sites|js/runtime)`. The unanchored `workflow` alternative falsely matched every intended `pkg/workflowv3` import and exited nonzero. The revised expression requires `workflow/`, then passed with no legacy imports.
+
+### What I learned
+- Coverage itself is part of the contract and needs range validation (`0 <= observed <= total`).
+- A terminal canceled run may validly have zero attempts and therefore zero critical-path coverage.
+- Guards must distinguish legacy `pkg/workflow/` from canonical `pkg/workflowv3*` packages.
+
+### What was tricky to build
+- Strict validation had to reject semantically malformed external input while accepting incomplete operation admissions as honest evidence.
+- The final validation matrix spans a generated Go CLI, web frontend, process protocol, two databases, and a downstream repository; the committed smoke summary provides one stable cross-boundary checkpoint.
+
+### What warrants a second pair of eyes
+- Confirm that downstream analysis preserves exact ratio objects alongside numeric projections.
+- Confirm that future map/reduce critical-path work first persists authoritative dynamic dependency edges.
+
+### What should be done in the future
+- Begin `RAG-V2-WORKFLOW-LOWERING` using execution contract v2 and canonical observations; do not fork metric formulas in RAG code.
+
+### Code review instructions
+- Inspect commits in dependency order: `e818676`, `8a47500`, `1fab49a`, `8181f61`, then documentation.
+- Run the exact commands in the acceptance report and compare smoke output with `sources/smoke/01-summary.json`.
+
+### Technical details
+- Complete Scraper validation: `GOWORK=off go test ./... -count=1`, focused `-race`, `make build-go`, `GOWORK=off make lint`, `make logcopter-check`, and the web stages within `make validate`.
+- Complete Researchctl validation: full tests, focused races, `make build`, lint, tidy, and logcopter check.
