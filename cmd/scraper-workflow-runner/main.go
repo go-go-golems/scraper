@@ -75,6 +75,9 @@ func (f *capacityFlag) Set(value string) error {
 	if *f == nil {
 		*f = capacityFlag{}
 	}
+	if _, exists := (*f)[name]; exists {
+		return fmt.Errorf("capacity %q is configured more than once", name)
+	}
 	(*f)[name] = count
 	return nil
 }
