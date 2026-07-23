@@ -17,3 +17,12 @@ Created and expanded the cross-linked textbook-style intern design and implement
 ## 2026-07-22
 
 Published the expanded intern guide in the Scriptable Experiment Platform Intern Guides reMarkable bundle at /ai/2026/07/22/EXPERIMENT-PLATFORM-CONVERGENCE
+
+## 2026-07-23
+
+Step 4: productized Workflow V3 commands worker task packages read models restart recovery and cancellation (commit 3746f37)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/cmd/workflow_v3.go — Public CLI
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3product/application.go — Product composition
