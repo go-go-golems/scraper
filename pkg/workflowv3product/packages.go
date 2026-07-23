@@ -20,6 +20,13 @@ type TaskPackage interface {
 	RequiredModules() []string
 }
 
+// TaskPackageModuleProvider lets domain-owned task packages contribute exact
+// trusted host modules without adding domain imports to Scraper's composition
+// root. RequiredModules must still list every contributed alias.
+type TaskPackageModuleProvider interface {
+	TaskModuleFactories() []workflowv3runtime.TaskModuleFactory
+}
+
 type PackageInfo struct {
 	Name         string   `json:"name"`
 	Version      string   `json:"version"`
@@ -89,8 +96,33 @@ func BuildPackageSet(selected []string, available ...TaskPackage) (*PackageSet, 
 			return nil, fmt.Errorf("build task package %q: %w", name, err)
 		}
 		aliases := candidate.RequiredModules()
+		provided := map[string]workflowv3runtime.TaskModuleFactory{}
+		if provider, ok := candidate.(TaskPackageModuleProvider); ok {
+			for _, factory := range provider.TaskModuleFactories() {
+				if factory.Alias == "" {
+					return nil, fmt.Errorf("task package %q provides an unnamed module", name)
+				}
+				if _, duplicate := provided[factory.Alias]; duplicate {
+					return nil, fmt.Errorf("task package %q provides module %q more than once", name, factory.Alias)
+				}
+				provided[factory.Alias] = factory
+			}
+		}
+		requiredAliases := make(map[string]bool, len(aliases))
 		for _, alias := range aliases {
-			factory, err := builtinModuleFactory(alias)
+			requiredAliases[alias] = true
+		}
+		for alias := range provided {
+			if !requiredAliases[alias] {
+				return nil, fmt.Errorf("task package %q provides undeclared module %q", name, alias)
+			}
+		}
+		for _, alias := range aliases {
+			factory, ok := provided[alias]
+			var err error
+			if !ok {
+				factory, err = builtinModuleFactory(alias)
+			}
 			if err != nil {
 				return nil, fmt.Errorf("task package %q: %w", name, err)
 			}

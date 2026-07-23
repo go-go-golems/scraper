@@ -26,15 +26,16 @@ const defaultMaxRequestBytes int64 = 32 << 20
 var artifactNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 type Config struct {
-	StateRoot           string
-	ArtifactRoot        string
-	TaskPackages        []string
-	Capacities          map[string]int
-	LeaseDuration       time.Duration
-	PollInterval        time.Duration
-	CancellationTimeout time.Duration
-	MaxRequestBytes     int64
-	MaxExportBytes      int64
+	StateRoot             string
+	ArtifactRoot          string
+	TaskPackages          []string
+	Capacities            map[string]int
+	LeaseDuration         time.Duration
+	PollInterval          time.Duration
+	CancellationTimeout   time.Duration
+	MaxRequestBytes       int64
+	MaxExportBytes        int64
+	AvailableTaskPackages []workflowv3product.TaskPackage
 }
 
 func DefaultConfig() Config {
@@ -139,7 +140,7 @@ func execute(ctx context.Context, request Request, config Config, emit emitter) 
 	productConfig.LeaseDuration = config.LeaseDuration
 	productConfig.PollInterval = config.PollInterval
 	productConfig.MaxArtifactBytes = config.MaxExportBytes
-	app, err := workflowv3product.Open(ctx, productConfig)
+	app, err := workflowv3product.Open(ctx, productConfig, config.AvailableTaskPackages...)
 	if err != nil {
 		return infrastructureError("RUNNER_OPEN")
 	}
@@ -147,7 +148,7 @@ func execute(ctx context.Context, request Request, config Config, emit emitter) 
 	if err := validateCatalog(execution, app.Authoring.Packages); err != nil {
 		return err
 	}
-	inputs, baseDir, err := resolveInputs(execution, request.Inputs)
+	inputs, baseDir, err := resolveInputs(ctx, execution, request.Inputs, app)
 	if err != nil {
 		return err
 	}
@@ -250,14 +251,18 @@ func validateExecution(execution WorkflowExecution) error {
 	if execution.TaskCatalog.Digest != execution.Plan.CatalogDigest {
 		return contractError("RUNNER_CATALOG_DIGEST")
 	}
-	if len(execution.Plan.SetInputs) != 0 {
-		return contractError("RUNNER_SET_INPUT_UNSUPPORTED")
-	}
-	if len(execution.InputBindings) != len(execution.Plan.Inputs) {
+	if len(execution.InputBindings) != len(execution.Plan.Inputs)+len(execution.Plan.SetInputs) {
 		return contractError("RUNNER_INPUT_BINDINGS")
 	}
+	inputNames := make([]string, 0, len(execution.Plan.Inputs)+len(execution.Plan.SetInputs))
 	for _, input := range execution.Plan.Inputs {
-		binding, ok := execution.InputBindings[input.Name]
+		inputNames = append(inputNames, input.Name)
+	}
+	for _, input := range execution.Plan.SetInputs {
+		inputNames = append(inputNames, input.Name)
+	}
+	for _, name := range inputNames {
+		binding, ok := execution.InputBindings[name]
 		if !ok || strings.TrimSpace(binding.Role) == "" || strings.TrimSpace(binding.Kind) == "" || strings.TrimSpace(binding.ID) == "" {
 			return contractError("RUNNER_INPUT_BINDINGS")
 		}
@@ -292,7 +297,7 @@ func validateCatalog(execution WorkflowExecution, packages *workflowv3product.Pa
 	return nil
 }
 
-func resolveInputs(execution WorkflowExecution, resolved []ResolvedInput) (map[string]workflowv3product.StagedInput, string, error) {
+func resolveInputs(ctx context.Context, execution WorkflowExecution, resolved []ResolvedInput, app *workflowv3product.Application) (map[string]workflowv3product.StagedInput, string, error) {
 	bySelector := map[string]ResolvedInput{}
 	for _, input := range resolved {
 		key := selectorKey(input.Reference.Role, input.Reference.Kind, input.Reference.ID)
@@ -301,45 +306,110 @@ func resolveInputs(execution WorkflowExecution, resolved []ResolvedInput) (map[s
 		}
 		bySelector[key] = input
 	}
+	if len(bySelector) != len(execution.InputBindings) {
+		return nil, "", contractError("RUNNER_INPUT_BINDINGS")
+	}
 	ret := make(map[string]workflowv3product.StagedInput, len(execution.InputBindings))
 	for name, binding := range execution.InputBindings {
 		resolvedInput, ok := bySelector[selectorKey(binding.Role, binding.Kind, binding.ID)]
 		if !ok || strings.TrimSpace(resolvedInput.Path) == "" {
 			return nil, "", contractError("RUNNER_INPUT_MISSING")
 		}
-		expectedSchema := ""
-		for _, planInput := range execution.Plan.Inputs {
-			if planInput.Name == name {
-				expectedSchema = planInput.Schema
-				break
-			}
-		}
-		if resolvedInput.Reference.SchemaVersion != expectedSchema {
-			return nil, "", contractError("RUNNER_INPUT_SCHEMA")
-		}
-		if err := verifyInput(resolvedInput); err != nil {
+		body, err := readVerifiedInput(resolvedInput)
+		if err != nil {
 			return nil, "", err
 		}
-		ret[name] = workflowv3product.StagedInput{
-			Path: resolvedInput.Path, Schema: expectedSchema, MediaType: resolvedInput.Reference.MediaType,
+		if expected, ok := scalarInputSchema(execution.Plan, name); ok {
+			if resolvedInput.Reference.SchemaVersion != expected {
+				return nil, "", contractError("RUNNER_INPUT_SCHEMA")
+			}
+			ret[name] = workflowv3product.StagedInput{Path: resolvedInput.Path, Schema: expected, MediaType: resolvedInput.Reference.MediaType}
+			continue
 		}
+		setInput, ok := setInputSchema(execution.Plan, name)
+		if !ok || resolvedInput.Reference.SchemaVersion != SetInputArchiveSchema {
+			return nil, "", contractError("RUNNER_INPUT_SCHEMA")
+		}
+		ref, err := stageSetInput(ctx, app, execution.Plan, name, setInput, body)
+		if err != nil {
+			return nil, "", err
+		}
+		ret[name] = workflowv3product.StagedInput{Schema: setInput.ManifestSchema, MediaType: "application/json", Reference: &ref}
 	}
 	return ret, ".", nil
 }
 
-func verifyInput(input ResolvedInput) error {
+func scalarInputSchema(plan workflowv3.WorkflowPlan, name string) (string, bool) {
+	for _, input := range plan.Inputs {
+		if input.Name == name {
+			return input.Schema, true
+		}
+	}
+	return "", false
+}
+
+func setInputSchema(plan workflowv3.WorkflowPlan, name string) (workflowv3.IRSetInput, bool) {
+	for _, input := range plan.SetInputs {
+		if input.Name == name {
+			return input, true
+		}
+	}
+	return workflowv3.IRSetInput{}, false
+}
+
+func readVerifiedInput(input ResolvedInput) ([]byte, error) {
 	body, err := os.ReadFile(input.Path)
 	if err != nil {
-		return contractError("RUNNER_INPUT_READ")
+		return nil, contractError("RUNNER_INPUT_READ")
 	}
 	if input.Reference.SizeBytes == nil || int64(len(body)) != *input.Reference.SizeBytes {
-		return contractError("RUNNER_INPUT_SIZE")
+		return nil, contractError("RUNNER_INPUT_SIZE")
 	}
 	sum := sha256.Sum256(body)
 	if input.Reference.Digest != "sha256:"+hex.EncodeToString(sum[:]) {
-		return contractError("RUNNER_INPUT_DIGEST")
+		return nil, contractError("RUNNER_INPUT_DIGEST")
 	}
-	return nil
+	return body, nil
+}
+
+func stageSetInput(ctx context.Context, app *workflowv3product.Application, plan workflowv3.WorkflowPlan, name string, input workflowv3.IRSetInput, body []byte) (workflowv3.ArtifactRef, error) {
+	var archive SetInputArchive
+	if err := decodeStrict(body, &archive); err != nil || archive.SchemaVersion != SetInputArchiveSchema || archive.ItemSchema != input.ItemSchema || archive.ManifestSchema != input.ManifestSchema {
+		return workflowv3.ArtifactRef{}, contractError("RUNNER_SET_INPUT_ARCHIVE")
+	}
+	maxItems := 0
+	for _, mapped := range plan.Maps {
+		if mapped.Source.Source == "set-input" && mapped.Source.Name == name && (maxItems == 0 || mapped.Policy.MaxItems < maxItems) {
+			maxItems = mapped.Policy.MaxItems
+		}
+	}
+	if maxItems < 1 || len(archive.Items) > maxItems {
+		return workflowv3.ArtifactRef{}, contractError("RUNNER_SET_INPUT_LIMIT")
+	}
+	items := make([]workflowv3.ManifestItem, 0, len(archive.Items))
+	for _, item := range archive.Items {
+		if strings.TrimSpace(item.Key) == "" || strings.TrimSpace(item.MediaType) == "" {
+			return workflowv3.ArtifactRef{}, contractError("RUNNER_SET_INPUT_ARCHIVE")
+		}
+		ref, err := app.Artifacts.Put(ctx, archive.ItemSchema, item.MediaType, item.Data)
+		if err != nil {
+			return workflowv3.ArtifactRef{}, infrastructureError("RUNNER_SET_INPUT_STAGE")
+		}
+		items = append(items, workflowv3.ManifestItem{Key: item.Key, Value: ref})
+	}
+	manifest, err := workflowv3.NewItemManifest(archive.ItemSchema, items)
+	if err != nil {
+		return workflowv3.ArtifactRef{}, contractError("RUNNER_SET_INPUT_ARCHIVE")
+	}
+	encoded, err := workflowv3.EncodeItemManifest(manifest)
+	if err != nil {
+		return workflowv3.ArtifactRef{}, infrastructureError("RUNNER_SET_INPUT_STAGE")
+	}
+	ref, err := app.Artifacts.Put(ctx, archive.ManifestSchema, "application/json", encoded)
+	if err != nil {
+		return workflowv3.ArtifactRef{}, infrastructureError("RUNNER_SET_INPUT_STAGE")
+	}
+	return ref, nil
 }
 
 func exportTerminal(ctx context.Context, app *workflowv3product.Application, execution WorkflowExecution, view workflowv3product.RunView, runID workflowv3.RunID, sequence int64, emit emitter, config Config) error {

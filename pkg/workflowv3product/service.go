@@ -36,9 +36,10 @@ type NodeExplanation struct {
 }
 
 type StagedInput struct {
-	Path      string `json:"path"`
-	Schema    string `json:"schema"`
-	MediaType string `json:"mediaType"`
+	Path      string                  `json:"path,omitempty"`
+	Schema    string                  `json:"schema"`
+	MediaType string                  `json:"mediaType"`
+	Reference *workflowv3.ArtifactRef `json:"-"`
 }
 
 type Submission struct {
@@ -127,8 +128,21 @@ func (a *Application) stageInputs(
 ) (map[string]workflowv3.ArtifactRef, error) {
 	refs := make(map[string]workflowv3.ArtifactRef, len(inputs))
 	for name, input := range inputs {
-		if strings.TrimSpace(name) == "" || strings.TrimSpace(input.Path) == "" || strings.TrimSpace(input.Schema) == "" {
-			return nil, fmt.Errorf("staged input name, path, and schema are required")
+		if strings.TrimSpace(name) == "" || strings.TrimSpace(input.Schema) == "" {
+			return nil, fmt.Errorf("staged input name and schema are required")
+		}
+		if input.Reference != nil {
+			if strings.TrimSpace(input.Path) != "" || input.Reference.Schema != input.Schema {
+				return nil, fmt.Errorf("staged input %q reference is inconsistent", name)
+			}
+			if err := workflowv3.ValidateArtifactRef(*input.Reference); err != nil {
+				return nil, fmt.Errorf("staged input %q reference: %w", name, err)
+			}
+			refs[name] = *input.Reference
+			continue
+		}
+		if strings.TrimSpace(input.Path) == "" {
+			return nil, fmt.Errorf("staged input %q path is required", name)
 		}
 		mediaType := strings.TrimSpace(input.MediaType)
 		if mediaType == "" {
