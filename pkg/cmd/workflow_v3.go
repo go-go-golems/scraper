@@ -158,7 +158,7 @@ func newWorkflowCompileCommand(options *workflowV3Options) *cobra.Command {
 func newWorkflowResearchctlConfigCommand(options *workflowV3Options) *cobra.Command {
 	var bindingsPath, output string
 	command := &cobra.Command{
-		Use: "researchctl-config <workflow.js>", Short: "Compile a Workflow V3 script into a scraper-workflow-execution/v1 domain config", Args: cobra.ExactArgs(1),
+		Use: "researchctl-config <workflow.js>", Short: "Compile a Workflow V3 script into a scraper-workflow-execution/v2 domain config", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if bindingsPath == "" {
 				return fmt.Errorf("--bindings is required")

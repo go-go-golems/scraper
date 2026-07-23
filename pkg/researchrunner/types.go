@@ -11,7 +11,7 @@ import (
 const (
 	ProtocolVersion     = "researchctl-runner-stdio/v1"
 	Domain              = "scraper-workflow"
-	DomainSchemaVersion = "scraper-workflow-execution/v1"
+	DomainSchemaVersion = "scraper-workflow-execution/v2"
 	RunnerName          = "scraper-workflow-runner"
 	RunnerVersion       = "v1"
 )
