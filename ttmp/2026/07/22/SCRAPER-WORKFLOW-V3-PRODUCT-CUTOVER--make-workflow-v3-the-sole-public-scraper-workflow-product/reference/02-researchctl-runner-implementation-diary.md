@@ -11,10 +11,16 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: repo://README.md
+      Note: Public runner orientation (commit d0da880)
     - Path: repo://cmd/scraper-workflow-runner/main.go
       Note: Integration executable (commit 917e5b6)
+    - Path: repo://cmd/scraper-workflow-runner/main_test.go
+      Note: Strict host flag tests (commit 55c3ecd)
     - Path: repo://examples/research-runner/execution.json
       Note: Canonical portable contract fixture (commit 917e5b6)
+    - Path: repo://pkg/doc/topics/scraper-researchctl-runner.md
+      Note: Embedded operator guide (commit d0da880)
     - Path: repo://pkg/researchrunner/runner.go
       Note: Strict Researchctl process bridge (commit 917e5b6)
     - Path: repo://pkg/taskpackages/researchfixture/package.go
@@ -27,6 +33,7 @@ LastUpdated: 2026-07-23T12:30:00-04:00
 WhatFor: Review the strict runner contract, fixture package, observation export, and cancellation implementation in Scraper.
 WhenToUse: Read with the owning Researchctl ticket's primary diary.
 ---
+
 
 
 # Researchctl runner implementation diary
@@ -94,3 +101,58 @@ The acceptance task package runs two JavaScript nodes. Its transform node admits
 - Protocol: `researchctl-runner-stdio/v1`.
 - Domain config: `scraper-workflow-execution/v1`.
 - Runner identity: `scraper-workflow-runner@v1`.
+
+## Step 2: Harden host flags and pass complete Scraper validation
+
+This step completed Scraper-side operational documentation and repository-wide verification. It added strict duplicate-capacity rejection, generated logging areas for the runner executable and packages, embedded help, README guidance, and a durable cross-repository contract fixture. No production lifecycle logic changed after the successful matrix smoke.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 1)
+
+**Assistant interpretation:** Finish every Scraper validation, documentation, generated-output, and clean-tree obligation for the cross-repository phase.
+
+**Inferred user intent:** Leave the new executable as a supported Scraper product component rather than an undocumented integration test tool.
+
+**Commit (code):** `55c3ecd8f323430147716c94e3cde30d742dd5da` — `test: harden workflow runner host configuration`
+
+**Commit (docs):** `d0da880c1f12682709b4cddd25c84c2c9bd3a4bd` — `docs: document Researchctl workflow runner`
+
+### What I did
+- Added strict host flag tests and rejected duplicate resource-capacity declarations.
+- Committed generated logcopter areas.
+- Added the embedded `scraper-researchctl-runner` operator guide and README package/binary map.
+- Ran full Go, web, build, race, lint, generation, module, help, boundary, and downstream checks.
+
+### Why
+- Duplicate capacity flags must not silently overwrite host scheduling authority.
+- The new binary must be built and documented by the same standard targets as every other product binary.
+
+### What worked
+- `make validate` passed the full Go suite, four web unit tests, TypeScript/Vite production build, and all binaries including `scraper-workflow-runner`.
+- Focused race tests for runner, product, runtime, and SQLite passed.
+- Module-mode lint and logcopter checks passed with zero issues.
+- RAG's existing workflow and preparation-workflow tests passed against the workspace Scraper.
+- Import and workload-neutrality guards found no forbidden dependency.
+
+### What didn't work
+- The first embedded-help assertion looked for the exact metric key even though the prose intentionally described the evidence semantically. The rendered page did not contain that literal. The test now asserts the stable phrase `external-operation counts` rather than coupling help prose to one metric spelling.
+
+### What I learned
+- Help tests should verify operator concepts and commands; schema keys belong in contract and runner tests.
+
+### What was tricky to build
+- Full validation runs every expensive Workflow V3 fixture; the existing shared-host timeout stabilization from phase 2 kept this phase deterministic.
+
+### What warrants a second pair of eyes
+- Review default artifact/request limits for realistic future RAG outputs before that workload migrates.
+
+### What should be done in the future
+- Add richer canonical observation vocabulary in its own ticket without broadening the bridge's authority.
+
+### Code review instructions
+- Run `make validate`, `GOWORK=off make lint`, and `make logcopter-check`.
+- Run `scraper help scraper-researchctl-runner`.
+
+### Technical details
+- `make build-go` now emits four binaries, including `dist/scraper-workflow-runner`.

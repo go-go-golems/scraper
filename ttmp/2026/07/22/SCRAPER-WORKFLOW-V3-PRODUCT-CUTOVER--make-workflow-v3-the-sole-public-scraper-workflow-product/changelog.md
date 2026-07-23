@@ -58,3 +58,11 @@ Follow-up: added Scraper half of EXPERIMENT-PLATFORM-SCRAPER-RUNNER with strict 
 ### Related Files
 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/researchrunner/runner.go — Cross-repository runner
+
+## 2026-07-23
+
+Follow-up validation: full tests web build race lint generation and downstream acceptance passed for Researchctl runner (commits 55c3ecd and d0da880)
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/cmd/scraper-workflow-runner/main_test.go — Host validation
