@@ -9,11 +9,12 @@ import (
 )
 
 const (
-	ProtocolVersion     = "researchctl-runner-stdio/v1"
-	Domain              = "scraper-workflow"
-	DomainSchemaVersion = "scraper-workflow-execution/v2"
-	RunnerName          = "scraper-workflow-runner"
-	RunnerVersion       = "v1"
+	ProtocolVersion       = "researchctl-runner-stdio/v1"
+	Domain                = "scraper-workflow"
+	DomainSchemaVersion   = "scraper-workflow-execution/v2"
+	RunnerName            = "scraper-workflow-runner"
+	RunnerVersion         = "v1"
+	SetInputArchiveSchema = "scraper-workflow-set-input-archive/v1"
 )
 
 type ArtifactRef struct {
@@ -72,6 +73,19 @@ type Request struct {
 	ProtocolVersion string          `json:"protocolVersion"`
 	Attempt         Attempt         `json:"attempt"`
 	Inputs          []ResolvedInput `json:"inputs"`
+}
+
+type SetInputArchiveItem struct {
+	Key       string `json:"key"`
+	MediaType string `json:"mediaType"`
+	Data      []byte `json:"data"`
+}
+
+type SetInputArchive struct {
+	SchemaVersion  string                `json:"schemaVersion"`
+	ItemSchema     string                `json:"itemSchema"`
+	ManifestSchema string                `json:"manifestSchema"`
+	Items          []SetInputArchiveItem `json:"items"`
 }
 
 type InputBinding struct {

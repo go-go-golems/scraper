@@ -185,6 +185,35 @@ func TestRunnerRequiresCanonicalObservationProjection(t *testing.T) {
 	require.Equal(t, "RUNNER_OBSERVATIONS_REQUIRED", frames[len(frames)-1].Error.Code)
 }
 
+func TestRunnerStagesBoundedSetInputArchive(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	root := t.TempDir()
+	config := workflowv3product.DefaultConfig()
+	config.DatabasePath = filepath.Join(root, "workflow.db")
+	config.ArtifactRoot = filepath.Join(root, "artifacts")
+	config.TaskPackages = []string{researchfixture.Name}
+	app, err := workflowv3product.Open(ctx, config)
+	require.NoError(t, err)
+	defer func() { _ = app.Close() }()
+	archive := SetInputArchive{SchemaVersion: SetInputArchiveSchema, ItemSchema: "query/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1, Items: []SetInputArchiveItem{{Key: "q1", MediaType: "application/json", Data: []byte(`{"id":"q1"}`)}, {Key: "q2", MediaType: "application/json", Data: []byte(`{"id":"q2"}`)}}}
+	body := mustJSON(archive)
+	plan := workflowv3.WorkflowPlan{SetInputs: []workflowv3.IRSetInput{{Name: "queries", ItemSchema: "query/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1}}, Maps: []workflowv3.PlanMap{{Key: "queries", Source: workflowv3.SetRef{Source: "set-input", Name: "queries", ItemSchema: "query/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1}, Policy: workflowv3.MapPolicy{PageSize: 2, MaxItems: 2, MaxMaterializedAhead: 2}}}}
+	ref, err := stageSetInput(ctx, app, plan, "queries", plan.SetInputs[0], body)
+	require.NoError(t, err)
+	manifestBody, err := workflowv3.ReadArtifact(ctx, app.Artifacts, ref)
+	require.NoError(t, err)
+	manifest, err := workflowv3.DecodeItemManifest(manifestBody)
+	require.NoError(t, err)
+	require.Len(t, manifest.Items, 2)
+	itemBody, err := workflowv3.ReadArtifact(ctx, app.Artifacts, manifest.Items[0].Value)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"id":"q1"}`, string(itemBody))
+	archive.Items = append(archive.Items, SetInputArchiveItem{Key: "q3", MediaType: "application/json", Data: []byte(`{}`)})
+	_, err = stageSetInput(ctx, app, plan, "queries", plan.SetInputs[0], mustJSON(archive))
+	require.ErrorContains(t, err, "RUNNER_SET_INPUT_LIMIT")
+}
+
 func TestRunnerCancellationFencesDurableWorkflow(t *testing.T) {
 	root := t.TempDir()
 	request, config := runnerRequest(t, root, []byte(`{"value":"cancel"}`))
