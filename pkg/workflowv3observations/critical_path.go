@@ -36,6 +36,10 @@ func criticalPath(source SourceSnapshot, limit int) (Trace, CountCoverage) {
 		progress := false
 		next := remaining[:0]
 		for _, node := range remaining {
+			if len(attempts[node.NodeKey]) == 0 {
+				next = append(next, node)
+				continue
+			}
 			ready := true
 			for _, dependency := range node.Dependencies {
 				if _, known := byKey[dependency]; known {
