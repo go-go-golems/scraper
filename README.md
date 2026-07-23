@@ -105,14 +105,34 @@ curl -X POST -H "Authorization: Bearer $SCRAPER_WORKFLOW_OPERATOR_TOKEN" \
 curl http://127.0.0.1:8081/api/v3/workflow/task-packages
 ```
 
+## Researchctl integration runner
+
+The `scraper-workflow-runner` binary executes one Workflow V3 run as one Researchctl laboratory attempt through the existing NDJSON process protocol. Generate a strict portable domain config from a workflow and artifact bindings:
+
+```bash
+./dist/scraper workflow \
+  --task-package research-runner-fixture \
+  researchctl-config examples/research-runner/workflow.js \
+  --bindings examples/research-runner/bindings.json \
+  --out /tmp/scraper-workflow-execution.json
+```
+
+The runner preserves Researchctl run/attempt IDs and an opaque Scraper run ID, keeps task retries inside Scraper, copies verified final outputs and external-operation evidence into Researchctl, and propagates cancellation before forced process termination. See:
+
+```bash
+./dist/scraper help scraper-researchctl-runner
+```
+
 ## Repository layout
 
 - `cmd/scraper/` — main product binary;
+- `cmd/scraper-workflow-runner/` — Researchctl NDJSON integration executable;
 - `pkg/workflowv3/` — canonical plans, identities, registries, artifacts, and policies;
 - `pkg/gojamodules/workflow/` — pure descriptor-only JavaScript authoring;
 - `pkg/workflowv3sqlite/` — durable control state and projections;
 - `pkg/workflowv3runtime/` — dispatcher, task execution, modules, and isolation;
 - `pkg/workflowv3product/` — production configuration, dependency construction, service/read models, and HTTP handler;
+- `pkg/researchrunner/` — strict execution contract, lineage, observation projection, and cancellation bridge;
 - `pkg/taskpackages/` — versioned production task packages;
 - `examples/workflowv3/` — runnable authoring and input examples;
 - `pkg/doc/` — embedded operator and architecture help;

@@ -87,6 +87,21 @@ func TestRootWorkflowWorkerHelpUsesV3Configuration(t *testing.T) {
 	require.NotContains(t, stdout.String(), "--engine-db")
 }
 
+func TestRootHelpLoadsResearchctlRunnerGuide(t *testing.T) {
+	rootCmd, err := NewRootCommand("test-version")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stdout)
+	rootCmd.SetArgs([]string{"help", "scraper-researchctl-runner"})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, stdout.String(), "Researchctl Workflow V3 Runner")
+	require.Contains(t, stdout.String(), "external-operation counts")
+}
+
 func TestRootHelpLoadsEmbeddedHTTPAPIDoc(t *testing.T) {
 	rootCmd, err := NewRootCommand("test-version")
 	require.NoError(t, err)
