@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-go-golems/scraper/pkg/taskpackages/researchfixture"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
+	"github.com/go-go-golems/scraper/pkg/workflowv3observations"
 	"github.com/go-go-golems/scraper/pkg/workflowv3product"
 	"github.com/go-go-golems/scraper/pkg/workflowv3sqlite"
 	"github.com/stretchr/testify/require"
@@ -45,7 +46,7 @@ func runnerRequest(t *testing.T, root string, input []byte) (Request, Config) {
 		SchemaVersion: DomainSchemaVersion, Plan: authored.Plan,
 		InputBindings: map[string]InputBinding{"source": {Role: reference.Role, Kind: reference.Kind, ID: reference.ID}},
 		TaskCatalog:   TaskCatalog{Digest: catalogDigest, Packages: []PackageIdentity{{Name: info[0].Name, Version: info[0].Version, BundleDigest: info[0].BundleDigest}}},
-		Observation:   ObservationPolicy{ExportOutputs: true, ExportExternalOperations: true},
+		Observation:   ObservationPolicy{ExportOutputs: true, ExportExternalOperations: true, ExportCanonicalObservations: true},
 	}
 	domainConfig, err := json.Marshal(execution)
 	require.NoError(t, err)
@@ -103,17 +104,21 @@ func TestRunnerExportsRetryFailedOperationAndVerifiedOutput(t *testing.T) {
 	require.Equal(t, "succeeded", frames[len(frames)-1].Complete.Status)
 
 	metrics := map[string]float64{}
+	metricMetadata := map[string]json.RawMessage{}
 	artifacts := map[string]Artifact{}
-	var trace Trace
+	var failureTrace Trace
 	for _, frame := range frames {
 		if frame.Metric != nil {
-			metrics[frame.Metric.Name] = *frame.Metric.NumericProjection
+			metricMetadata[frame.Metric.Name] = frame.Metric.Metadata
+			if frame.Metric.NumericProjection != nil {
+				metrics[frame.Metric.Name] = *frame.Metric.NumericProjection
+			}
 		}
 		if frame.Artifact != nil {
 			artifacts[frame.Artifact.Name] = *frame.Artifact
 		}
-		if frame.Trace != nil {
-			trace = *frame.Trace
+		if frame.Trace != nil && frame.Trace.Kind == "workflow.failures" {
+			failureTrace = *frame.Trace
 		}
 	}
 	require.Equal(t, float64(1), metrics["workflow.retries"])
@@ -122,8 +127,15 @@ func TestRunnerExportsRetryFailedOperationAndVerifiedOutput(t *testing.T) {
 	require.Equal(t, float64(1), metrics["workflow.external_operations.succeeded"])
 	require.JSONEq(t, `{"published":true,"value":"CROSS REPOSITORY"}`, string(artifacts["workflow-output-result.json"].Data))
 	require.Len(t, strings.Split(strings.TrimSpace(string(artifacts["workflow-external-operations.jsonl"].Data)), "\n"), 2)
-	require.NotContains(t, string(trace.Value), "fixture operation requested retry")
-	require.Contains(t, string(trace.Value), "FIXTURE_OPERATION_TRANSIENT")
+	require.NotContains(t, string(failureTrace.Value), "fixture operation requested retry")
+	require.Contains(t, string(failureTrace.Value), "FIXTURE_OPERATION_TRANSIENT")
+	require.Equal(t, "scraper-workflow-observations/v1", artifacts["workflow-observations.json"].SchemaVersion)
+	observations, err := workflowv3observations.Decode(artifacts["workflow-observations.json"].Data)
+	require.NoError(t, err)
+	var retryMetadata map[string]any
+	require.NoError(t, json.Unmarshal(metricMetadata["workflow.retries"], &retryMetadata))
+	require.Equal(t, observations.SourceDigest, retryMetadata["sourceDigest"])
+	require.Equal(t, observations.Digest, retryMetadata["observationDigest"])
 }
 
 func TestRunnerMapsPermanentTaskFailureWithoutLeakingInput(t *testing.T) {
@@ -159,6 +171,18 @@ func TestRunnerRejectsCatalogAndInputDigestMismatchWithClosedErrors(t *testing.T
 	frames, err = runRequest(t, context.Background(), request, config)
 	require.NoError(t, err)
 	require.Equal(t, "RUNNER_INPUT_DIGEST", frames[len(frames)-1].Error.Code)
+}
+
+func TestRunnerRequiresCanonicalObservationProjection(t *testing.T) {
+	t.Parallel()
+	request, config := runnerRequest(t, t.TempDir(), []byte(`{"value":"fixture"}`))
+	var execution WorkflowExecution
+	require.NoError(t, json.Unmarshal(request.Attempt.Specification.CanonicalIdentity.DomainConfig, &execution))
+	execution.Observation.ExportCanonicalObservations = false
+	request.Attempt.Specification.CanonicalIdentity.DomainConfig = mustJSON(execution)
+	frames, err := runRequest(t, context.Background(), request, config)
+	require.NoError(t, err)
+	require.Equal(t, "RUNNER_OBSERVATIONS_REQUIRED", frames[len(frames)-1].Error.Code)
 }
 
 func TestRunnerCancellationFencesDurableWorkflow(t *testing.T) {

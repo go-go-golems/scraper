@@ -37,6 +37,7 @@ func newWorkflowV3Command() *cobra.Command {
 	command.AddCommand(newWorkflowResearchctlConfigCommand(options))
 	command.AddCommand(newWorkflowSubmitCommand(options, false))
 	command.AddCommand(newWorkflowSubmitCommand(options, true))
+	command.AddCommand(newWorkflowObservationsCommand(options))
 	command.AddCommand(newWorkflowRunsCommand(options))
 	command.AddCommand(newWorkflowServeCommand(options))
 	return command
@@ -188,7 +189,7 @@ func newWorkflowResearchctlConfigCommand(options *workflowV3Options) *cobra.Comm
 			if err := decoder.Decode(&trailing); err != io.EOF {
 				return fmt.Errorf("decode Researchctl input bindings: trailing JSON content")
 			}
-			execution, err := researchrunner.BuildExecution(authored.Plan, environment.Packages, bindings, researchrunner.ObservationPolicy{ExportOutputs: true, ExportExternalOperations: true})
+			execution, err := researchrunner.BuildExecution(authored.Plan, environment.Packages, bindings, researchrunner.ObservationPolicy{ExportOutputs: true, ExportExternalOperations: true, ExportCanonicalObservations: true})
 			if err != nil {
 				return err
 			}
@@ -306,6 +307,21 @@ func newWorkflowServeCommand(options *workflowV3Options) *cobra.Command {
 	command.Flags().StringVar(&address, "address", "127.0.0.1:8081", "Workflow V3 operator API listen address")
 	command.Flags().StringVar(&operatorTokenEnv, "operator-token-env", "SCRAPER_WORKFLOW_OPERATOR_TOKEN", "Environment variable containing the bearer token for mutating operator requests")
 	return command
+}
+
+func newWorkflowObservationsCommand(options *workflowV3Options) *cobra.Command {
+	return &cobra.Command{
+		Use: "observations <run-id>", Short: "Derive canonical retry-aware observations from a terminal Workflow V3 run", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withWorkflowApp(cmd, options, func(app *workflowv3product.Application) error {
+				observations, err := app.Observations(cmd.Context(), workflowv3.RunID(args[0]))
+				if err != nil {
+					return err
+				}
+				return writeWorkflowJSON(cmd.OutOrStdout(), observations)
+			})
+		},
+	}
 }
 
 func newWorkflowRunsCommand(options *workflowV3Options) *cobra.Command {

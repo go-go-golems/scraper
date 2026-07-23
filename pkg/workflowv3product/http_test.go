@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-go-golems/scraper/pkg/taskpackages/cookbooklinear"
+	"github.com/go-go-golems/scraper/pkg/workflowv3observations"
 	"github.com/go-go-golems/scraper/pkg/workflowv3product"
 	"github.com/stretchr/testify/require"
 )
@@ -64,6 +65,15 @@ func TestProductHTTPReadModelsAndCancellation(t *testing.T) {
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&view))
 	require.NoError(t, response.Body.Close())
 	require.Equal(t, "canceled", view.Snapshot.Status)
+
+	response, err = http.Get(server.URL + "/api/v3/workflow/runs/api-run/observations")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	var observations workflowv3observations.ObservationSet
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&observations))
+	require.NoError(t, response.Body.Close())
+	require.Equal(t, workflowv3observations.SchemaVersion, observations.SchemaVersion)
+	require.Equal(t, "canceled", observations.RunStatus)
 
 	response, err = http.Get(server.URL + "/api/v3/workflow/task-packages")
 	require.NoError(t, err)

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
+	"github.com/go-go-golems/scraper/pkg/workflowv3observations"
 	"github.com/google/uuid"
 )
 
@@ -184,6 +185,13 @@ func (a *Application) ListRuns(ctx context.Context, status string, limit int) ([
 		})
 	}
 	return ret, nil
+}
+
+func (a *Application) Observations(ctx context.Context, runID workflowv3.RunID) (workflowv3observations.ObservationSet, error) {
+	if a == nil || a.Store == nil {
+		return workflowv3observations.ObservationSet{}, fmt.Errorf("workflow application is required")
+	}
+	return workflowv3observations.Project(ctx, a.Store, runID, workflowv3observations.DefaultProjectOptions())
 }
 
 func (a *Application) Show(ctx context.Context, runID workflowv3.RunID) (RunView, error) {
