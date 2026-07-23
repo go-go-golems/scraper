@@ -11,6 +11,7 @@ import (
 	"github.com/go-go-golems/scraper/pkg/taskpackages/cookbooklinear"
 	"github.com/go-go-golems/scraper/pkg/taskpackages/researchfixture"
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
+	"github.com/go-go-golems/scraper/pkg/workflowv3observations"
 	"github.com/go-go-golems/scraper/pkg/workflowv3product"
 	"github.com/stretchr/testify/require"
 )
@@ -107,6 +108,19 @@ func TestProductResearchFixtureRetainsRetryAndFailedOperation(t *testing.T) {
 	body, err := workflowv3.ReadArtifact(ctx, app.Artifacts, view.Snapshot.Outputs["result"])
 	require.NoError(t, err)
 	require.JSONEq(t, `{"published":true,"value":"RUNNER FIXTURE"}`, string(body))
+	observations, err := app.Observations(ctx, "research-fixture")
+	require.NoError(t, err)
+	require.Equal(t, "scraper-workflow-observations/v1", observations.SchemaVersion)
+	require.Equal(t, 1.0, observationNumeric(t, observations.Metrics, "workflow.retries"))
+	require.Equal(t, 1.0, observationNumeric(t, observations.Metrics, "workflow.external_operations.failed"))
+	require.Len(t, observations.ArtifactLineage, 1)
+	require.NoError(t, app.Close())
+	reopened, err := workflowv3product.Open(ctx, config)
+	require.NoError(t, err)
+	defer func() { _ = reopened.Close() }()
+	afterRestart, err := reopened.Observations(ctx, "research-fixture")
+	require.NoError(t, err)
+	require.Equal(t, observations, afterRestart)
 }
 
 func TestProductPersistsTypedTaskFailure(t *testing.T) {
@@ -130,6 +144,10 @@ func TestProductPersistsTypedTaskFailure(t *testing.T) {
 	require.Len(t, view.Snapshot.Attempts, 2)
 	require.Equal(t, "CUSTOMER_DUPLICATE_ID", view.Snapshot.Attempts[1].Failure.Code)
 	require.False(t, view.Snapshot.Attempts[1].Failure.Retryable)
+	observations, err := app.Observations(ctx, "failed-run")
+	require.NoError(t, err)
+	require.Equal(t, "failed", observations.RunStatus)
+	require.Equal(t, 1.0, observationNumeric(t, observations.Metrics, "workflow.failed_job_attempts"))
 }
 
 func TestProductCancelFencesRunBeforeWorkerStart(t *testing.T) {
@@ -151,6 +169,24 @@ func TestProductCancelFencesRunBeforeWorkerStart(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "canceled", view.Snapshot.Status)
 	require.Empty(t, view.Snapshot.Attempts)
+	observations, err := app.Observations(ctx, "cancel-run")
+	require.NoError(t, err)
+	require.Equal(t, "canceled", observations.RunStatus)
+	require.Equal(t, 0.0, observationNumeric(t, observations.Metrics, "workflow.job_attempts"))
+}
+
+func observationNumeric(t *testing.T, metrics []workflowv3observations.Metric, name string) float64 {
+	t.Helper()
+	for _, metric := range metrics {
+		if metric.Name != name {
+			continue
+		}
+		var value float64
+		require.NoError(t, json.Unmarshal(metric.Value, &value))
+		return value
+	}
+	t.Fatalf("observation metric %s not found", name)
+	return 0
 }
 
 func TestProductAuthoringIsPureAndPackageGenerationIsDeterministic(t *testing.T) {

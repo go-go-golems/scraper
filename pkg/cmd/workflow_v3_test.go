@@ -75,6 +75,9 @@ func TestWorkflowV3CLIValidateCompileRunInspectAndCancel(t *testing.T) {
 	require.Contains(t, showOutput, `"planDigest"`)
 	followOutput := executeScraper(t, ctx, append([]string{"workflow"}, append(fixture.flags(), "runs", "follow", "cli-run")...)...)
 	require.Contains(t, followOutput, `"status":"succeeded"`)
+	observationsOutput := executeScraper(t, ctx, append([]string{"workflow"}, append(fixture.flags(), "observations", "cli-run")...)...)
+	require.Contains(t, observationsOutput, `"schemaVersion": "scraper-workflow-observations/v1"`)
+	require.Contains(t, observationsOutput, `"name": "workflow.elapsed"`)
 
 	executeScraper(t, ctx, append([]string{"workflow"}, append(fixture.flags(), "submit", fixture.script, "--inputs", fixture.inputs, "--run-id", "cancel-run")...)...)
 	cancelOutput := executeScraper(t, ctx, append([]string{"workflow"}, append(fixture.flags(), "runs", "cancel", "cancel-run")...)...)
@@ -111,6 +114,7 @@ func TestWorkflowV3CLICompilesResearchctlDomainConfig(t *testing.T) {
 	require.Equal(t, researchrunner.DomainSchemaVersion, execution.SchemaVersion)
 	require.Equal(t, execution.Plan.CatalogDigest, execution.TaskCatalog.Digest)
 	require.Equal(t, researchfixture.Name, execution.TaskCatalog.Packages[0].Name)
+	require.True(t, execution.Observation.ExportCanonicalObservations)
 }
 
 func TestWorkflowV3CLIWorkerRecoversSubmittedRunAfterRestart(t *testing.T) {

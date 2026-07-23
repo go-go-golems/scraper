@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
+	"github.com/go-go-golems/scraper/pkg/workflowv3observations"
 	"github.com/go-go-golems/scraper/pkg/workflowv3product"
 )
 
@@ -264,6 +265,9 @@ func validateExecution(execution WorkflowExecution) error {
 	if !execution.Observation.ExportOutputs {
 		return contractError("RUNNER_OUTPUT_EXPORT_REQUIRED")
 	}
+	if !execution.Observation.ExportCanonicalObservations {
+		return contractError("RUNNER_OBSERVATIONS_REQUIRED")
+	}
 	return nil
 }
 
@@ -344,45 +348,11 @@ func exportTerminal(ctx context.Context, app *workflowv3product.Application, exe
 	if err := emit.frame(Frame{Type: "event", Event: &Event{Type: "workflow.terminal", ProducerSequence: &sequence, ProducerOccurredAt: time.Now().UTC().Format(time.RFC3339Nano), Payload: terminalPayload}}); err != nil {
 		return err
 	}
-	metrics := []struct {
-		name  string
-		value int
-	}{
-		{"workflow.attempts", len(view.Snapshot.Attempts)},
-		{"workflow.retries", view.Operations.RetryAttempts},
+	observations, err := app.Observations(ctx, runID)
+	if err != nil {
+		return infrastructureError("RUNNER_OBSERVATIONS")
 	}
-	if view.Operations.ExternalOperations != nil {
-		metrics = append(metrics,
-			struct {
-				name  string
-				value int
-			}{"workflow.external_operations.admitted", view.Operations.ExternalOperations.Admitted},
-			struct {
-				name  string
-				value int
-			}{"workflow.external_operations.failed", view.Operations.ExternalOperations.Outcomes[workflowv3.ExternalOperationOutcomeFailed]},
-			struct {
-				name  string
-				value int
-			}{"workflow.external_operations.succeeded", view.Operations.ExternalOperations.Outcomes[workflowv3.ExternalOperationOutcomeSucceeded]},
-		)
-	}
-	for _, current := range metrics {
-		value := float64(current.value)
-		if err := emit.frame(Frame{Type: "metric", Metric: &Metric{Name: current.name, Scope: "workflow", Value: json.RawMessage(fmt.Sprintf("%d", current.value)), NumericProjection: &value, Unit: "count", Metadata: json.RawMessage(`{}`)}}); err != nil {
-			return err
-		}
-	}
-	attempts := make([]map[string]any, 0, len(view.Snapshot.Attempts))
-	for _, attempt := range view.Snapshot.Attempts {
-		current := map[string]any{"nodeKey": attempt.NodeKey, "number": attempt.Number, "status": attempt.Status, "registryGeneration": attempt.RegistryGeneration}
-		if attempt.Failure != nil {
-			current["failure"] = map[string]any{"class": attempt.Failure.Class, "code": attempt.Failure.Code, "retryable": attempt.Failure.Retryable}
-		}
-		attempts = append(attempts, current)
-	}
-	trace := mustJSON(map[string]any{"schemaVersion": "scraper-workflow-attempt-trace/v1", "workflowRunId": runID, "attempts": attempts})
-	if err := emit.frame(Frame{Type: "trace", Trace: &Trace{Kind: "scraper-workflow-attempts", Value: trace}}); err != nil {
+	if err := emitObservations(observations, emit, config); err != nil {
 		return err
 	}
 	if execution.Observation.ExportOutputs {
@@ -414,6 +384,64 @@ func exportTerminal(ctx context.Context, app *workflowv3product.Application, exe
 	finished := time.Now().UTC()
 	payload := mustJSON(map[string]any{"schemaVersion": "scraper-workflow-result/v1", "workflowRunId": runID, "planDigest": view.Snapshot.PlanDigest, "status": view.Snapshot.Status, "attempts": len(view.Snapshot.Attempts), "retries": view.Operations.RetryAttempts})
 	return emit.frame(Frame{Type: "complete", Complete: &Complete{Status: view.Snapshot.Status, ProducerFinishedAt: finished.Format(time.RFC3339Nano), Payload: payload}})
+}
+
+func emitObservations(observations workflowv3observations.ObservationSet, emit emitter, config Config) error {
+	for _, current := range observations.Metrics {
+		var numeric *float64
+		var text string
+		switch current.ValueKind {
+		case "integer":
+			var value int64
+			if err := json.Unmarshal(current.Value, &value); err != nil {
+				return infrastructureError("RUNNER_OBSERVATIONS")
+			}
+			projection := float64(value)
+			numeric = &projection
+		case "ratio":
+			var value workflowv3observations.Ratio
+			if err := json.Unmarshal(current.Value, &value); err != nil {
+				return infrastructureError("RUNNER_OBSERVATIONS")
+			}
+			if value.Denominator > 0 {
+				projection := float64(value.Numerator) / float64(value.Denominator)
+				numeric = &projection
+			}
+		case "string":
+			if err := json.Unmarshal(current.Value, &text); err != nil {
+				return infrastructureError("RUNNER_OBSERVATIONS")
+			}
+		default:
+			return infrastructureError("RUNNER_OBSERVATIONS")
+		}
+		metadata := mustJSON(map[string]any{
+			"schemaVersion": observations.SchemaVersion, "derivationVersion": observations.DerivationVersion,
+			"sourceDigest": observations.SourceDigest, "observationDigest": observations.Digest,
+			"valueKind": current.ValueKind, "boundary": current.Boundary, "coverage": observations.Coverage,
+		})
+		if err := emit.frame(Frame{Type: "metric", Metric: &Metric{Name: current.Name, Scope: current.Scope, Value: current.Value, NumericProjection: numeric, TextProjection: text, Unit: current.Unit, Metadata: metadata}}); err != nil {
+			return err
+		}
+	}
+	for _, current := range observations.Traces {
+		value := mustJSON(map[string]any{
+			"schemaVersion": current.SchemaVersion, "derivationVersion": observations.DerivationVersion,
+			"sourceDigest": observations.SourceDigest, "observationDigest": observations.Digest,
+			"truncated": current.Truncated, "value": json.RawMessage(current.Value),
+		})
+		if err := emit.frame(Frame{Type: "trace", Trace: &Trace{Kind: current.Kind, Value: value}}); err != nil {
+			return err
+		}
+	}
+	body, err := workflowv3.CanonicalJSON(observations)
+	if err != nil || int64(len(body)) > config.MaxExportBytes {
+		return infrastructureError("RUNNER_OBSERVATIONS")
+	}
+	metadata := mustJSON(map[string]any{"digest": observations.Digest, "sourceDigest": observations.SourceDigest, "workflowRunId": observations.RunID, "planDigest": observations.PlanDigest})
+	return emit.frame(Frame{Type: "artifact", Artifact: &Artifact{
+		Role: "workflow-evidence", Kind: "scraper-workflow-observations", Name: "workflow-observations.json",
+		SchemaVersion: observations.SchemaVersion, MediaType: "application/json", Metadata: metadata, Data: append(body, '\n'),
+	}})
 }
 
 func exportOperations(ctx context.Context, app *workflowv3product.Application, runID workflowv3.RunID, planDigest string, emit emitter, config Config) error {

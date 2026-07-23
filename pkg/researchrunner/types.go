@@ -92,8 +92,9 @@ type TaskCatalog struct {
 }
 
 type ObservationPolicy struct {
-	ExportOutputs            bool `json:"exportOutputs"`
-	ExportExternalOperations bool `json:"exportExternalOperations"`
+	ExportOutputs               bool `json:"exportOutputs"`
+	ExportExternalOperations    bool `json:"exportExternalOperations"`
+	ExportCanonicalObservations bool `json:"exportCanonicalObservations"`
 }
 
 type WorkflowExecution struct {

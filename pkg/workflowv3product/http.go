@@ -43,6 +43,19 @@ func NewHTTPHandler(app *Application, options HTTPOptions) (http.Handler, error)
 		}
 		writeHTTPJSON(writer, http.StatusOK, runs)
 	})
+	mux.HandleFunc("GET /api/v3/workflow/runs/{runID}/observations", func(writer http.ResponseWriter, request *http.Request) {
+		runID := strings.TrimSpace(request.PathValue("runID"))
+		if runID == "" {
+			writeHTTPError(writer, http.StatusBadRequest, "run ID is required")
+			return
+		}
+		observations, err := app.Observations(request.Context(), workflowv3.RunID(runID))
+		if err != nil {
+			writeHTTPError(writer, http.StatusConflict, err.Error())
+			return
+		}
+		writeHTTPJSON(writer, http.StatusOK, observations)
+	})
 	mux.HandleFunc("GET /api/v3/workflow/runs/{runID}", func(writer http.ResponseWriter, request *http.Request) {
 		runID := strings.TrimSpace(request.PathValue("runID"))
 		if runID == "" {

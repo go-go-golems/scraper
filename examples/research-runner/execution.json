@@ -130,6 +130,7 @@
   },
   "observation": {
     "exportOutputs": true,
-    "exportExternalOperations": true
+    "exportExternalOperations": true,
+    "exportCanonicalObservations": true
   }
 }
