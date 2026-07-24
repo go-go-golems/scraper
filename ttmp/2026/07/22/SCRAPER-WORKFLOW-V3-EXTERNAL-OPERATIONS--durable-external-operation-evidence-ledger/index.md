@@ -1,7 +1,7 @@
 ---
 Title: Durable External Operation Evidence Ledger
 Ticket: SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS
-Status: active
+Status: complete
 Topics:
     - workflow-v3
     - durability
@@ -12,11 +12,12 @@ Intent: long-term
 Owners: []
 RelatedFiles: []
 ExternalSources: []
-Summary: "Design ticket for generic, failure-durable external-call admission, measurement, accounting, export, and research custody in Workflow V3."
-LastUpdated: 2026-07-22T19:55:00-04:00
-WhatFor: "Coordinate implementation of a reusable external-operation evidence ledger across scraper Workflow V3, RAG evaluation, and researchctl custody."
-WhenToUse: "Use as the entry point for architecture, implementation tasks, decisions, and investigation history for external-operation evidence."
+Summary: Design ticket for generic, failure-durable external-call admission, measurement, accounting, export, and research custody in Workflow V3.
+LastUpdated: 2026-07-23T23:08:57.949123259-04:00
+WhatFor: Coordinate implementation of a reusable external-operation evidence ledger across scraper Workflow V3, RAG evaluation, and researchctl custody.
+WhenToUse: Use as the entry point for architecture, implementation tasks, decisions, and investigation history for external-operation evidence.
 ---
+
 
 # Durable External Operation Evidence Ledger
 

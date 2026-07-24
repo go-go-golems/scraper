@@ -13,26 +13,25 @@ DocType: design-doc
 Intent: long-term
 Owners: []
 RelatedFiles:
-    - Path: repo://pkg/workflowv3
-      Note: Canonical workflow IR plans bundles registries failures and artifact references
     - Path: repo://pkg/gojamodules/workflow
       Note: Safe authoring module and exact TypeScript contract
+    - Path: repo://pkg/testfixtures/workflowv3database
+      Note: Executable Slice 5 database workflow
+    - Path: repo://pkg/testfixtures/workflowv3http
+      Note: Executable Slice 3 HTTP workflow
+    - Path: repo://pkg/workflowv3
+      Note: Canonical workflow IR plans bundles registries failures and artifact references
     - Path: repo://pkg/workflowv3runtime
       Note: Lease-scoped task execution modules engine and dispatcher
     - Path: repo://pkg/workflowv3sqlite
       Note: Durable control-plane schema transactions and projections
-    - Path: repo://pkg/testfixtures/workflowv3linear
-      Note: Executable Slice 1 and 2 file workflow
-    - Path: repo://pkg/testfixtures/workflowv3http
-      Note: Executable Slice 3 HTTP workflow
-    - Path: repo://pkg/testfixtures/workflowv3database
-      Note: Executable Slice 5 database workflow
 ExternalSources: []
 Summary: Intern-oriented architectural guide to all twelve Workflow V3 vertical slices, including implemented evidence for Slices 1-9 and implementation contracts for Slices 10-12.
 LastUpdated: 2026-07-21T20:15:00-04:00
 WhatFor: Understand why each Workflow V3 slice exists, which architectural boundary it proves, how it changes durable state, and what evidence is required before advancing.
 WhenToUse: Read before implementing, reviewing, testing, or operating any Workflow V3 slice, and before changing canonical IR, SQLite state, worker registries, task capabilities, or RAG integration.
 ---
+
 
 # Workflow V3 Slices 1 Through 12 - Intern Architecture and Analysis Guide
 

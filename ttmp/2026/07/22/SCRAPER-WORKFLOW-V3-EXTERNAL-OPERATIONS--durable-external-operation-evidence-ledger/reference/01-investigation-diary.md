@@ -11,14 +11,6 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
-    - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/cmd/rag-ttc-v3-sweep/main.go
-      Note: Step 11 canonical per-cell operation JSONL and manifest custody
-    - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/internal/workflowv3ttc/module.go
-      Note: Host-only RAG operation dispatch (commit b728e0a)
-    - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/internal/workflowv3ttc/provider.go
-      Note: |-
-        Real failure path that motivated the reusable ledger
-        Step 9 RAG provider operation adapter (commits b728e0a 3bde483 0147ea2)
     - Path: repo://pkg/workflowv3/external_operation.go
       Note: Step 3 implementation and policy boundary (commit b637095)
     - Path: repo://pkg/workflowv3/external_operation_test.go
@@ -43,6 +35,7 @@ LastUpdated: 2026-07-22T19:55:00-04:00
 WhatFor: Preserve the investigation path, evidence, failures, design decisions, validation, and continuation instructions for the external-operation ledger ticket.
 WhenToUse: Read before resuming design or implementation work on SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS.
 ---
+
 
 
 
@@ -1008,3 +1001,7 @@ Error: load real provider host: RAG_PROMPT_MANIFEST_INVALID: RAG_PROMPT_MANIFEST
 
 ### Technical details
 - The real matrix remains 60 planned generation calls with 61 prior admissions and eight retry admissions; it is not allowed to run while either model or prompt manifest validation fails.
+
+## Closure: fixture and bounded real-provider acceptance
+
+The final gate passed in the RAG-owned adapter: bounded authorized generation, embedding, and reranking executed as `provider.* /v1` external operations with exact authority digests, admitted/failed/succeeded counts, usage settlement, retry evidence, redacted projections, and immutable artifact custody. Fake providers emitted no operation and reserved no provider budget. Scripted TTC subsequently carried failed-operation evidence through Researchctl and deterministic analysis. Scraper full/race tests and the post-legacy-cut built-binary smoke passed, so the generic ledger has both fixture and production-consumer evidence. No provider body, secret, or task input is present in canonical operation exports.

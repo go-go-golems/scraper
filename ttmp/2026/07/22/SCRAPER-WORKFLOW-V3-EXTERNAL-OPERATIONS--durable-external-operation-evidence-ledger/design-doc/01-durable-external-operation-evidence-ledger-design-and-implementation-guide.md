@@ -11,10 +11,6 @@ DocType: design-doc
 Intent: long-term
 Owners: []
 RelatedFiles:
-    - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/cmd/rag-ttc-v3-sweep/main.go
-      Note: Current successful-cell and failed-cell custody behavior
-    - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/internal/workflowv3ttc/provider.go
-      Note: Current provider-wall timer and failure measurement loss
     - Path: repo://pkg/workflowv3/external_operation.go
       Note: Closed generic external-operation contracts validation descriptor identity and host-only recorder interface (commit b637095)
     - Path: repo://pkg/workflowv3/external_operation_test.go
@@ -54,6 +50,7 @@ LastUpdated: 2026-07-22T19:55:00-04:00
 WhatFor: Guide implementation of a generic Workflow V3 external-operation ledger and its RAG and researchctl integration without leaking payloads or weakening lease and budget authority.
 WhenToUse: Read before changing Workflow V3 persistence, task-module APIs, provider instrumentation, operation evidence exports, or researchctl custody for network, model, browser, database, or subprocess calls.
 ---
+
 
 
 

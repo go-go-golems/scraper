@@ -15,14 +15,6 @@ Owners: []
 RelatedFiles:
     - Path: abs:///home/manuel/code/wesen/go-go-golems/go-go-goja/pkg/xgoja/sourcegraph/graph.go
       Note: Reusable source discovery and literal import resolution foundation
-    - Path: repo://pkg/engine/runner/runner.go
-      Note: Current string-keyed mutable runner registry that v3 must version seal and advertise
-    - Path: repo://pkg/js/runtime/executor.go
-      Note: Current per-operation Goja runtime and script loading baseline
-    - Path: repo://pkg/sites/manifest/loader.go
-      Note: Strict site manifest and script-root loading baseline
-    - Path: repo://pkg/workflow/executor.go
-      Note: Existing Go executor-to-runner adapter demonstrating language-independent engine contracts
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/scripts/05-js-task-bundle-registration-probe.mjs
       Note: Executable registration sealing and exact matching probe
 ExternalSources: []
@@ -31,6 +23,7 @@ LastUpdated: 2026-07-21T22:30:00Z
 WhatFor: Replace hypothetical built-in domain task modules with a robust extension system where developers can ship custom JavaScript task descriptors and implementations reproducibly across workers.
 WhenToUse: Read before implementing workflow task catalogs, JavaScript task execution, worker capability advertisement, task bundle packaging, dynamic registry reload, or custom domain tasks.
 ---
+
 
 
 # Reproducible JavaScript task bundles and worker registries

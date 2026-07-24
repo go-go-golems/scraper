@@ -13,12 +13,6 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
-    - Path: repo://pkg/engine/scheduler/scheduler.go
-      Note: Current scheduler baseline contrasted with continuous per-node dispatch walkthroughs
-    - Path: repo://pkg/workflow/context.go
-      Note: Current durable task/result/emission boundary contrasted with v3 typed tasks
-    - Path: repo://pkg/workflow/package.go
-      Note: Current Go package and initial-step builder baseline for job mapping
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md
       Note: Defines the proposed DSL contracts and durable execution invariants used by every example
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/02-reproducible-javascript-task-bundles-and-worker-registries.md
@@ -33,6 +27,7 @@ LastUpdated: 2026-07-21T21:00:00Z
 WhatFor: Teach and pressure-test workflow v3 with paired workflow scripts and executable task source that maps through descriptors, compiled plans, sealed worker registries, guarded host modules, durable attempts, and validated outputs.
 WhenToUse: Read when implementing the workflow module/compiler, writing workflow definitions, adding task providers, or reviewing how authored scripts become durable execution.
 ---
+
 
 
 

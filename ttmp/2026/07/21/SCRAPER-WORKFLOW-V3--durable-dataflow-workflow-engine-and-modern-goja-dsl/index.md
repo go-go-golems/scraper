@@ -1,7 +1,7 @@
 ---
 Title: Durable dataflow workflow engine and modern Goja DSL
 Ticket: SCRAPER-WORKFLOW-V3
-Status: active
+Status: complete
 Topics:
     - architecture
     - scheduler
@@ -15,10 +15,11 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: Ticket hub for the workflow-v3 architecture, JavaScript cookbook, evidence catalogue, experiments, and implementation diary.
-LastUpdated: 2026-07-21T17:50:00Z
+LastUpdated: 2026-07-23T23:08:58.152574752-04:00
 WhatFor: Navigate the complete design and examples for scraper's compact durable dataflow engine and modern Goja workflow DSL.
 WhenToUse: Start here when reviewing or implementing workflow v3.
 ---
+
 
 # Durable dataflow workflow engine and modern Goja DSL
 

@@ -11,8 +11,6 @@ DocType: analysis
 Intent: long-term
 Owners: []
 RelatedFiles:
-    - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/cmd/rag-ttc-v3-sweep/main.go
-      Note: Per-cell custody and researchctl export
     - Path: repo://pkg/workflowv3/external_operation.go
       Note: Privacy-safe external operation contract
     - Path: repo://pkg/workflowv3sqlite/external_operation.go
@@ -23,6 +21,7 @@ LastUpdated: 2026-07-22T17:20:35.33864348-04:00
 WhatFor: Prevent premature completion and provide the exact evidence/recheck plan for real qualification.
 WhenToUse: Before requesting authority, running a paid qualification, or closing SCRAPER-WORKFLOW-V3-EXTERNAL-OPERATIONS.
 ---
+
 
 
 # Completion Audit — Active, Not Complete

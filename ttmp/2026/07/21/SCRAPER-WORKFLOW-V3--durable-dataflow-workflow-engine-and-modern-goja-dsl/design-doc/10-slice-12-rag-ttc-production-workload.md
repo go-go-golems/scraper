@@ -12,22 +12,21 @@ DocType: design-doc
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: abs:///home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/researchctl/pkg/lab
+      Note: Generic experiment custody and immutable evidence boundary
+    - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/pkg/ragproviders/provider_set.go
+      Note: Provider and model profile authority
     - Path: repo://pkg/workflowv3/types.go
       Note: Generic exact plans refs resources retries budgets gates and isolation
     - Path: repo://pkg/workflowv3runtime/dispatcher.go
       Note: Work-conserving heterogeneous execution
-    - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/internal/preparationworkflow/workflow.go
-      Note: Existing durable RAG preparation semantics to migrate without weakening validation
-    - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/pkg/ragproviders/provider_set.go
-      Note: Provider and model profile authority
-    - Path: abs:///home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/researchctl/pkg/lab
-      Note: Generic experiment custody and immutable evidence boundary
 ExternalSources: []
 Summary: Implementation and operating contract for migrating the TTC real-provider study onto compact Workflow V3 execution, proving preflight, then publishing and evaluating a fresh admissible run.
 LastUpdated: 2026-07-22T01:15:00-04:00
 WhatFor: Freeze the final integrated acceptance workload before modifying RAG execution or spending provider budget.
 WhenToUse: Read before implementing the Workflow V3 RAG adapter, running TTC preflight, launching provider work, publishing prepared artifacts, evaluating quality, or writing the final report.
 ---
+
 
 # Slice 12 RAG TTC - Safe Real-Provider Production Workload
 
