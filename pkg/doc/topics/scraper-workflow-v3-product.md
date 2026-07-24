@@ -26,8 +26,7 @@ and bounded operational events. Artifact payloads remain in the configured
 content-addressed artifact root.
 
 The retained older site engine is available only for downstream migrations. Its
-worker moved to `scraper legacy worker run`. New generic workflow integrations
-must use the commands documented here and must not import `pkg/engine`.
+legacy worker and engine command trees were deleted. Workflow integrations must use the commands documented here; Workflow V3 is the only scheduling and persistence authority.
 
 ## Runnable example
 

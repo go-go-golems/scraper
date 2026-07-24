@@ -28,14 +28,16 @@ if grep -q -- '--engine-db' <<<"$help"; then
   exit 1
 fi
 
-legacy_help=$(GOWORK=off go run ./cmd/scraper legacy worker run --help)
-grep -q -- '--engine-db' <<<"$legacy_help"
+for removed in legacy engine api site; do
+  if GOWORK=off go run ./cmd/scraper "$removed" --help >/dev/null 2>&1; then
+    echo "ERROR: removed command remains available: $removed" >&2
+    exit 1
+  fi
+done
 
-# The old engine cannot be deleted while the repository still has production
-# callers. This is an explicit guard, not approval for new dependencies.
-legacy_callers=$( (rg -l "$legacy_import" pkg/api pkg/cmd pkg/js pkg/services pkg/sites pkg/workflow 2>/dev/null || true) | wc -l)
-if (( legacy_callers == 0 )); then
-  echo "ERROR: legacy deletion gate changed; update the ticket inventory before deleting" >&2
+legacy_callers=$( (rg -l "$legacy_import" --glob '*.go' --glob '!ttmp/**' . 2>/dev/null || true) | wc -l)
+if (( legacy_callers != 0 )); then
+  echo "ERROR: $legacy_callers local legacy importers remain" >&2
   exit 1
 fi
 
@@ -45,11 +47,11 @@ if [[ -n "${RAG_EVAL_REPO:-}" ]]; then
     exit 1
   fi
   downstream=$( (rg -l "$legacy_import" "$RAG_EVAL_REPO" --glob '*.go' 2>/dev/null || true) | wc -l)
-  if (( downstream == 0 )); then
-    echo "ERROR: downstream deletion gate changed; update the ticket inventory" >&2
+  if (( downstream != 0 )); then
+    echo "ERROR: $downstream downstream legacy importers remain" >&2
     exit 1
   fi
-  printf 'downstream legacy callers: %d\n' "$downstream"
+  printf 'downstream legacy callers: 0\n'
 fi
 
-printf 'Workflow V3 product cutover guard passed; local legacy callers: %d\n' "$legacy_callers"
+printf 'Workflow V3 sole-product guard passed; local legacy callers: 0\n'

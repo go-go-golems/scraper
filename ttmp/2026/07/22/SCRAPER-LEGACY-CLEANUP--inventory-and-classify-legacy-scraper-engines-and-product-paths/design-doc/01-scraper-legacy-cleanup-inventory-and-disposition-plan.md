@@ -16,12 +16,6 @@ RelatedFiles:
       Note: |-
         Current old-engine product command tree
         Current old-engine product command tree retained
-    - Path: repo://pkg/cmd/runtime_helpers.go
-      Note: |-
-        Current old store scheduler and runner construction
-        Current old store scheduler and runner construction retained
-    - Path: repo://pkg/engine/scheduler/scheduler.go
-      Note: Active legacy scheduler
     - Path: repo://pkg/gojamodules/workflow/authoring.go
       Note: Canonical Workflow V3 JavaScript authoring
     - Path: repo://pkg/workflowv3runtime/engine.go
@@ -34,6 +28,7 @@ LastUpdated: 2026-07-22T23:45:00-04:00
 WhatFor: Prevent blind deletion while planning a hard cut from the active site engine to Workflow V3.
 WhenToUse: Read before SCRAPER-WORKFLOW-V3-PRODUCT-CUTOVER and before deleting any old engine package.
 ---
+
 
 
 
