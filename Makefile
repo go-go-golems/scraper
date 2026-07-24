@@ -1,4 +1,4 @@
-.PHONY: all test test-go test-web build build-go build-web generate proto lint lintmax docker-lint golangci-lint-install gosec govulncheck goreleaser tag-major tag-minor tag-patch release install version clean dev-up dev-down dev-status dev-logs validate tidy bump-go-go-golems
+.PHONY: all test test-go build build-go generate lint lintmax docker-lint golangci-lint-install gosec govulncheck goreleaser tag-major tag-minor tag-patch release install version clean validate tidy bump-go-go-golems
 
 all: test build
 
@@ -13,29 +13,25 @@ GORELEASER_TARGET ?= --single-target
 GOLANGCI_LINT_VERSION ?= $(shell cat .golangci-lint-version)
 GOLANGCI_LINT_BIN ?= $(CURDIR)/.bin/golangci-lint
 GO_PACKAGES ?= ./...
-WEB_DIR ?= web
 DIST_DIR ?= dist
 
 version:
 	@echo $(VERSION)
 
-generate proto:
-	buf generate
+generate:
+	GOWORK=off go generate ./...
 
 tidy:
 	GOWORK=off go mod tidy
 
 validate: test build
 
-test: test-go test-web
+test: test-go
 
 test-go:
 	GOWORK=off go test $(GO_PACKAGES) -count=1
 
-test-web:
-	cd $(WEB_DIR) && pnpm test:unit -- --runInBand
-
-build: build-go build-web
+build: build-go
 
 build-go:
 	GOWORK=off go generate ./...
@@ -45,9 +41,6 @@ build-go:
 	CGO_ENABLED=0 GOWORK=off go build -trimpath -o $(DIST_DIR)/$(ISOLATION_LAUNCHER) ./cmd/$(ISOLATION_LAUNCHER)
 	GOWORK=off go build -trimpath -o $(DIST_DIR)/$(RESEARCH_RUNNER) ./cmd/$(RESEARCH_RUNNER)
 
-build-web:
-	cd $(WEB_DIR) && pnpm build
-
 docker-lint:
 	docker run --rm -v $(CURDIR):/app -w /app golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) golangci-lint run -v ./cmd/... ./pkg/...
 
@@ -56,14 +49,14 @@ golangci-lint-install:
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(dir $(GOLANGCI_LINT_BIN)) $(GOLANGCI_LINT_VERSION)
 
 lint: golangci-lint-install
-	$(GOLANGCI_LINT_BIN) run -v ./cmd/... ./pkg/...
+	GOWORK=off $(GOLANGCI_LINT_BIN) run -v ./cmd/... ./pkg/...
 
 lintmax: golangci-lint-install
-	$(GOLANGCI_LINT_BIN) run -v --max-same-issues=100 ./cmd/... ./pkg/...
+	GOWORK=off $(GOLANGCI_LINT_BIN) run -v --max-same-issues=100 ./cmd/... ./pkg/...
 
 gosec:
 	GOWORK=off go install github.com/securego/gosec/v2/cmd/gosec@latest
-	GOWORK=off gosec -exclude=G101,G304,G301,G306,G204 -exclude-dir=gen -exclude-dir=ttmp -exclude-dir=.history -exclude-dir=web/node_modules ./...
+	GOWORK=off gosec -exclude=G101,G304,G301,G306,G204 -exclude-dir=ttmp -exclude-dir=.history ./...
 
 govulncheck:
 	GOWORK=off go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -101,21 +94,7 @@ bump-go-go-golems:
 
 clean:
 	rm -rf $(DIST_DIR)
-	rm -rf $(WEB_DIR)/dist
 	rm -rf .bin
-
-# Local development stack. Requires devctl and Docker for Redis.
-dev-up:
-	devctl up
-
-dev-down:
-	devctl down
-
-dev-status:
-	devctl status --tail-lines 10
-
-dev-logs:
-	devctl logs --service api --follow
 
 .PHONY: logcopter-generate
 logcopter-generate:

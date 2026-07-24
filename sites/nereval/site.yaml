@@ -1,5 +1,0 @@
-name: nereval
-databaseFileName: nereval.db
-scriptsRoot: scripts
-verbsRoot: verbs
-sqlMigrationsRoot: migrations

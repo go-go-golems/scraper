@@ -6,9 +6,7 @@ append-only attempts, deterministic retries, cancellation fencing,
 content-addressed artifacts, typed task packages, bounded dispatch, and pure
 JavaScript authoring.
 
-The older site-oriented engine remains available only while downstream site and
-RAG cutovers are completed. Its worker is explicitly namespaced as
-`scraper legacy worker run`; new generic workflow code must use Workflow V3.
+The superseded site-oriented engine, dynamic site runtime, API, frontend, and duplicate scheduler/store were removed after downstream cutovers. Workflow V3 is the sole product lifecycle.
 
 ## Workflow V3 quickstart
 
@@ -151,24 +149,7 @@ The v2 runner contract preserves Researchctl run/attempt IDs and an opaque Scrap
 - `pkg/researchrunner/` — strict execution contract, lineage, observation projection, and cancellation bridge;
 - `pkg/taskpackages/` — versioned production task packages;
 - `examples/workflowv3/` — runnable authoring and input examples;
-- `pkg/doc/` — embedded operator and architecture help;
-- `pkg/engine/`, `pkg/workflow/`, `pkg/sites/`, `pkg/js/runtime/` — retained legacy system awaiting explicit downstream deletion gates;
-- `web/` — current frontend.
-
-## Legacy site workflows
-
-Existing site commands and API remain available during the migration:
-
-```bash
-./dist/scraper --sites-manifest-dir ./sites site js-demo run seed --help
-./dist/scraper api serve --help
-./dist/scraper legacy worker run --help
-./dist/scraper engine status --help
-```
-
-They are not the extension path for new generic workflows. Deletion requires
-the named site and RAG replacement tickets to pass their acceptance fixtures;
-no Workflow V3 compatibility adapter wraps the old engine.
+- `pkg/doc/` — embedded Workflow V3 operator and architecture help.
 
 ## Development and validation
 
@@ -179,14 +160,9 @@ make lint
 make logcopter-check
 ```
 
-The complete local stack remains available through `devctl up`; it currently
-hosts legacy API/frontend consumers until their separate cutover gates pass.
-
 Useful embedded documentation:
 
 ```bash
 ./dist/scraper help scraper-workflow-v3-product
 ./dist/scraper help scraper-workflow-v3-minimal-runtime
-./dist/scraper help scraper-architecture-overview
-./dist/scraper help scraper-new-developer-onboarding
 ```

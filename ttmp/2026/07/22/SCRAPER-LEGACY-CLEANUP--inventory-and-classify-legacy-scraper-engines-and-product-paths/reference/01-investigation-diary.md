@@ -199,3 +199,35 @@ The user approved the remove-now tables. Scraper's table contained no active pro
 
 ### Review guidance
 Confirm the repository has no implementation diff beyond this ticket update. The next destructive operation remains the separately gated V3 product hard cut.
+
+## Step 5: Execute the deferred whole-product hard cut
+
+### Prompt Context
+
+**User prompt (verbatim):** "Ok, continue working through the tickets until completion. Use a goal."
+
+**Assistant interpretation:** Continue through accepted replacement tickets and remove the old Scraper product only after every local and downstream owner has cut over.
+
+**Inferred user intent:** End with Workflow V3 as the sole engine, without aliases, compatibility services, or duplicate persistence and telemetry.
+
+### What I did and why
+
+The prior inventory found 49 production importers and correctly deferred deletion. Since then, the Workflow V3 product, observations, Researchctl runner, RAG execution, RAG intake, external-operation custody, reproducible analysis, and scripted TTC gates all passed. A fresh RAG search found zero imports of old Scraper packages.
+
+I deleted the old engine/store/scheduler/runners, convenience workflow package, site registry/manifests/scripts, JS operation runtime, API/services/types, metrics/runtime events/protobufs, frontend/Storybook output, and legacy dev stack in one tranche. Partial retention would preserve a second lifecycle. I simplified root bootstrap to a Workflow V3-only command tree and added a negative root test for `legacy`, `engine`, `api`, `site`, and `sites-manifest-dir`.
+
+I updated the product guard from “legacy must still exist” to the final invariant: zero local and downstream importers and absent old commands. Active README/help now describe only Workflow V3. `go mod tidy` removed Watermill, Redis, Sessionstream, Prometheus, WebSocket, protobuf, and other dependencies owned solely by the deleted product.
+
+### Failures and fixes
+
+1. Compile initially failed with `pattern tutorials/*: no matching files found` after obsolete tutorials were deleted. I narrowed the embed directive to retained topics.
+2. The first lint attempt used workspace mode and failed in the workspace's incompatible `goja_nodejs`/`goja` pair (`undefined: goja.IsNumber`). Go tests/build already passed in the repository's supported `GOWORK=off` mode. I fixed the Makefile lint/lintmax targets to enforce that same module boundary; lint then passed with zero issues.
+3. The old product guard intentionally failed conceptually because it required a legacy worker and nonzero callers. I converted it to a deletion guard and added RAG downstream verification.
+
+### Validation and review guidance
+
+Full tests passed; Workflow V3 runtime's real isolation suite completed in 82.820s. All binaries built. The built-binary tmux smoke completed a submitted run through a separately started worker, stable follow, read API, rejected unauthorized cancellation, and accepted bearer-authorized cancellation. The final guard reports zero local and downstream importers. Review the deleted package clusters, `pkg/cmd/root.go`, `Makefile`, module dependency reduction, and `analysis/02-deferred-hard-cut-closure-audit.md`.
+
+### Future guard
+
+Scraping functionality may return only as a closed versioned task package with Workflow V3 custody. Do not restore old row projections, manual operation retry, dynamic root site commands, old event truth, or a second frontend/API lifecycle.

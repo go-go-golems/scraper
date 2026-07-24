@@ -275,9 +275,6 @@ GOWORK=off go test -race \
   ./pkg/workflowv3runtime \
   ./pkg/workflowv3sqlite -count=1
 
-cd web && pnpm exec tsc --noEmit --skipLibCheck \
-  ../pkg/gojamodules/workflow/testdata/workflow.d.ts \
-  ../pkg/workflowv3runtime/testdata/workflow-task.d.ts
 ```
 
 The focused tests cover the 12,000-row file workflow, real local HTTP and
