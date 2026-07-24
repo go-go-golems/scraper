@@ -28,6 +28,6 @@
 - [x] Design and implement Slice 9 transactional budgets and authoritative projections <!-- t:gkai -->
 - [x] Design and implement Slice 10 durable lease-free approval gates <!-- t:ks62 -->
 - [x] Validate document audit and publish evidence for workflow v3 Slices 6 through 10 <!-- t:gjfd -->
-- [ ] Design and implement Slice 11 stronger process isolation <!-- t:xd44 -->
-- [ ] Design and implement Slice 12 real RAG TTC production workload <!-- t:rika -->
-- [ ] Validate audit publish and close Workflow V3 Slices 11 through 12 <!-- t:a8wf -->
+- [x] Design and implement Slice 11 stronger process isolation <!-- t:xd44 -->
+- [x] Design and implement Slice 12 real RAG TTC production workload <!-- t:rika -->
+- [x] Validate audit publish and close Workflow V3 Slices 11 through 12 <!-- t:a8wf -->

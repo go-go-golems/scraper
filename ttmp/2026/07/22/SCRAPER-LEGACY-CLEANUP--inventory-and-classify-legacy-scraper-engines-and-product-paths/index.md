@@ -1,7 +1,7 @@
 ---
 Title: Inventory and classify legacy Scraper engines and product paths
 Ticket: SCRAPER-LEGACY-CLEANUP
-Status: active
+Status: complete
 Topics:
     - scraper
     - workflow-v3
@@ -14,10 +14,11 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-07-22T21:37:41.693056977-04:00
+LastUpdated: 2026-07-23T23:08:58.374884236-04:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # Inventory and classify legacy Scraper engines and product paths
 

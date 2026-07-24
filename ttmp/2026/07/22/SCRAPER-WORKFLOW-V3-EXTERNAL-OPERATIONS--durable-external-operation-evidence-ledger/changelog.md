@@ -195,3 +195,8 @@ Step 28: non-submitting real preflight rejected stale TTC model-manifest identit
 
 Step 29: normalized ledger diary context and recorded current host identity failure chain
 
+
+## 2026-07-23
+
+Closed after bounded authorized provider generation embedding and reranking, fixture/privacy/retry/restart evidence, Researchctl projection, scripted TTC analysis, and final full/race acceptance.
+

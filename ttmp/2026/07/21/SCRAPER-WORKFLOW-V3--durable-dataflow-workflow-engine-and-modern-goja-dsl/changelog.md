@@ -333,3 +333,7 @@ Completed the evidence-backed Slices 6–10 requirement audit, normalized Slice 
 Implemented the first complete Slice 11 process-isolation tranche: canonical requested/effective policy and exact executor identity, JavaScript/DTS authoring, registry-generation pinning and rolling executor coexistence, additive SQLite attempt evidence and projections, static worker/launcher binaries, bounded canonical protocol, Bubblewrap namespaces, cgroup-v2 CPU/memory/process controls, fixed allowlisted tools, parent-only candidate publication, cancellation/fencing, worker-death retry, privacy, migration, and real integration evidence
 
 Added generic chained-map activation and post-reduction task composition required by the RAG-owned Slice 12 graph; pushed RAG commits 60309c8 and e2f86e7 with production-cardinality deterministic preparation, real ragoperators contracts, provider usage/cost adapter, budget activation, restart-safe publication gating, and prepared publication authority
+
+## 2026-07-23
+
+Closed Slices 11-12 after real process isolation, RAG preparation/query/provider workloads, scripted TTC, full/race/build/lint, and sole-product cutover acceptance.

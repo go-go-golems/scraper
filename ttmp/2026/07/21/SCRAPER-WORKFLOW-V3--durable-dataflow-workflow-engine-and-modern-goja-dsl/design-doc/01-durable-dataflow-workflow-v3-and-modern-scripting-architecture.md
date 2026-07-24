@@ -15,24 +15,12 @@ Owners: []
 RelatedFiles:
     - Path: abs:///home/manuel/workspaces/2026-07-13/rag-eval-ttc/rag-evaluation-system/pkg/gojamodules/rag/module.go
       Note: Modern Go-backed DSL handles validation explanation and compilation pattern
-    - Path: repo://pkg/engine/scheduler/scheduler.go
-      Note: Current fixed-cycle scheduler and WaitGroup barrier that workflow v3 replaces
-    - Path: repo://pkg/engine/store/sqlite/migrations/001_engine_core.sql
-      Note: Current globally keyed operations and inline workflow/operation JSON schema
-    - Path: repo://pkg/engine/store/sqlite/migrations/002_engine_runtime.sql
-      Note: Current dependencies leases mutable results and inline artifact BLOB schema
     - Path: repo://pkg/gojamodules/workflow
       Note: Implemented safe minimal require(workflow) authoring module and DTS
-    - Path: repo://pkg/js/runtime/executor.go
-      Note: Current execution-time mutable ctx surface and raw operation decoder
-    - Path: repo://pkg/sites/submitverbs/runtime.go
-      Note: Current independent submission ctx and raw operation decoder
     - Path: repo://pkg/testfixtures/workflowv3database
       Note: Reproducible Slice 5 authored workflow and bundle
     - Path: repo://pkg/testfixtures/workflowv3http
       Note: Reproducible Slice 3 authored workflow and bundle
-    - Path: repo://pkg/workflow/context.go
-      Note: Current typed Go step context and raw input/emission persistence boundary
     - Path: repo://pkg/workflowv3
       Note: Implemented canonical model compiler bundles registry failures and artifacts
     - Path: repo://pkg/workflowv3runtime
@@ -52,6 +40,7 @@ LastUpdated: 2026-07-21T22:30:00Z
 WhatFor: Implement scraper workflow v3 without repeating the source-bearing payload, fixed-cycle scheduling, untyped scripting, and observability defects found during the real-provider TTC preparation run.
 WhenToUse: Read before changing scraper persistence, scheduling, workflow APIs, Goja/xgoja integration, or adapting researchctl and RAG to durable workflow execution.
 ---
+
 
 
 

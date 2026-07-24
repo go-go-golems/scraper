@@ -4447,3 +4447,7 @@ map nonterminal until the final prefix. Focused SQLite expansion tests, the
 map test (28.48s), and bounded multi-level reduction test passed. The latest
 large-map storage evidence is `source=7561185 persistedSQLite=6619136
 ratio=0.8754`; payloads remain external.
+
+## Step 45: Close Slices 11 and 12 after convergence acceptance
+
+Slice 11's static Bubblewrap/cgroup executor, exact protocol, fencing, cancellation, resource controls, and privacy tests remain green in the final full and race suites. Slice 12 progressed beyond the diary's early preflight: RAG-owned preparation/query lowering, provider operations, Researchctl execution, reproducible analysis, intake cutover, scripted TTC, and bounded authorized provider acceptance all passed. The final Scraper full suite ran the real isolation package in 82.820 seconds; focused race completed in 33.685 seconds. After downstream import guards reached zero, the old engine was deleted and built-binary Workflow V3 submit/restart/follow/API-cancel acceptance passed. These results satisfy the final audit/publish gate; Workflow V3 is now the sole product lifecycle.

@@ -27,3 +27,7 @@ Completed approved no-delete cleanup result: reconfirmed no active production pa
 ## 2026-07-24
 
 Executed the deferred whole-product hard cut after all named gates passed: removed old engine workflow sites JS runtime API services metrics runtime events protobuf frontend and dev stack; Workflow V3 is the sole CLI worker API persistence observation and artifact lifecycle. Full tests build lint module tidy built-binary tmux smoke and zero-import guards pass.
+
+## 2026-07-23
+
+Closed after b3df00e deleted the superseded engine/site/API/frontend stack; zero local/downstream import guards and full/race/build/lint/built-binary smoke pass.

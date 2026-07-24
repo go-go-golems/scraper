@@ -12,4 +12,4 @@
 - [x] Integrate RAG generation and embedding providers with the generic recorder <!-- t:qfpd -->
 - [x] Publish per-cell operation evidence and deterministic failed-cell reductions <!-- t:q293 -->
 - [x] Map compact operation evidence into researchctl verified artifacts and metrics <!-- t:a77h -->
-- [ ] Validate fixture and bounded real-provider workflows before production use <!-- t:stdm -->
+- [x] Validate fixture and bounded real-provider workflows before production use <!-- t:stdm -->
