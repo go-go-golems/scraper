@@ -63,3 +63,14 @@ Step 7: derived readiness from value bindings, unified static/dynamic dependency
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/reduction.go — Dynamic reduction lowering
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/store.go — Plan validation and static lowering
 
+
+## 2026-08-23
+
+Step 8: centralized successful terminal reconciliation, output readiness, run.succeeded emission, immediate pass-through completion, and accurate submission status (commit 7f6e728).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/researchrunner/runner_test.go — End-to-end zero-work runner proof
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3product/service.go — Persisted submission status
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/reconcile.go — Authoritative completion predicate
+

@@ -24,6 +24,8 @@ RelatedFiles:
       Note: Product path/reference staging boundary and submission status
     - Path: repo://pkg/workflowv3sqlite/expansion.go
       Note: Dynamic map dependency lowering and map terminal transition
+    - Path: repo://pkg/workflowv3sqlite/reconcile.go
+      Note: Single transaction-local successful terminal state and output readiness owner (commit 7f6e728)
     - Path: repo://pkg/workflowv3sqlite/reduction.go
       Note: Dynamic reduction dependency lowering, capacity semantics, and reduction terminal transition
     - Path: repo://pkg/workflowv3sqlite/store.go
@@ -36,6 +38,7 @@ LastUpdated: 2026-08-23T19:45:00-04:00
 WhatFor: Understand, review, and implement the PR 10 correctness fixes without adding more duplicated workflow invariants.
 WhenToUse: Read before changing Researchctl input staging, set-input limits, Workflow V3 dependency compilation, scheduling readiness, or run terminal transitions.
 ---
+
 
 
 

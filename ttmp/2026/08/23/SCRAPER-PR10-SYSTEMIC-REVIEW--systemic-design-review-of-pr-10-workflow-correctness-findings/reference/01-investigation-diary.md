@@ -18,6 +18,8 @@ RelatedFiles:
       Note: Custody replacement and resolved-input bound regression tests (commit 5486f2e)
     - Path: repo://pkg/workflowv3/compiler_test.go
       Note: Set policy, consumer capacity, reduction bound, and pass-through tests (commit 2dfdee1)
+    - Path: repo://pkg/workflowv3product/application_test.go
+      Note: Immediate persisted submission status and scalar pass-through test (commit 7f6e728)
     - Path: repo://pkg/workflowv3sqlite/store_test.go
       Note: Direct set-input output projection regression test (commit 2dfdee1)
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md
@@ -33,6 +35,7 @@ LastUpdated: 2026-08-23T19:45:00-04:00
 WhatFor: Resume or review the evidence collection, architectural diagnosis, ticket writing, validation, and reMarkable delivery.
 WhenToUse: Read before implementing or reviewing the fixes proposed by SCRAPER-PR10-SYSTEMIC-REVIEW.
 ---
+
 
 
 
@@ -654,3 +657,97 @@ effective node dependencies
 ```
 
 Typed cycle vertices use `node:`, `map:`, `reduction:`, and `gate:` prefixes.
+
+## Step 8: Reconcile successful terminal state in one transaction-local owner
+
+This slice replaces four copies of run-success SQL with one transaction-local reconciler. It runs after creation, node completion, map publication, reduction publication, and gate approval; before changing status it proves every work category is complete and every declared scalar or set output is resolvable.
+
+Zero-work scalar and set pass-through workflows now become `succeeded` in the creation transaction, emit `run.created` followed by exactly one `run.succeeded`, and return their persisted status from the product submission API. A full Researchctl runner test proves the process no longer polls forever.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 4)
+
+**Assistant interpretation:** Implement the fourth accepted invariant boundary and prove immediate pass-through completion through store, product, and Researchctl layers.
+
+**Inferred user intent:** Eliminate lifecycle drift and ensure future work kinds have one place to participate in terminalization.
+
+**Commit (code):** `7f6e728c993675699dfc49b304256e99dbf83aef` — `fix: reconcile workflow terminal state centrally`
+
+### What I did
+
+- Added `pkg/workflowv3sqlite/reconcile.go`.
+- Centralized the successful completion predicate and output-resolvability checks.
+- Called reconciliation after `run.created` and every current successful work transition.
+- Removed duplicated success SQL from store, expansion, reduction, and gate files.
+- Added compare-and-set `run.succeeded` event emission.
+- Changed `Application.SubmitArtifacts` to return persisted snapshot status.
+- Added store tests for immediate set pass-through and exactly one success event.
+- Added product and full Researchctl tests for immediate scalar pass-through.
+- Repeated zero-work and normal completion tests twenty times before commit.
+
+### Why
+
+- Successful terminal state is derived from durable facts; it should not depend on which transition happened to run last.
+- A status transition is incomplete if a declared output cannot be resolved.
+- Submission responses must not claim `running` after creation already committed `succeeded`.
+
+### What worked
+
+- `TestRunnerCompletesPassThroughWithoutScheduledWork` completes, exports the original input, and produces terminal status `succeeded` without attempts.
+- Set pass-through snapshots return the submitted manifest and event order `run.created,run.succeeded`.
+- Existing node/map/reduction/gate suites passed against the central predicate.
+- Pre-commit full tests and lint passed; runtime integration took 84.907 seconds.
+
+### What didn't work
+
+- N/A. Focused and repeated lifecycle tests passed on the first run.
+
+### What I learned
+
+- The gate subsystem already had a private completion helper, confirming the need for centralization; other transition files had independently copied the same SQL.
+- Output readiness is a useful final invariant check and naturally covers pass-through refs.
+- Emitting success only after a compare-and-set winner makes terminal evidence idempotent.
+
+### What was tricky to build
+
+- Reconciliation must use the caller's transaction. Querying through `s.db` would escape the uncommitted transition and could observe stale state or deadlock under SQLite's immediate transaction mode.
+- Gate outputs may be approved without an artifact for control-only use; if such a gate is a declared data output, reconciliation correctly requires a decision ref.
+- The completion predicate preserves special budget-gate semantics: inactive pending budget gates do not block, but waiting/rejected/expired/canceled activation gates do.
+
+### What warrants a second pair of eyes
+
+- Review whether `run.succeeded` should become part of any externally versioned observation vocabulary; current tests accept it and canonical evidence naturally includes it.
+- Review output-readiness error handling: a missing output rolls back the transition that would have completed the run, surfacing an invariant defect rather than committing an unusable success.
+- Consider whether terminal timestamps should become an explicit run column in a future schema revision.
+
+### What should be done in the future
+
+- Every future durable work kind must extend `reconcileRunStateTx` and the topology matrix in the same change.
+
+### Code review instructions
+
+- Start at `pkg/workflowv3sqlite/reconcile.go`.
+- Verify each call occurs after its domain event and before transaction commit.
+- Review pass-through tests in `store_test.go`, `application_test.go`, and `runner_test.go`.
+- Run:
+
+```bash
+go test ./pkg/workflowv3sqlite -run 'PassThrough|PersistsAppendOnly' -count=20
+go test ./pkg/workflowv3product -run 'ImmediatelyCompletes' -count=20
+go test ./pkg/researchrunner -run 'PassThroughWithoutScheduledWork' -count=10
+```
+
+### Technical details
+
+Reconciliation order:
+
+```text
+persist domain transition
+append domain event
+prove all work complete
+prove all outputs resolvable
+CAS run running -> succeeded
+append run.succeeded if CAS won
+commit once
+```
