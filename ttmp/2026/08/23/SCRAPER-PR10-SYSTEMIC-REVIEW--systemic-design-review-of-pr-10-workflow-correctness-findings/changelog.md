@@ -51,3 +51,15 @@ Step 6: added explicit set-input maxItems contracts, compiler consumer/capacity 
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/types.go — Canonical ingress cardinality contract
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/store.go — Direct set-input output resolution
 
+
+## 2026-08-23
+
+Step 7: derived readiness from value bindings, unified static/dynamic dependency lowering, validated typed cross-kind cycles, and rejected structurally invalid digest-valid plans (commit b0cdd1b).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/dependencies.go — Single dependency semantics owner
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/expansion.go — Dynamic map lowering
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/reduction.go — Dynamic reduction lowering
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/store.go — Plan validation and static lowering
+

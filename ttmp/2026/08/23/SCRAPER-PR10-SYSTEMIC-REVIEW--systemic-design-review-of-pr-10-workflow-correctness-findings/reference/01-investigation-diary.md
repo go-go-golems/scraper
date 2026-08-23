@@ -563,3 +563,94 @@ map-output.maxItems <= chained-map.maxItems
 set-or-map maxItems <= reduction FanIn^MaxLevels
 runner archive item count <= set-input.maxItems
 ```
+
+## Step 7: Derive readiness from data bindings and validate the complete graph
+
+This slice removes the requirement that authors repeat a `node-output` binding with `.after(...)`. Compilation now emits the canonical union of data-derived node producers and explicit control-only dependencies, while one typed acyclicity analysis covers nodes, maps, reductions, gates, source chains, and budget gates.
+
+The same dependency helper now lowers static and dynamically materialized work. `CreateRun` validates a decoded plan's dependency structure in addition to its digest, preventing a cross-process caller from supplying a digest-valid plan that omits a producer edge.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 4)
+
+**Assistant interpretation:** Implement the third accepted invariant boundary so dataflow and scheduling cannot disagree, including externally supplied plans and dynamic workers.
+
+**Inferred user intent:** Prevent premature leasing and deadlocks without forcing workflow authors to manually synchronize schedule annotations with value references.
+
+**Commit (code):** `b0cdd1b7f69bceefb6afd9acede2be9437d22b08` — `fix: derive workflow readiness from data bindings`
+
+### What I did
+
+- Added `pkg/workflowv3/dependencies.go` with canonical `EffectiveNodeDependencies`.
+- Replaced separate node-only and node/gate cycle checks with one deterministic typed graph.
+- Included map source, reduction source, value-binding, gate, control, and budget-gate edges.
+- Compiled effective static `PlanNode.DependsOn` from bindings plus control edges.
+- Added `ValidatePlanDependencies` for digest-valid cross-process plans.
+- Reused the same helper when materializing map children and reduction partition nodes.
+- Updated store dependency persistence defensively to derive the union again.
+- Clarified in embedded documentation that `.after` is control-only.
+- Added tests for inferred blocking, cross-kind cycles, and a digest-valid plan missing its derived edge.
+
+### Why
+
+- A data binding already identifies its producer and must be authoritative for readiness.
+- Plan digest validation proves bytes are unchanged; it does not prove those bytes encode a valid scheduling contract.
+- Dynamic and static work should not have separate dependency semantics.
+
+### What worked
+
+- The existing store fixture now omits explicit `DependsOn`; a second lease attempt returns nil until the producer completes.
+- A node/reduction cycle is rejected before persistence with `dependency cycle`.
+- A recomputed, digest-valid plan with the inferred dependency removed is rejected as `dependencies are not canonical`.
+- Ten repeated focused runs of dependency compiler/store tests passed.
+- Full pre-commit tests and lint passed; runtime integration took 80.424 seconds.
+
+### What didn't work
+
+- N/A. The first implementation compiled and passed focused tests after formatting.
+
+### What I learned
+
+- Existing SQLite tables are adequate lowering targets; semantic unification did not require a storage migration.
+- Cross-process plan validation is necessary even when plans usually originate from the local compiler.
+- Sorting and deduplication in the shared helper preserves deterministic plan digests when a data edge is also explicitly listed as a control dependency.
+
+### What was tricky to build
+
+- The graph spans static and template work kinds. A map/reduction template may depend on static node, gate, reduction, or upstream map state even though its concrete children do not exist at compile time.
+- Budget claims use different IR and plan types; dependency validation projects only the approval-gate identity needed for graph analysis.
+- The store still uses specialized readiness tables, so shared semantic analysis must lower into node, gate, and reduction projections without pretending the SQL schema is a single graph table.
+
+### What warrants a second pair of eyes
+
+- Review cycle diagnostics: they are deterministic and identify typed keys, but could later be shortened to the minimal repeated segment for operator readability.
+- Review whether duplicate work keys in hand-constructed plans need an additional explicit validator beyond existing compile guarantees and database constraints.
+- Review defense-in-depth classification for an impossible unresolved input after a valid lease; this slice prevents the known path but does not yet introduce run quarantine.
+
+### What should be done in the future
+
+- If blocked-reason explanations need richer UI detail, expose dependency edge reason/path from the pure analysis rather than reconstructing it from SQL.
+
+### Code review instructions
+
+- Start at `pkg/workflowv3/dependencies.go`.
+- Follow `Compile` into `Store.CreateRun`, then dynamic lowering in `expansion.go` and `reduction.go`.
+- Run:
+
+```bash
+go test ./pkg/workflowv3 -run 'Dependency|CrossKind' -count=10
+go test ./pkg/workflowv3sqlite -run 'PersistsAppendOnly|DigestValidPlan' -count=10
+```
+
+### Technical details
+
+Dependency rule:
+
+```text
+effective node dependencies
+  = explicit control-only DependsOn
+  union every node-output producer in Bindings
+```
+
+Typed cycle vertices use `node:`, `map:`, `reduction:`, and `gate:` prefixes.
