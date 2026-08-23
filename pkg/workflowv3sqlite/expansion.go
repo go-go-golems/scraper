@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/go-go-golems/scraper/pkg/workflowv3"
@@ -390,17 +389,7 @@ INSERT INTO v3_map_items(
 			[]any{runID, mapKey, item.Key, itemIndex, nodeKey}, item.Value); err != nil {
 			return nil, fmt.Errorf("insert map item %s: %w", item.Key, err)
 		}
-		dependencies := map[workflowv3.NodeKey]struct{}{}
-		for _, binding := range bindings {
-			if binding.Source == "node-output" {
-				dependencies[binding.NodeKey] = struct{}{}
-			}
-		}
-		dependencyKeys := make([]string, 0, len(dependencies))
-		for dependency := range dependencies {
-			dependencyKeys = append(dependencyKeys, string(dependency))
-		}
-		sort.Strings(dependencyKeys)
+		dependencyKeys := workflowv3.EffectiveNodeDependencies(bindings, nil)
 		for _, binding := range bindings {
 			if binding.Source == "gate-output" {
 				if _, err := tx.ExecContext(ctx, `

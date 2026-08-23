@@ -52,9 +52,8 @@ func testIR() WorkflowIR {
 				},
 			},
 			{
-				Key:       "validate",
-				Task:      TaskKey{Kind: "cookbook.linear.validate-dataset", Version: "v1"},
-				DependsOn: []NodeKey{"normalize"},
+				Key:  "validate",
+				Task: TaskKey{Kind: "cookbook.linear.validate-dataset", Version: "v1"},
 				Bindings: map[string]ValueRef{
 					"dataset": {
 						Source: "node-output", NodeKey: "normalize", Port: "dataset",
@@ -87,6 +86,7 @@ func TestCompilePinsExactIdentityAndIsDeterministic(t *testing.T) {
 	require.Equal(t, TaskABI, first.Nodes[0].Implementation.ABI)
 	require.Equal(t, ResourceCPUDefault, first.Nodes[0].ResourceClass)
 	require.Equal(t, RetryPolicy{MaxAttempts: 1}, first.Nodes[0].Retry)
+	require.Equal(t, []NodeKey{"normalize"}, first.Nodes[1].DependsOn)
 }
 
 func TestValidateIRRejectsSchemaMismatch(t *testing.T) {
@@ -103,6 +103,39 @@ func TestValidateIRRejectsDependencyCycle(t *testing.T) {
 	ir.Nodes[0].DependsOn = []NodeKey{"validate"}
 	err := ValidateIR(ir, testCatalog(t))
 	require.ErrorContains(t, err, "cycle")
+}
+
+func TestValidateIRRejectsCrossKindDependencyCycle(t *testing.T) {
+	catalog, err := NewCatalog(
+		TaskSpec{
+			Identity: ImplementationIdentity{TaskKey: TaskKey{Kind: "cycle.publish", Version: "v1"}, BundleDigest: testBundleDigest, Entrypoint: "tasks.cjs#publish", ABI: TaskABI},
+			Inputs:   map[string]string{"count": "count/v1"}, Outputs: map[string]string{"aux": "aux/v1"},
+		},
+		TaskSpec{
+			Identity: ImplementationIdentity{TaskKey: TaskKey{Kind: "cycle.reduce", Version: "v1"}, BundleDigest: testBundleDigest, Entrypoint: "tasks.cjs#reduce", ABI: TaskABI},
+			Inputs:   map[string]string{"partition": ReductionPartitionSchemaV1, "aux": "aux/v1"}, Outputs: map[string]string{"count": "count/v1"},
+		},
+	)
+	require.NoError(t, err)
+	ir := WorkflowIR{
+		Schema: IRSchema, Name: "cross-kind-cycle",
+		SetInputs: []IRSetInput{{Name: "counts", ItemSchema: "count/v1", ManifestSchema: ItemManifestSchemaV1, Policy: SetInputPolicy{MaxItems: 8}}},
+		Nodes: []IRNode{{
+			Key: "publish", Task: TaskKey{Kind: "cycle.publish", Version: "v1"},
+			Bindings: map[string]ValueRef{"count": {Source: "reduction-output", ReduceKey: "merge", Schema: "count/v1"}},
+		}},
+		Reductions: []IRReduce{{
+			Key: "merge", Source: SetRef{Source: "set-input", Name: "counts", ItemSchema: "count/v1", ManifestSchema: ItemManifestSchemaV1},
+			PartitionTask: TaskKey{Kind: "cycle.reduce", Version: "v1"},
+			Bindings: map[string]ValueRef{
+				"partition": {Source: "reduction-partition", ReduceKey: "merge", Schema: ReductionPartitionSchemaV1},
+				"aux":       {Source: "node-output", NodeKey: "publish", Port: "aux", Schema: "aux/v1"},
+			},
+			Policy: ReducePolicy{FanIn: 2, MaxLevels: 3},
+		}},
+		Outputs: []IROutput{{Name: "count", Value: ValueRef{Source: "reduction-output", ReduceKey: "merge", Schema: "count/v1"}}},
+	}
+	require.ErrorContains(t, ValidateIR(ir, catalog), "dependency cycle")
 }
 
 func TestCatalogRejectsUnsupportedABI(t *testing.T) {

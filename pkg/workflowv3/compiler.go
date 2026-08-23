@@ -2,7 +2,6 @@ package workflowv3
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -213,13 +212,6 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 			seenDeps[dependency] = struct{}{}
 		}
 	}
-	if err := validateAcyclic(ir.Nodes); err != nil {
-		return err
-	}
-	if err := validateGateAcyclic(ir.Nodes, ir.Gates); err != nil {
-		return err
-	}
-
 	mapOutputs := make(map[string]SetRef, len(ir.Maps))
 	mapMaxItems := make(map[string]int, len(ir.Maps))
 	for _, mapped := range ir.Maps {
@@ -467,6 +459,9 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 	if len(ir.Outputs) == 0 && len(ir.SetOutputs) == 0 {
 		return fmt.Errorf("workflow requires at least one output")
 	}
+	if err := validateWorkflowAcyclic(ir); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -507,7 +502,7 @@ func Compile(ir WorkflowIR, catalog *Catalog) (WorkflowPlan, error) {
 			Key:            node.Key,
 			Implementation: spec.Identity,
 			Bindings:       cloneBindings(node.Bindings),
-			DependsOn:      append([]NodeKey(nil), node.DependsOn...),
+			DependsOn:      EffectiveNodeDependencies(node.Bindings, node.DependsOn),
 			InputSchemas:   cloneStringMap(spec.Inputs),
 			OutputSchemas:  cloneStringMap(spec.Outputs),
 			Modules:        append([]string(nil), spec.Modules...),
@@ -673,95 +668,6 @@ func ReductionCapacity(policy ReducePolicy) int {
 		capacity *= policy.FanIn
 	}
 	return capacity
-}
-
-func validateGateAcyclic(nodes []IRNode, gates []IRGate) error {
-	dependencies := map[string][]string{}
-	for _, node := range nodes {
-		key := "node:" + string(node.Key)
-		for _, dependency := range node.DependsOn {
-			dependencies[key] = append(dependencies[key], "node:"+string(dependency))
-		}
-		for _, binding := range node.Bindings {
-			if binding.Source == "gate-output" {
-				dependencies[key] = append(dependencies[key], "gate:"+string(binding.GateKey))
-			}
-		}
-		if node.Budget != nil && node.Budget.ApprovalGate != "" {
-			dependencies[key] = append(dependencies[key], "gate:"+string(node.Budget.ApprovalGate))
-		}
-	}
-	for _, gate := range gates {
-		key := "gate:" + string(gate.Key)
-		for _, dependency := range gate.DependsOn {
-			dependencies[key] = append(dependencies[key], "node:"+string(dependency))
-		}
-	}
-	state := map[string]int{}
-	var visit func(string) error
-	visit = func(key string) error {
-		switch state[key] {
-		case 1:
-			return fmt.Errorf("workflow gate dependency cycle includes %q", key)
-		case 2:
-			return nil
-		}
-		state[key] = 1
-		for _, dependency := range dependencies[key] {
-			if err := visit(dependency); err != nil {
-				return err
-			}
-		}
-		state[key] = 2
-		return nil
-	}
-	keys := make([]string, 0, len(dependencies))
-	for key := range dependencies {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		if err := visit(key); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateAcyclic(nodes []IRNode) error {
-	dependencies := make(map[NodeKey][]NodeKey, len(nodes))
-	for _, node := range nodes {
-		dependencies[node.Key] = append([]NodeKey(nil), node.DependsOn...)
-	}
-	state := map[NodeKey]int{}
-	var visit func(NodeKey) error
-	visit = func(key NodeKey) error {
-		switch state[key] {
-		case 1:
-			return fmt.Errorf("workflow dependency cycle includes %q", key)
-		case 2:
-			return nil
-		}
-		state[key] = 1
-		for _, dependency := range dependencies[key] {
-			if err := visit(dependency); err != nil {
-				return err
-			}
-		}
-		state[key] = 2
-		return nil
-	}
-	keys := make([]string, 0, len(nodes))
-	for _, node := range nodes {
-		keys = append(keys, string(node.Key))
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		if err := visit(NodeKey(key)); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func cloneBindings(input map[string]ValueRef) map[string]ValueRef {

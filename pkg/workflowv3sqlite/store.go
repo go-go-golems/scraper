@@ -80,6 +80,9 @@ func (s *Store) CreateRun(ctx context.Context, runID workflowv3.RunID, plan work
 	if err := validatePlanDigest(plan); err != nil {
 		return err
 	}
+	if err := workflowv3.ValidatePlanDependencies(plan); err != nil {
+		return fmt.Errorf("validate workflow v3 plan dependencies: %w", err)
+	}
 	if err := validateRunInputs(plan, inputs); err != nil {
 		return err
 	}
@@ -163,7 +166,7 @@ INSERT INTO v3_nodes(
 		}
 	}
 	for _, node := range plan.Nodes {
-		for _, dependency := range node.DependsOn {
+		for _, dependency := range workflowv3.EffectiveNodeDependencies(node.Bindings, node.DependsOn) {
 			if _, err := tx.ExecContext(ctx, `
 INSERT INTO v3_dependencies(run_id, node_key, dependency_key)
 VALUES (?, ?, ?)`, runID, node.Key, dependency); err != nil {

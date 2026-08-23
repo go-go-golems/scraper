@@ -304,12 +304,11 @@ VALUES (?, ?, ?)`, runID, nodeKey, binding.GateKey); err != nil {
 					return err
 				}
 			}
-			if binding.Source != "node-output" {
-				continue
-			}
+		}
+		for _, dependency := range workflowv3.EffectiveNodeDependencies(reduced.Bindings, nil) {
 			if _, err := tx.ExecContext(ctx, `
 INSERT OR IGNORE INTO v3_dependencies(run_id, node_key, dependency_key)
-VALUES (?, ?, ?)`, runID, nodeKey, binding.NodeKey); err != nil {
+VALUES (?, ?, ?)`, runID, nodeKey, dependency); err != nil {
 				return err
 			}
 		}

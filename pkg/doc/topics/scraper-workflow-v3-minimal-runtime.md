@@ -44,7 +44,9 @@ module, then use:
   `workflow.compile`.
 
 The JavaScript builder produces the same canonical Go IR as direct Go
-construction. Compilation pins task kind, task version, bundle digest,
+construction. Data bindings automatically create producer readiness edges;
+`job.after(otherJob)` is only needed for control ordering when no output is
+consumed. Compilation pins task kind, task version, bundle digest,
 entrypoint, task ABI, schemas, declared modules, resource class, retry policy,
 catalog digest, IR digest, and plan digest.
 

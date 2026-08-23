@@ -65,7 +65,6 @@ func storeFixture(t *testing.T, source string) (*workflowv3.SealedRegistry, work
 						Schema: "dataset/v1",
 					},
 				},
-				DependsOn: []workflowv3.NodeKey{"normalize"},
 			},
 		},
 		Outputs: []workflowv3.IROutput{{
@@ -231,6 +230,9 @@ func TestStorePersistsAppendOnlyAttemptsAndReopens(t *testing.T) {
 	first, err := store.LeaseNext(ctx, registry, now, time.Minute)
 	require.NoError(t, err)
 	require.Equal(t, workflowv3.NodeKey("normalize"), first.NodeKey)
+	blocked, err := store.LeaseNext(ctx, registry, now, time.Minute)
+	require.NoError(t, err)
+	require.Nil(t, blocked, "consumer bound to producer output must not lease concurrently")
 	inputs, err := store.ResolveInputs(ctx, *first)
 	require.NoError(t, err)
 	require.Equal(t, "source/v1", inputs["source"].Schema)
@@ -282,6 +284,24 @@ func TestSnapshotResolvesDirectSetInputOutput(t *testing.T) {
 	snapshot, err := store.Snapshot(ctx, "set-pass-through")
 	require.NoError(t, err)
 	require.Equal(t, manifest, snapshot.Outputs["items"])
+}
+
+func TestCreateRunRejectsDigestValidPlanMissingDerivedDependency(t *testing.T) {
+	ctx := context.Background()
+	_, plan := storeFixture(t, "dependency-contract")
+	plan.Nodes[1].DependsOn = nil
+	withoutDigest := plan
+	withoutDigest.Digest = ""
+	digest, err := workflowv3.Digest(withoutDigest)
+	require.NoError(t, err)
+	plan.Digest = digest
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, store.Close()) }()
+	err = store.CreateRun(ctx, "invalid-dependencies", plan, map[string]workflowv3.ArtifactRef{
+		"source": artifactRef("source/v1", "dependency-contract"),
+	}, time.Now().UTC())
+	require.ErrorContains(t, err, "dependencies are not canonical")
 }
 
 func TestStoreRejectsStaleCompletionAfterCancel(t *testing.T) {
