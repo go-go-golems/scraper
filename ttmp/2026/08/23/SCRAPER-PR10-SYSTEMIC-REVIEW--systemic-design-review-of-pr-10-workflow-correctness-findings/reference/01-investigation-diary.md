@@ -865,3 +865,64 @@ Requirement audit:
 | Set input without direct map | `SetInputPolicy.MaxItems`; reduction capacity; direct set output | `TestRunnerStagesSetInputFromExplicitPolicy`, pass-through/compiler tests |
 | Producer dependencies | `EffectiveNodeDependencies`, typed graph, plan validation | inferred lease blocking, cross-kind cycle, malformed-plan tests |
 | Zero-work workflow | `reconcileRunStateTx` at creation and transitions | store/product/runner pass-through and single-event tests |
+
+## Step 10: Publish the completed implementation record
+
+This step publishes a new implementation bundle without overwriting the earlier review-only PDF. The bundle captures the completed code mapping, all diary steps through final validation, closed tasks, and the ticket changelog.
+
+The separate name preserves any annotations on the original review document while making the final implementation evidence available in the same reMarkable ticket directory.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 4)
+
+**Assistant interpretation:** Finish the ticket workflow with a durable implementation record after code, tests, commits, and audit are complete.
+
+**Inferred user intent:** Keep the off-device review package synchronized with the completed implementation without destroying prior annotations.
+
+### What I did
+
+- Ran a five-document bundle dry-run.
+- Uploaded `SCRAPER PR10 Systemic Correctness Implementation.pdf` with a depth-two table of contents.
+- Used a distinct name instead of `--force` against the earlier review bundle.
+
+### Why
+
+- The original ticket request included reMarkable delivery.
+- Non-overwriting delivery preserves the review artifact and any annotations.
+
+### What worked
+
+```text
+OK: uploaded SCRAPER PR10 Systemic Correctness Implementation.pdf -> /ai/2026/08/23/SCRAPER-PR10-SYSTEMIC-REVIEW
+```
+
+### What didn't work
+
+- N/A. Dry-run, rendering, and upload succeeded without reauthentication.
+
+### What I learned
+
+- Revision-specific bundle names are safer than forced replacement once a document may have been annotated.
+
+### What was tricky to build
+
+- Delivery occurs after the implementation diary is otherwise complete; this final local step records the upload evidence without replacing the just-uploaded bundle solely to include its own receipt.
+
+### What warrants a second pair of eyes
+
+- N/A for code correctness; review the uploaded PDF only for rendering/layout quality if desired.
+
+### What should be done in the future
+
+- Use a new revision name for any later follow-up rather than overwriting either current PDF.
+
+### Code review instructions
+
+- Read the implementation bundle after the original review bundle, or start directly at the implementation outcome and Steps 5–9.
+
+### Technical details
+
+- Remote directory: `/ai/2026/08/23/SCRAPER-PR10-SYSTEMIC-REVIEW`.
+- New bundle: `SCRAPER PR10 Systemic Correctness Implementation.pdf`.
+- Original preserved bundle: `SCRAPER PR10 Systemic Correctness Review.pdf`.
