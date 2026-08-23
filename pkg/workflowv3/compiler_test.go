@@ -156,6 +156,7 @@ func TestCompileMapPinsTemplateAndSetIdentity(t *testing.T) {
 		Schema: IRSchema, Name: "mapped-customers",
 		SetInputs: []IRSetInput{{
 			Name: "customers", ItemSchema: "customer/v1", ManifestSchema: ItemManifestSchemaV1,
+			Policy: SetInputPolicy{MaxItems: 2000},
 		}},
 		Maps: []IRMap{{
 			Key: "normalize", Source: SetRef{
@@ -206,7 +207,7 @@ func TestCompileReductionPinsBoundedHomogeneousTemplate(t *testing.T) {
 			Key: "finalize", Task: TaskKey{Kind: "finalize", Version: "v1"},
 			Bindings: map[string]ValueRef{"count": {Source: "reduction-output", ReduceKey: "merge-counts", Schema: "word-count/v1"}},
 		}},
-		SetInputs: []IRSetInput{{Name: "documents", ItemSchema: "document/v1", ManifestSchema: ItemManifestSchemaV1}},
+		SetInputs: []IRSetInput{{Name: "documents", ItemSchema: "document/v1", ManifestSchema: ItemManifestSchemaV1, Policy: SetInputPolicy{MaxItems: 100}}},
 		Maps: []IRMap{{
 			Key: "count-documents", Source: SetRef{Source: "set-input", Name: "documents", ItemSchema: "document/v1", ManifestSchema: ItemManifestSchemaV1},
 			ItemTask: TaskKey{Kind: "count", Version: "v1"},
@@ -233,6 +234,13 @@ func TestCompileReductionPinsBoundedHomogeneousTemplate(t *testing.T) {
 	invalid.Reductions = append([]IRReduce(nil), ir.Reductions...)
 	invalid.Reductions[0].Policy.FanIn = 1
 	require.ErrorContains(t, ValidateIR(invalid, catalog), "invalid reduction policy")
+
+	tooLarge := ir
+	tooLarge.SetInputs = append([]IRSetInput(nil), ir.SetInputs...)
+	tooLarge.SetInputs[0].Policy.MaxItems = 4097
+	tooLarge.Maps = append([]IRMap(nil), ir.Maps...)
+	tooLarge.Maps[0].Policy.MaxItems = 4097
+	require.ErrorContains(t, ValidateIR(tooLarge, catalog), "capacity 4096 is smaller than source contract 4097")
 }
 
 func TestValidateIRRejectsInvalidMapContracts(t *testing.T) {
@@ -246,7 +254,7 @@ func TestValidateIRRejectsInvalidMapContracts(t *testing.T) {
 	require.NoError(t, err)
 	base := WorkflowIR{
 		Schema: IRSchema, Name: "map",
-		SetInputs: []IRSetInput{{Name: "items", ItemSchema: "item/v1", ManifestSchema: ItemManifestSchemaV1}},
+		SetInputs: []IRSetInput{{Name: "items", ItemSchema: "item/v1", ManifestSchema: ItemManifestSchemaV1, Policy: SetInputPolicy{MaxItems: 100}}},
 		Maps: []IRMap{{
 			Key: "mapped", Source: SetRef{Source: "set-input", Name: "items", ItemSchema: "item/v1", ManifestSchema: ItemManifestSchemaV1},
 			ItemTask: TaskKey{Kind: "map-item", Version: "v1"},
@@ -269,4 +277,33 @@ func TestValidateIRRejectsInvalidMapContracts(t *testing.T) {
 	wrongOutput := base
 	wrongOutput.SetOutputs = []IRSetOutput{{Name: "results", Value: SetRef{Source: "map-output", MapKey: "mapped", ItemSchema: "wrong/v1", ManifestSchema: ItemManifestSchemaV1}}}
 	require.ErrorContains(t, ValidateIR(wrongOutput, catalog), "schema mismatch")
+
+	missingInputBound := base
+	missingInputBound.SetInputs = append([]IRSetInput(nil), base.SetInputs...)
+	missingInputBound.SetInputs[0].Policy = SetInputPolicy{}
+	require.ErrorContains(t, ValidateIR(missingInputBound, catalog), "max items must be positive")
+
+	consumerTooSmall := base
+	consumerTooSmall.SetInputs = append([]IRSetInput(nil), base.SetInputs...)
+	consumerTooSmall.SetInputs[0].Policy.MaxItems = 101
+	require.ErrorContains(t, ValidateIR(consumerTooSmall, catalog), "smaller than source contract")
+}
+
+func TestCompileAcceptsBoundedSetInputPassThrough(t *testing.T) {
+	ir := WorkflowIR{
+		Schema: IRSchema, Name: "set-pass-through",
+		SetInputs: []IRSetInput{{
+			Name: "items", ItemSchema: "item/v1", ManifestSchema: ItemManifestSchemaV1,
+			Policy: SetInputPolicy{MaxItems: 10},
+		}},
+		SetOutputs: []IRSetOutput{{
+			Name: "items", Value: SetRef{Source: "set-input", Name: "items", ItemSchema: "item/v1", ManifestSchema: ItemManifestSchemaV1},
+		}},
+	}
+	plan, err := Compile(ir, testCatalog(t))
+	require.NoError(t, err)
+	require.Equal(t, 10, plan.SetInputs[0].Policy.MaxItems)
+	require.Empty(t, plan.Nodes)
+	require.Empty(t, plan.Maps)
+	require.Empty(t, plan.Reductions)
 }

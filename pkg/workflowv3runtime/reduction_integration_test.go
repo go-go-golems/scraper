@@ -118,7 +118,7 @@ func TestReductionLevelMaterializationIsIdempotentAcrossConnections(t *testing.T
 	plan, err := workflowv3.Compile(workflowv3.WorkflowIR{
 		Schema: workflowv3.IRSchema, Name: "direct-reduction",
 		Inputs: []workflowv3.IRInput{}, Nodes: []workflowv3.IRNode{},
-		SetInputs: []workflowv3.IRSetInput{{Name: "counts", ItemSchema: "word-count/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1}},
+		SetInputs: []workflowv3.IRSetInput{{Name: "counts", ItemSchema: "word-count/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1, Policy: workflowv3.SetInputPolicy{MaxItems: 100}}},
 		Reductions: []workflowv3.IRReduce{{
 			Key: "merge-counts", Source: workflowv3.SetRef{Source: "set-input", Name: "counts", ItemSchema: "word-count/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1},
 			PartitionTask: workflowv3.TaskKey{Kind: "cookbook.word-count.merge", Version: "v1"},

@@ -128,10 +128,15 @@ type IRNode struct {
 	Isolation *IsolationPolicy    `json:"isolation,omitempty"`
 }
 
+type SetInputPolicy struct {
+	MaxItems int `json:"maxItems"`
+}
+
 type IRSetInput struct {
-	Name           string `json:"name"`
-	ItemSchema     string `json:"itemSchema"`
-	ManifestSchema string `json:"manifestSchema"`
+	Name           string         `json:"name"`
+	ItemSchema     string         `json:"itemSchema"`
+	ManifestSchema string         `json:"manifestSchema"`
+	Policy         SetInputPolicy `json:"policy"`
 }
 
 type MapPolicy struct {

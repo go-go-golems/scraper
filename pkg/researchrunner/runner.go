@@ -345,7 +345,7 @@ func resolveInputs(ctx context.Context, execution WorkflowExecution, resolved []
 		if !ok || resolvedInput.Reference.SchemaVersion != SetInputArchiveSchema {
 			return nil, contractError("RUNNER_INPUT_SCHEMA")
 		}
-		ref, err := stageSetInput(ctx, app, execution.Plan, name, setInput, body)
+		ref, err := stageSetInput(ctx, app, setInput, body)
 		if err != nil {
 			return nil, err
 		}
@@ -401,18 +401,12 @@ func readVerifiedInput(input ResolvedInput, maxBytes int64) ([]byte, error) {
 	return body, nil
 }
 
-func stageSetInput(ctx context.Context, app *workflowv3product.Application, plan workflowv3.WorkflowPlan, name string, input workflowv3.IRSetInput, body []byte) (workflowv3.ArtifactRef, error) {
+func stageSetInput(ctx context.Context, app *workflowv3product.Application, input workflowv3.IRSetInput, body []byte) (workflowv3.ArtifactRef, error) {
 	var archive SetInputArchive
 	if err := decodeStrict(body, &archive); err != nil || archive.SchemaVersion != SetInputArchiveSchema || archive.ItemSchema != input.ItemSchema || archive.ManifestSchema != input.ManifestSchema {
 		return workflowv3.ArtifactRef{}, contractError("RUNNER_SET_INPUT_ARCHIVE")
 	}
-	maxItems := 0
-	for _, mapped := range plan.Maps {
-		if mapped.Source.Source == "set-input" && mapped.Source.Name == name && (maxItems == 0 || mapped.Policy.MaxItems < maxItems) {
-			maxItems = mapped.Policy.MaxItems
-		}
-	}
-	if maxItems < 1 || len(archive.Items) > maxItems {
+	if input.Policy.MaxItems < 1 || len(archive.Items) > input.Policy.MaxItems {
 		return workflowv3.ArtifactRef{}, contractError("RUNNER_SET_INPUT_LIMIT")
 	}
 	items := make([]workflowv3.ManifestItem, 0, len(archive.Items))

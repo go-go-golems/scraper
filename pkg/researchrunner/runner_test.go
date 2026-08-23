@@ -236,7 +236,7 @@ func TestDomainProjectionRejectsWorkflowNamesAndNonfiniteValues(t *testing.T) {
 	require.ErrorContains(t, emitDomainProjection(DomainProjection{Traces: []Trace{{Kind: "domain.item", Value: json.RawMessage(`{"value":"1234"}`)}, {Kind: "domain.item", Value: json.RawMessage(`{"value":"5678"}`)}}}, emit, 20), "RUNNER_DOMAIN_PROJECTION_LIMIT")
 }
 
-func TestRunnerStagesBoundedSetInputArchive(t *testing.T) {
+func TestRunnerStagesSetInputFromExplicitPolicy(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
@@ -249,8 +249,8 @@ func TestRunnerStagesBoundedSetInputArchive(t *testing.T) {
 	defer func() { _ = app.Close() }()
 	archive := SetInputArchive{SchemaVersion: SetInputArchiveSchema, ItemSchema: "query/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1, Items: []SetInputArchiveItem{{Key: "q1", MediaType: "application/json", Data: []byte(`{"id":"q1"}`)}, {Key: "q2", MediaType: "application/json", Data: []byte(`{"id":"q2"}`)}}}
 	body := mustJSON(archive)
-	plan := workflowv3.WorkflowPlan{SetInputs: []workflowv3.IRSetInput{{Name: "queries", ItemSchema: "query/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1}}, Maps: []workflowv3.PlanMap{{Key: "queries", Source: workflowv3.SetRef{Source: "set-input", Name: "queries", ItemSchema: "query/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1}, Policy: workflowv3.MapPolicy{PageSize: 2, MaxItems: 2, MaxMaterializedAhead: 2}}}}
-	ref, err := stageSetInput(ctx, app, plan, "queries", plan.SetInputs[0], body)
+	plan := workflowv3.WorkflowPlan{SetInputs: []workflowv3.IRSetInput{{Name: "queries", ItemSchema: "query/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1, Policy: workflowv3.SetInputPolicy{MaxItems: 2}}}}
+	ref, err := stageSetInput(ctx, app, plan.SetInputs[0], body)
 	require.NoError(t, err)
 	manifestBody, err := workflowv3.ReadArtifact(ctx, app.Artifacts, ref)
 	require.NoError(t, err)
@@ -261,7 +261,7 @@ func TestRunnerStagesBoundedSetInputArchive(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{"id":"q1"}`, string(itemBody))
 	archive.Items = append(archive.Items, SetInputArchiveItem{Key: "q3", MediaType: "application/json", Data: []byte(`{}`)})
-	_, err = stageSetInput(ctx, app, plan, "queries", plan.SetInputs[0], mustJSON(archive))
+	_, err = stageSetInput(ctx, app, plan.SetInputs[0], mustJSON(archive))
 	require.ErrorContains(t, err, "RUNNER_SET_INPUT_LIMIT")
 }
 

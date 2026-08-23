@@ -39,7 +39,7 @@ func budgetedMapFixture(t *testing.T) (*workflowv3.SealedRegistry, workflowv3.Wo
 	}
 	plan, err := workflowv3.Compile(workflowv3.WorkflowIR{
 		Schema: workflowv3.IRSchema, Name: "budget-map",
-		SetInputs: []workflowv3.IRSetInput{{Name: "items", ItemSchema: "item/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1}},
+		SetInputs: []workflowv3.IRSetInput{{Name: "items", ItemSchema: "item/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1, Policy: workflowv3.SetInputPolicy{MaxItems: 2}}},
 		Budgets:   []workflowv3.BudgetAccount{{Account: "provider", PolicyDigest: "sha256:" + strings.Repeat("1", 64), Limits: []workflowv3.BudgetAmount{{Dimension: "requests", Units: 1}}}},
 		Maps: []workflowv3.IRMap{{
 			Key: "mapped", Source: workflowv3.SetRef{Source: "set-input", Name: "items", ItemSchema: "item/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1},
@@ -74,7 +74,7 @@ func budgetedReductionFixture(t *testing.T) (*workflowv3.SealedRegistry, workflo
 	claim := &workflowv3.BudgetClaim{Account: "provider", OnExhausted: workflowv3.BudgetExhaustBlock, Reserve: []workflowv3.BudgetAmount{{Dimension: "requests", Units: 1}}}
 	plan, err := workflowv3.Compile(workflowv3.WorkflowIR{
 		Schema: workflowv3.IRSchema, Name: "budget-reduce",
-		SetInputs: []workflowv3.IRSetInput{{Name: "items", ItemSchema: "item/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1}},
+		SetInputs: []workflowv3.IRSetInput{{Name: "items", ItemSchema: "item/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1, Policy: workflowv3.SetInputPolicy{MaxItems: 8}}},
 		Budgets:   []workflowv3.BudgetAccount{{Account: "provider", PolicyDigest: "sha256:" + strings.Repeat("2", 64), Limits: []workflowv3.BudgetAmount{{Dimension: "requests", Units: 1}}}},
 		Reductions: []workflowv3.IRReduce{{
 			Key: "reduced", Source: workflowv3.SetRef{Source: "set-input", Name: "items", ItemSchema: "item/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1},

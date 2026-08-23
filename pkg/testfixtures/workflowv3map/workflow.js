@@ -5,6 +5,7 @@ const definition = workflow.define("lazy-map-transform", (plan) => {
   const records = plan.inputSet("records", {
     itemSchema: "map-record/v1",
     manifestSchema: "scraper-workflow-item-manifest/v1",
+    maxItems: 2000,
   });
   const normalized = plan.map(
     "normalize-records",

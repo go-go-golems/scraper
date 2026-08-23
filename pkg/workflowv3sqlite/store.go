@@ -993,14 +993,21 @@ FROM v3_reductions WHERE run_id = ? AND reduce_key = ? AND status = 'published'`
 		snapshot.Outputs[output.Name] = ref
 	}
 	for _, output := range plan.SetOutputs {
-		if output.Value.Source != "map-output" {
-			return workflowv3.RunSnapshot{}, fmt.Errorf("unsupported set output source %q", output.Value.Source)
-		}
-		row := s.db.QueryRowContext(ctx, `
+		var row *sql.Row
+		switch output.Value.Source {
+		case "set-input":
+			row = s.db.QueryRowContext(ctx, `
+SELECT schema_id, digest, media_type, size_bytes, locator
+FROM v3_run_inputs WHERE run_id = ? AND name = ?`, runID, output.Value.Name)
+		case "map-output":
+			row = s.db.QueryRowContext(ctx, `
 SELECT output_schema, output_digest, output_media_type, output_size_bytes,
   output_locator
 FROM v3_expansions WHERE run_id = ? AND map_key = ? AND status = 'published'`,
-			runID, output.Value.MapKey)
+				runID, output.Value.MapKey)
+		default:
+			return workflowv3.RunSnapshot{}, fmt.Errorf("unsupported set output source %q", output.Value.Source)
+		}
 		ref, err := scanRef(row)
 		if err == sql.ErrNoRows && snapshot.Status != "succeeded" {
 			continue

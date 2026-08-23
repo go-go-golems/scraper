@@ -5,6 +5,7 @@ const definition = workflow.define("bounded-word-count", (plan) => {
   const documents = plan.inputSet("documents", {
     itemSchema: "word-document/v1",
     manifestSchema: "scraper-workflow-item-manifest/v1",
+    maxItems: 512,
   });
   const counts = plan.map(
     "count-documents",

@@ -258,6 +258,32 @@ func TestStorePersistsAppendOnlyAttemptsAndReopens(t *testing.T) {
 	require.Equal(t, registry.Generation(), snapshot.Attempts[0].RegistryGeneration)
 }
 
+func TestSnapshotResolvesDirectSetInputOutput(t *testing.T) {
+	ctx := context.Background()
+	registry, _ := storeFixture(t, "pass-through")
+	catalog, err := registry.Catalog()
+	require.NoError(t, err)
+	plan, err := workflowv3.Compile(workflowv3.WorkflowIR{
+		Schema: workflowv3.IRSchema, Name: "set-pass-through",
+		SetInputs: []workflowv3.IRSetInput{{
+			Name: "items", ItemSchema: "item/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1,
+			Policy: workflowv3.SetInputPolicy{MaxItems: 10},
+		}},
+		SetOutputs: []workflowv3.IRSetOutput{{
+			Name: "items", Value: workflowv3.SetRef{Source: "set-input", Name: "items", ItemSchema: "item/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1},
+		}},
+	}, catalog)
+	require.NoError(t, err)
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, store.Close()) }()
+	manifest := artifactRef(workflowv3.ItemManifestSchemaV1, "set-pass-through")
+	require.NoError(t, store.CreateRun(ctx, "set-pass-through", plan, map[string]workflowv3.ArtifactRef{"items": manifest}, time.Now().UTC()))
+	snapshot, err := store.Snapshot(ctx, "set-pass-through")
+	require.NoError(t, err)
+	require.Equal(t, manifest, snapshot.Outputs["items"])
+}
+
 func TestStoreRejectsStaleCompletionAfterCancel(t *testing.T) {
 	ctx := context.Background()
 	registry, plan := storeFixture(t, "first")

@@ -34,6 +34,7 @@ func mapStoreFixture(t *testing.T, policy workflowv3.MapPolicy) (*workflowv3.Sea
 		Inputs: []workflowv3.IRInput{}, Nodes: []workflowv3.IRNode{}, Outputs: []workflowv3.IROutput{},
 		SetInputs: []workflowv3.IRSetInput{{
 			Name: "items", ItemSchema: "item/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1,
+			Policy: workflowv3.SetInputPolicy{MaxItems: policy.MaxItems},
 		}},
 		Maps: []workflowv3.IRMap{{
 			Key:      "normalize",

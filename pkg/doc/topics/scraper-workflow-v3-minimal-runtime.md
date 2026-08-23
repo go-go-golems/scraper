@@ -33,7 +33,7 @@ module, then use:
 
 - `workflow.define(name, callback)`;
 - `plan.input(name, {schema})`;
-- `plan.inputSet(name, {itemSchema, manifestSchema})`;
+- `plan.inputSet(name, {itemSchema, manifestSchema, maxItems})`, where `maxItems` is the explicit external cardinality contract;
 - `plan.task(nodeKey, taskDescriptor, callback?)`;
 - `plan.map(name, set, itemCallback, mapPolicyCallback?)`;
 - `plan.reduce(name, set, partitionCallback, reducePolicyCallback?)`;

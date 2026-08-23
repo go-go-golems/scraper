@@ -68,7 +68,7 @@ declare module "workflow" {
     ): ValueRef<T>;
     inputSet<T = unknown>(
       name: string,
-      options: {itemSchema: string; manifestSchema: string},
+      options: {itemSchema: string; manifestSchema: string; maxItems: number},
     ): SetRef<T>;
     task(
       name: string,

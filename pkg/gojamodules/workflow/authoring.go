@@ -246,8 +246,12 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 		options := call.Argument(1).ToObject(vm)
 		itemSchema := strings.TrimSpace(options.Get("itemSchema").String())
 		manifestSchema := strings.TrimSpace(options.Get("manifestSchema").String())
-		if name == "" || itemSchema == "" || manifestSchema == "" {
-			panic(vm.NewTypeError("set input name, itemSchema, and manifestSchema are required"))
+		maxItems := 0
+		if value := options.Get("maxItems"); value != nil && !goja.IsUndefined(value) && !goja.IsNull(value) {
+			maxItems = int(value.ToInteger())
+		}
+		if name == "" || itemSchema == "" || manifestSchema == "" || maxItems < 1 {
+			panic(vm.NewTypeError("set input name, itemSchema, manifestSchema, and positive maxItems are required"))
 		}
 		for _, input := range b.ir.Inputs {
 			if input.Name == name {
@@ -261,6 +265,7 @@ func (b *planBuilder) object(vm *goja.Runtime) *goja.Object {
 		}
 		b.ir.SetInputs = append(b.ir.SetInputs, workflowv3.IRSetInput{
 			Name: name, ItemSchema: itemSchema, ManifestSchema: manifestSchema,
+			Policy: workflowv3.SetInputPolicy{MaxItems: maxItems},
 		})
 		return b.newSet(vm, workflowv3.SetRef{
 			Source: "set-input", Name: name, ItemSchema: itemSchema, ManifestSchema: manifestSchema,
@@ -765,7 +770,7 @@ func TypeScript() string {
     ): ValueRef<T>;
     inputSet<T = unknown>(
       name: string,
-      options: {itemSchema: string; manifestSchema: string},
+      options: {itemSchema: string; manifestSchema: string; maxItems: number},
     ): SetRef<T>;
     task(
       name: string,

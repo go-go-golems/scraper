@@ -77,6 +77,7 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 	}
 
 	setInputs := make(map[string]SetRef, len(ir.SetInputs))
+	setInputMaxItems := make(map[string]int, len(ir.SetInputs))
 	for _, input := range ir.SetInputs {
 		if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.ItemSchema) == "" ||
 			strings.TrimSpace(input.ManifestSchema) == "" {
@@ -88,10 +89,14 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		if _, exists := setInputs[input.Name]; exists {
 			return fmt.Errorf("duplicate workflow set input %q", input.Name)
 		}
+		if input.Policy.MaxItems < 1 {
+			return fmt.Errorf("workflow set input %q max items must be positive", input.Name)
+		}
 		setInputs[input.Name] = SetRef{
 			Source: "set-input", Name: input.Name, ItemSchema: input.ItemSchema,
 			ManifestSchema: input.ManifestSchema,
 		}
+		setInputMaxItems[input.Name] = input.Policy.MaxItems
 	}
 
 	nodeSpecs := make(map[NodeKey]TaskSpec, len(ir.Nodes))
@@ -216,6 +221,7 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 	}
 
 	mapOutputs := make(map[string]SetRef, len(ir.Maps))
+	mapMaxItems := make(map[string]int, len(ir.Maps))
 	for _, mapped := range ir.Maps {
 		if strings.TrimSpace(mapped.Key) == "" {
 			return fmt.Errorf("map key is required")
@@ -233,10 +239,17 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		if err != nil {
 			return fmt.Errorf("map %q source: %w", mapped.Key, err)
 		}
+		sourceMaxItems, err := setRefMaxItems(mapped.Source, setInputMaxItems, mapMaxItems)
+		if err != nil {
+			return fmt.Errorf("map %q source cardinality: %w", mapped.Key, err)
+		}
 		if mapped.Policy.PageSize < 1 || mapped.Policy.MaxItems < 1 ||
 			mapped.Policy.MaxMaterializedAhead < mapped.Policy.PageSize ||
 			mapped.Policy.PageSize > mapped.Policy.MaxItems {
 			return fmt.Errorf("map %q has invalid expansion policy", mapped.Key)
+		}
+		if mapped.Policy.MaxItems < sourceMaxItems {
+			return fmt.Errorf("map %q max items %d is smaller than source contract %d", mapped.Key, mapped.Policy.MaxItems, sourceMaxItems)
 		}
 		spec, ok := catalog.Lookup(mapped.ItemTask)
 		if !ok {
@@ -302,6 +315,7 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 			Source: "map-output", MapKey: mapped.Key, ItemSchema: outputSchema,
 			ManifestSchema: ItemManifestSchemaV1,
 		}
+		mapMaxItems[mapped.Key] = mapped.Policy.MaxItems
 	}
 
 	reductionOutputs := make(map[string]string, len(ir.Reductions))
@@ -325,8 +339,15 @@ func ValidateIR(ir WorkflowIR, catalog *Catalog) error {
 		if err != nil {
 			return fmt.Errorf("reduction %q source: %w", reduced.Key, err)
 		}
+		sourceMaxItems, err := setRefMaxItems(reduced.Source, setInputMaxItems, mapMaxItems)
+		if err != nil {
+			return fmt.Errorf("reduction %q source cardinality: %w", reduced.Key, err)
+		}
 		if reduced.Policy.FanIn < 2 || reduced.Policy.MaxLevels < 1 {
 			return fmt.Errorf("reduction %q has invalid reduction policy", reduced.Key)
+		}
+		if capacity := ReductionCapacity(reduced.Policy); capacity < sourceMaxItems {
+			return fmt.Errorf("reduction %q capacity %d is smaller than source contract %d", reduced.Key, capacity, sourceMaxItems)
 		}
 		spec, ok := catalog.Lookup(reduced.PartitionTask)
 		if !ok {
@@ -615,6 +636,43 @@ func setRefSchema(ref SetRef, inputs, maps map[string]SetRef) (SetRef, error) {
 	default:
 		return SetRef{}, fmt.Errorf("unsupported set ref source %q", ref.Source)
 	}
+}
+
+func setRefMaxItems(ref SetRef, inputs, maps map[string]int) (int, error) {
+	switch ref.Source {
+	case "set-input":
+		maximum, ok := inputs[ref.Name]
+		if !ok {
+			return 0, fmt.Errorf("unknown set input %q", ref.Name)
+		}
+		return maximum, nil
+	case "map-output":
+		maximum, ok := maps[ref.MapKey]
+		if !ok {
+			return 0, fmt.Errorf("unknown or forward map output %q", ref.MapKey)
+		}
+		return maximum, nil
+	default:
+		return 0, fmt.Errorf("unsupported set ref source %q", ref.Source)
+	}
+}
+
+// ReductionCapacity returns the largest source cardinality that can collapse
+// to one root within the compiled fan-in and level limits. It saturates at the
+// platform maximum integer instead of overflowing.
+func ReductionCapacity(policy ReducePolicy) int {
+	if policy.FanIn < 2 || policy.MaxLevels < 1 {
+		return 0
+	}
+	capacity := 1
+	maxInt := int(^uint(0) >> 1)
+	for range policy.MaxLevels {
+		if capacity > maxInt/policy.FanIn {
+			return maxInt
+		}
+		capacity *= policy.FanIn
+	}
+	return capacity
 }
 
 func validateGateAcyclic(nodes []IRNode, gates []IRGate) error {

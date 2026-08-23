@@ -155,6 +155,7 @@ const definition = workflow.define("mapped-customers", plan => {
   const customers = plan.inputSet("customers", {
     itemSchema: "customer/v1",
     manifestSchema: "scraper-workflow-item-manifest/v1",
+    maxItems: 2000,
   });
   const normalized = plan.map(
     "normalize",
@@ -225,6 +226,7 @@ module.exports = workflow.compile(workflow.define("word-count", plan => {
   const documents = plan.inputSet("documents", {
     itemSchema: "document/v1",
     manifestSchema: "scraper-workflow-item-manifest/v1",
+    maxItems: 100,
   });
   const counts = plan.map("count-documents", documents,
     document => tasks.count({document}),
@@ -292,11 +294,23 @@ module.exports = workflow.compile(workflow.define("bad", p => {
 
 	_, err = workflowmodule.Author(context.Background(), `
 const workflow = require("workflow");
+module.exports = workflow.compile(workflow.define("bad", p => {
+  const items = p.inputSet("items", {
+    itemSchema: "item/v1",
+    manifestSchema: "scraper-workflow-item-manifest/v1",
+  });
+  p.outputSet("results", items);
+}));`, catalog, module)
+	require.ErrorContains(t, err, "positive maxItems")
+
+	_, err = workflowmodule.Author(context.Background(), `
+const workflow = require("workflow");
 const tasks = require("map-tasks");
 module.exports = workflow.compile(workflow.define("bad", p => {
   const items = p.inputSet("items", {
     itemSchema: "item/v1",
     manifestSchema: "scraper-workflow-item-manifest/v1",
+    maxItems: 100,
   });
   const mapped = p.map("mapped", items, value => ({value}));
   p.outputSet("results", mapped);
