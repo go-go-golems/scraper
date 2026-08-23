@@ -1,7 +1,7 @@
 ---
 Title: Investigation diary
 Ticket: SCRAPER-PR10-SYSTEMIC-REVIEW
-Status: active
+Status: complete
 Topics:
     - scraper
     - workflow-v3
@@ -751,3 +751,117 @@ CAS run running -> succeeded
 append run.succeeded if CAS won
 commit once
 ```
+
+## Step 9: Audit all review requirements and close implementation
+
+This step validates the complete corrective series as one system rather than relying only on per-commit tests. The final tree passes workspace-mode tests/build, module-mode lint and pre-commit suites, focused race detection, docmgr validation, and repeated invariant tests.
+
+The audit maps each explicit PR review comment to code and regression evidence. No required work remains for the four findings; policy questions retained in the design are follow-ups rather than correctness blockers.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 4)
+
+**Assistant interpretation:** Finish implementation only after an evidence-backed audit, keep the diary complete, and leave focused commits suitable for PR review.
+
+**Inferred user intent:** Receive a genuinely complete correction—not partial progress reported as done—with enough evidence for another engineer to verify it independently.
+
+### What I did
+
+- Ran full workspace tests with `go test ./... -count=1`.
+- Ran `go build ./...`.
+- Ran race tests for SQLite, runtime, and Researchctl packages.
+- Ran module-mode golangci-lint over `./cmd/... ./pkg/...`.
+- Ran docmgr doctor, Git whitespace checks, and clean-tree checks.
+- Repeated the highest-risk custody, dependency, pass-through, and terminal event tests.
+- Added an implementation outcome section to the primary design with commit mapping and accepted decisions.
+- Audited every review comment against concrete tests and commits.
+
+### Why
+
+- The fixes cross compiler/runtime/persistence boundaries and must be validated together.
+- Focused tests prove regressions precisely; full and race suites prove integration and concurrency safety.
+
+### What worked
+
+Full suite:
+
+```text
+ok github.com/go-go-golems/scraper/pkg/researchrunner        1.833s
+ok github.com/go-go-golems/scraper/pkg/workflowv3runtime     67.358s
+ok github.com/go-go-golems/scraper/pkg/workflowv3sqlite      2.537s
+```
+
+Race suite:
+
+```text
+ok github.com/go-go-golems/scraper/pkg/workflowv3sqlite      3.256s
+ok github.com/go-go-golems/scraper/pkg/workflowv3runtime     24.604s
+ok github.com/go-go-golems/scraper/pkg/researchrunner        1.861s
+```
+
+Additional evidence:
+
+```text
+go build ./...                              PASS
+GOWORK=off ./.bin/golangci-lint ...         0 issues
+docmgr doctor                               All checks passed
+git diff --check                            PASS
+```
+
+### What didn't work
+
+- No failures occurred in final validation. Earlier implementation failures are recorded at the step where they occurred (duplicate edit match, stale goldens, and nil Goja option access).
+
+### What I learned
+
+- The systemic approach stayed bounded: four code commits, each aligned with one invariant, with no SQLite schema migration.
+- Running both workspace and `GOWORK=off` modes matters because local workspace replacements and module-resolved dependencies exercise different integration environments.
+
+### What was tricky to build
+
+- Completion confidence required mapping review prose to artifacts, not merely observing a green full test. Each finding now has a direct regression test and an integration path.
+- The implementation changed canonical V3 plan digests through set policy and inferred dependencies; because V3 remains unreleased within PR 10, fixtures were amended consistently rather than supporting two semantic shapes.
+
+### What warrants a second pair of eyes
+
+- Review the new canonical contract fields and dependency ordering in generated plans.
+- Review the transaction-local output readiness checks and `run.succeeded` event ordering.
+- Review default resolved input size and future host maximum set cardinality as deployment policy.
+
+### What should be done in the future
+
+- Optionally add a host-wide set-cardinality ceiling.
+- Version any future external observation use of `run.succeeded`.
+- Consider minimal-cycle diagnostic formatting and streaming artifact ingestion only when justified by operator evidence.
+
+### Code review instructions
+
+Review commits in this order:
+
+```text
+5486f2e  fix: preserve verified workflow input custody
+2dfdee1  feat: compile bounded set input contracts
+b0cdd1b  fix: derive workflow readiness from data bindings
+7f6e728  fix: reconcile workflow terminal state centrally
+```
+
+Then run:
+
+```bash
+go test ./... -count=1
+go build ./...
+go test -race ./pkg/workflowv3sqlite ./pkg/workflowv3runtime ./pkg/researchrunner -count=1
+GOWORK=off ./.bin/golangci-lint run ./cmd/... ./pkg/...
+```
+
+### Technical details
+
+Requirement audit:
+
+| Review finding | Implementation evidence | Regression evidence |
+|---|---|---|
+| Stage verified bytes | `resolveInputs` stages verified body; `SubmitArtifacts` accepts refs | `TestResolveInputsStagesExactlyTheVerifiedScalarBytes` |
+| Set input without direct map | `SetInputPolicy.MaxItems`; reduction capacity; direct set output | `TestRunnerStagesSetInputFromExplicitPolicy`, pass-through/compiler tests |
+| Producer dependencies | `EffectiveNodeDependencies`, typed graph, plan validation | inferred lease blocking, cross-kind cycle, malformed-plan tests |
+| Zero-work workflow | `reconcileRunStateTx` at creation and transitions | store/product/runner pass-through and single-event tests |

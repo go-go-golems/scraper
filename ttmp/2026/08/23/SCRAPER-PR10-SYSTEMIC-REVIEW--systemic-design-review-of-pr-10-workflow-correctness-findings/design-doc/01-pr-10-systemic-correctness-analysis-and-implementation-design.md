@@ -1,7 +1,7 @@
 ---
 Title: PR 10 systemic correctness analysis and implementation design
 Ticket: SCRAPER-PR10-SYSTEMIC-REVIEW
-Status: active
+Status: complete
 Topics:
     - scraper
     - workflow-v3
@@ -54,7 +54,7 @@ PR 10 introduces Workflow V3 as Scraper's sole workflow product and removes the 
 3. a node-output binding does not automatically make its producer a scheduling dependency, so a consumer may be leased before its input exists;
 4. a valid workflow with outputs but no scheduled work remains `running` forever.
 
-The reviewed source files are unchanged between the reviewed commit and the current local merge commit `e4578b8bcb17317c3fcccbde854c177c24993bdf`, so every comment still applies to the current code.
+At analysis time, the reviewed source files were unchanged between the reviewed commit and local merge commit `e4578b8bcb17317c3fcccbde854c177c24993bdf`, so every comment applied to the implementation baseline. Section 18 records the subsequent corrective commits and validation evidence.
 
 These defects can each be patched locally, but **localized patches alone would preserve the design condition that produced them**: the same correctness fact has multiple owners in different layers. The systemic pattern is:
 
@@ -1089,7 +1089,7 @@ Correct for one shape, but it creates another copy of completion semantics. Use 
 5. Should impossible post-lease input resolution fail the run or quarantine it for operator repair? The scheduler must not attribute it to user task execution.
 6. Is empty reduction input intentionally invalid for every domain, or should reduction policy eventually support an identity value?
 
-None of these questions blocks fixing the four reviewed defects. Questions 1 and 4 affect compatibility/release sequencing and should be answered before merging the final implementation.
+None of these questions blocked fixing the four reviewed defects. The unreleased V3 contract was amended in place and `run.succeeded` remains internal evidence unless a future versioned observation change promotes it.
 
 ## 17. Final recommendation
 
@@ -1101,6 +1101,30 @@ Treat the comments as **four manifestations of missing invariant ownership**, no
 4. the store reconciles successful terminal state in one place.
 
 This approach is systemic enough to prevent adjacent failures but bounded enough for PR 10. The implementation should be split into custody, set-policy, graph, and reconciliation commits, each with focused tests, followed by the topology matrix and full cross-repository validation.
+
+## 18. Implementation outcome
+
+The four corrective slices described by this design were implemented and committed:
+
+| Invariant | Code commit | Result |
+|---|---|---|
+| Verified byte custody | `5486f2e` | Bounded single read, immediate content-addressed staging, immutable-ref submission |
+| Set-input cardinality | `2dfdee1` | Explicit `maxItems`, compiler consumer/capacity checks, runner enforcement, pass-through set projection |
+| Dependency readiness | `b0cdd1b` | Data-derived canonical dependencies, typed cross-kind cycle validation, plan validation, shared dynamic lowering |
+| Successful terminalization | `7f6e728` | One transaction-local reconciler, output readiness, immediate pass-through success, accurate submission status |
+
+All five decision records in Section 9 are accepted for the current unreleased Workflow V3 contract. The implementation retained specialized SQLite readiness tables while centralizing semantic derivation, as proposed.
+
+Final evidence:
+
+- `go test ./... -count=1` passed;
+- `go build ./...` passed;
+- `go test -race ./pkg/workflowv3sqlite ./pkg/workflowv3runtime ./pkg/researchrunner -count=1` passed;
+- golangci-lint reported `0 issues`;
+- every code commit's pre-commit hook also ran `GOWORK=off go test ./... -count=1` and lint successfully;
+- `docmgr doctor --ticket SCRAPER-PR10-SYSTEMIC-REVIEW --stale-after 30` passed.
+
+The remaining questions in Section 16 are future policy/design topics, not blockers for the four PR findings. In particular, empty reduction remains explicitly invalid, a future host cardinality ceiling remains optional hardening, and the added `run.succeeded` event may be promoted into external observation vocabulary only through a versioned follow-up.
 
 ## References
 
