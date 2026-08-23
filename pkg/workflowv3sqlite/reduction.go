@@ -479,24 +479,12 @@ WHERE run_id = ? AND reduce_key = ? AND status IN ('pending','executing')`,
 		formatTime(now), runID, reduceKey); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `
-UPDATE v3_runs SET status = 'succeeded', updated_at = ?
-WHERE run_id = ? AND status = 'running'
-  AND NOT EXISTS (SELECT 1 FROM v3_nodes WHERE run_id = ? AND status != 'succeeded')
-  AND NOT EXISTS (SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'published')
-  AND NOT EXISTS (SELECT 1 FROM v3_reductions WHERE run_id = ? AND status != 'published')
-  AND NOT EXISTS (
-    SELECT 1 FROM v3_gates WHERE run_id = ? AND (
-      (budget_activation = 0 AND status != 'approved') OR
-      (budget_activation = 1 AND status IN ('waiting','rejected','expired','canceled'))
-    )
-  )`,
-		formatTime(now), runID, runID, runID, runID, runID); err != nil {
-		return err
-	}
 	if err := insertEvent(ctx, tx, runID, "", "reduction.published", map[string]any{
 		"reduceKey": reduceKey, "digest": root.Digest,
 	}, now); err != nil {
+		return err
+	}
+	if _, _, err := reconcileRunStateTx(ctx, tx, runID, now); err != nil {
 		return err
 	}
 	return tx.Commit()

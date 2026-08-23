@@ -254,6 +254,9 @@ func TestStorePersistsAppendOnlyAttemptsAndReopens(t *testing.T) {
 	snapshot, err := reopened.Snapshot(ctx, "run-1")
 	require.NoError(t, err)
 	require.Equal(t, "succeeded", snapshot.Status)
+	var succeededEvents int
+	require.NoError(t, reopened.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM v3_events WHERE run_id = 'run-1' AND event_type = 'run.succeeded'`).Scan(&succeededEvents))
+	require.Equal(t, 1, succeededEvents)
 	require.Equal(t, artifactRef("validated/v1", "3"), snapshot.Outputs["result"])
 	require.Len(t, snapshot.Attempts, 2)
 	require.Equal(t, "succeeded", snapshot.Attempts[0].Status)
@@ -283,7 +286,11 @@ func TestSnapshotResolvesDirectSetInputOutput(t *testing.T) {
 	require.NoError(t, store.CreateRun(ctx, "set-pass-through", plan, map[string]workflowv3.ArtifactRef{"items": manifest}, time.Now().UTC()))
 	snapshot, err := store.Snapshot(ctx, "set-pass-through")
 	require.NoError(t, err)
+	require.Equal(t, "succeeded", snapshot.Status)
 	require.Equal(t, manifest, snapshot.Outputs["items"])
+	var eventTypes string
+	require.NoError(t, store.db.QueryRowContext(ctx, `SELECT GROUP_CONCAT(event_type, ',') FROM (SELECT event_type FROM v3_events WHERE run_id = 'set-pass-through' ORDER BY sequence)`).Scan(&eventTypes))
+	require.Equal(t, "run.created,run.succeeded", eventTypes)
 }
 
 func TestCreateRunRejectsDigestValidPlanMissingDerivedDependency(t *testing.T) {

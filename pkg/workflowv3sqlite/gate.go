@@ -196,7 +196,7 @@ WHERE run_id = ? AND gate_key = ? AND status = 'waiting' AND version = ?`,
 		if err := terminateRunForGateTx(ctx, tx, command.RunID, command.GateKey, "rejected", now); err != nil {
 			return err
 		}
-	} else if err := succeedRunIfCompleteTx(ctx, tx, command.RunID, now); err != nil {
+	} else if _, _, err := reconcileRunStateTx(ctx, tx, command.RunID, now); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -446,25 +446,4 @@ func scanGateProgress(rows rowScanner, now time.Time) (workflowv3.GateProgress, 
 		gate.DecidedAt = &decidedAt
 	}
 	return gate, nil
-}
-
-func succeedRunIfCompleteTx(
-	ctx context.Context,
-	tx *sql.Tx,
-	runID workflowv3.RunID,
-	now time.Time,
-) error {
-	_, err := tx.ExecContext(ctx, `
-UPDATE v3_runs SET status = 'succeeded', updated_at = ?
-WHERE run_id = ? AND status = 'running'
-  AND NOT EXISTS (SELECT 1 FROM v3_nodes WHERE run_id = ? AND status != 'succeeded')
-  AND NOT EXISTS (SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'published')
-  AND NOT EXISTS (SELECT 1 FROM v3_reductions WHERE run_id = ? AND status != 'published')
-  AND NOT EXISTS (
-    SELECT 1 FROM v3_gates WHERE run_id = ? AND (
-      (budget_activation = 0 AND status != 'approved') OR
-      (budget_activation = 1 AND status IN ('waiting','rejected','expired','canceled'))
-    )
-  )`, formatTime(now), runID, runID, runID, runID, runID)
-	return err
 }

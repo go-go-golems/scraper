@@ -583,24 +583,12 @@ WHERE run_id = ? AND map_key = ? AND status = 'pending' AND source_digest IS NUL
 			return fmt.Errorf("activate downstream map %s: %w", downstream.Key, err)
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `
-UPDATE v3_runs SET status = 'succeeded', updated_at = ?
-WHERE run_id = ? AND status = 'running'
-  AND NOT EXISTS (SELECT 1 FROM v3_nodes WHERE run_id = ? AND status != 'succeeded')
-  AND NOT EXISTS (SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'published')
-  AND NOT EXISTS (SELECT 1 FROM v3_reductions WHERE run_id = ? AND status != 'published')
-  AND NOT EXISTS (
-    SELECT 1 FROM v3_gates WHERE run_id = ? AND (
-      (budget_activation = 0 AND status != 'approved') OR
-      (budget_activation = 1 AND status IN ('waiting','rejected','expired','canceled'))
-    )
-  )`,
-		formatTime(now), runID, runID, runID, runID, runID); err != nil {
-		return err
-	}
 	if err := insertEvent(ctx, tx, runID, "", "map.published", map[string]any{
 		"mapKey": mapKey, "digest": output.Digest,
 	}, now); err != nil {
+		return err
+	}
+	if _, _, err := reconcileRunStateTx(ctx, tx, runID, now); err != nil {
 		return err
 	}
 	return tx.Commit()

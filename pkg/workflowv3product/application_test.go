@@ -72,6 +72,33 @@ func TestProductExecutesAuthoredWorkflowAcrossProcessRestart(t *testing.T) {
 	require.Equal(t, workflowv3.RunID("restart-run"), runs[0].RunID)
 }
 
+func TestProductImmediatelyCompletesScalarPassThrough(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	app, err := workflowv3product.Open(ctx, productConfig(t.TempDir()))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, app.Close()) }()
+	catalog := app.Authoring.Packages.Catalog()
+	plan, err := workflowv3.Compile(workflowv3.WorkflowIR{
+		Schema: workflowv3.IRSchema, Name: "scalar-pass-through",
+		Inputs: []workflowv3.IRInput{{Name: "source", Schema: "source/v1"}},
+		Outputs: []workflowv3.IROutput{{
+			Name: "source", Value: workflowv3.ValueRef{Source: "input", Name: "source", Schema: "source/v1"},
+		}},
+	}, catalog)
+	require.NoError(t, err)
+	ref, err := app.Artifacts.Put(ctx, "source/v1", "application/json", []byte(`{"value":"pass-through"}`))
+	require.NoError(t, err)
+	submission, err := app.SubmitArtifacts(ctx, plan, map[string]workflowv3.ArtifactRef{"source": ref}, "pass-through")
+	require.NoError(t, err)
+	require.Equal(t, "succeeded", submission.Status)
+	view, err := app.Show(ctx, "pass-through")
+	require.NoError(t, err)
+	require.Equal(t, "succeeded", view.Snapshot.Status)
+	require.Equal(t, ref, view.Snapshot.Outputs["source"])
+	require.Empty(t, view.Snapshot.Attempts)
+}
+
 func TestProductResearchFixtureRetainsRetryAndFailedOperation(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

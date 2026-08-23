@@ -211,6 +211,39 @@ func TestReadVerifiedInputEnforcesResolvedInputLimit(t *testing.T) {
 	require.ErrorContains(t, err, "RUNNER_INPUT_LIMIT")
 }
 
+func TestRunnerCompletesPassThroughWithoutScheduledWork(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	input := []byte(`{"value":"pass-through"}`)
+	request, config := runnerRequest(t, root, input)
+	var execution WorkflowExecution
+	require.NoError(t, json.Unmarshal(request.Attempt.Specification.CanonicalIdentity.DomainConfig, &execution))
+	environment, err := workflowv3product.NewAuthoringEnvironment([]string{researchfixture.Name})
+	require.NoError(t, err)
+	execution.Plan, err = workflowv3.Compile(workflowv3.WorkflowIR{
+		Schema: workflowv3.IRSchema, Name: "runner-pass-through",
+		Inputs: []workflowv3.IRInput{{Name: "source", Schema: "fixture-source/v1"}},
+		Outputs: []workflowv3.IROutput{{
+			Name: "source", Value: workflowv3.ValueRef{Source: "input", Name: "source", Schema: "fixture-source/v1"},
+		}},
+	}, environment.Packages.Catalog())
+	require.NoError(t, err)
+	execution.TaskCatalog.Digest = execution.Plan.CatalogDigest
+	request.Attempt.Specification.CanonicalIdentity.DomainConfig = mustJSON(execution)
+
+	frames, err := runRequest(t, context.Background(), request, config)
+	require.NoError(t, err)
+	require.Equal(t, "complete", frames[len(frames)-1].Type)
+	require.Equal(t, "succeeded", frames[len(frames)-1].Complete.Status)
+	var exported []byte
+	for _, frame := range frames {
+		if frame.Artifact != nil && frame.Artifact.Name == "workflow-output-source.json" {
+			exported = frame.Artifact.Data
+		}
+	}
+	require.Equal(t, input, exported)
+}
+
 func TestRunnerRequiresCanonicalObservationProjection(t *testing.T) {
 	t.Parallel()
 	request, config := runnerRequest(t, t.TempDir(), []byte(`{"value":"fixture"}`))

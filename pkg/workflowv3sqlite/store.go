@@ -274,6 +274,9 @@ VALUES (?, ?, ?)`, runID, node.Key, binding.ReduceKey); err != nil {
 	}, now); err != nil {
 		return err
 	}
+	if _, _, err := reconcileRunStateTx(ctx, tx, runID, now); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -670,29 +673,12 @@ WHERE run_id = ? AND node_key = ? AND status IN ('pending','running')`,
 		lease.RunID, lease.NodeKey); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `
-UPDATE v3_runs SET status = 'succeeded', updated_at = ?
-WHERE run_id = ? AND status = 'running'
-  AND NOT EXISTS (
-    SELECT 1 FROM v3_nodes WHERE run_id = ? AND status != 'succeeded'
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM v3_expansions WHERE run_id = ? AND status != 'published'
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM v3_reductions WHERE run_id = ? AND status != 'published'
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM v3_gates WHERE run_id = ? AND (
-      (budget_activation = 0 AND status != 'approved') OR
-      (budget_activation = 1 AND status IN ('waiting','rejected','expired','canceled'))
-    )
-  )`, stamp, lease.RunID, lease.RunID, lease.RunID, lease.RunID, lease.RunID); err != nil {
-		return err
-	}
 	if err := insertEvent(ctx, tx, lease.RunID, lease.NodeKey, "node.succeeded", map[string]any{
 		"attempt": lease.Attempt, "outputs": outputDigests(outputs),
 	}, now); err != nil {
+		return err
+	}
+	if _, _, err := reconcileRunStateTx(ctx, tx, lease.RunID, now); err != nil {
 		return err
 	}
 	return tx.Commit()

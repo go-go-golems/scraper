@@ -133,7 +133,11 @@ func (a *Application) SubmitArtifacts(
 	if err := a.Engine.Submit(ctx, runID, plan, inputs); err != nil {
 		return Submission{}, err
 	}
-	return Submission{RunID: runID, PlanDigest: plan.Digest, Status: "running"}, nil
+	snapshot, err := a.Engine.Snapshot(ctx, runID)
+	if err != nil {
+		return Submission{}, err
+	}
+	return Submission{RunID: runID, PlanDigest: plan.Digest, Status: snapshot.Status}, nil
 }
 
 func (a *Application) stageInputs(
