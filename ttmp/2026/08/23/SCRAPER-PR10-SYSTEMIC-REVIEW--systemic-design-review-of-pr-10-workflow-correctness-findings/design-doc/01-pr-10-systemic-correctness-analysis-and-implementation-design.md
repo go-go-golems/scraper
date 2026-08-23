@@ -16,6 +16,8 @@ RelatedFiles:
       Note: Researchctl digest verification, scalar/set staging, and the two input findings
     - Path: repo://pkg/workflowv3/compiler.go
       Note: IR validation, dependency checks, topology support, and plan compilation
+    - Path: repo://pkg/workflowv3/types.go
+      Note: Canonical set-input policy and plan contract (commit 2dfdee1)
     - Path: repo://pkg/workflowv3product/service.go
       Note: Product path/reference staging boundary and submission status
     - Path: repo://pkg/workflowv3sqlite/expansion.go
@@ -32,6 +34,7 @@ LastUpdated: 2026-08-23T19:45:00-04:00
 WhatFor: Understand, review, and implement the PR 10 correctness fixes without adding more duplicated workflow invariants.
 WhenToUse: Read before changing Researchctl input staging, set-input limits, Workflow V3 dependency compilation, scheduling readiness, or run terminal transitions.
 ---
+
 
 
 # PR 10 systemic correctness analysis and implementation design

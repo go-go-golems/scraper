@@ -40,3 +40,14 @@ Step 5: staged verified scalar bytes directly into immutable artifact refs, adde
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/researchrunner/runner.go — Verified-byte custody and bounded reads
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3product/service.go — Immutable artifact-ref submission boundary
 
+
+## 2026-08-23
+
+Step 6: added explicit set-input maxItems contracts, compiler consumer/capacity checks, runner policy admission, and direct set pass-through outputs (commit 2dfdee1).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/compiler.go — Map/reduction compatibility validation
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3/types.go — Canonical ingress cardinality contract
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/store.go — Direct set-input output resolution
+

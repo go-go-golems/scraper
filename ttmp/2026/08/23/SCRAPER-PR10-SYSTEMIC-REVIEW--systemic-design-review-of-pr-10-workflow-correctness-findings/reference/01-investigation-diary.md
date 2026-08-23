@@ -12,8 +12,14 @@ Owners: []
 RelatedFiles:
     - Path: repo://cmd/scraper-workflow-runner/main.go
       Note: Host-level resolved-input byte limit flag (commit 5486f2e)
+    - Path: repo://pkg/gojamodules/workflow/authoring_test.go
+      Note: DSL option validation and canonical golden coverage (commit 2dfdee1)
     - Path: repo://pkg/researchrunner/runner_test.go
       Note: Custody replacement and resolved-input bound regression tests (commit 5486f2e)
+    - Path: repo://pkg/workflowv3/compiler_test.go
+      Note: Set policy, consumer capacity, reduction bound, and pass-through tests (commit 2dfdee1)
+    - Path: repo://pkg/workflowv3sqlite/store_test.go
+      Note: Direct set-input output projection regression test (commit 2dfdee1)
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md
       Note: Original immutable-reference, boundedness, dependency, and durability requirements
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/08-workflow-v3-slices-1-through-12-intern-architecture-and-analysis-guide.md
@@ -27,6 +33,7 @@ LastUpdated: 2026-08-23T19:45:00-04:00
 WhatFor: Resume or review the evidence collection, architectural diagnosis, ticket writing, validation, and reMarkable delivery.
 WhenToUse: Read before implementing or reviewing the fixes proposed by SCRAPER-PR10-SYSTEMIC-REVIEW.
 ---
+
 
 
 
@@ -464,4 +471,95 @@ Researchctl digest
   == sha256(single bounded read)
   == ArtifactRef digest returned by Put
   == v3_run_inputs digest
+```
+
+## Step 6: Compile explicit bounded set-input contracts
+
+This slice moves set cardinality from runner inference into the canonical workflow contract. Every `inputSet` now declares positive `maxItems`; the compiler verifies map and reduction consumers can support that ingress contract, and the runner enforces the input policy without inspecting incidental map topology.
+
+The slice also closes the adjacent runtime mismatch: a direct set-input pass-through output can now be resolved from `v3_run_inputs`. Existing V3 IR/plan fixtures were amended in place because Workflow V3 is still introduced by the open PR and has not crossed a released compatibility boundary.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 4)
+
+**Assistant interpretation:** Implement the second accepted invariant boundary, including DSL/API propagation, compiler compatibility checks, runner admission, output resolution, and canonical fixtures.
+
+**Inferred user intent:** Make reduction-only and pass-through workflows valid without weakening boundedness or hiding limits in consumer-specific logic.
+
+**Commit (code):** `2dfdee1dbc47718d44d5b627791a1448a170979a` — `feat: compile bounded set input contracts`
+
+### What I did
+
+- Added `SetInputPolicy{MaxItems}` to `IRSetInput`; plans inherit the policy canonically.
+- Required positive `maxItems` in JavaScript `inputSet` and TypeScript declarations.
+- Added compiler checks that map capacity covers source contracts.
+- Added saturating `ReductionCapacity(FanIn, MaxLevels)` and rejected incompatible reduction sources.
+- Changed runner set admission to enforce `input.Policy.MaxItems` directly.
+- Added direct `set-input` output resolution to `Store.Snapshot`.
+- Updated executable fixtures, TypeScript output, eight canonical IR/plan JSON files, and embedded help.
+- Added tests for missing bounds, undersized map consumers, reduction capacity, bounded pass-through compilation, direct set output snapshots, and runner policy admission without maps.
+
+### Why
+
+- External admission limits belong to the input contract, not whichever consumer happens to be scanned first.
+- Compiler and runtime must support the same topology matrix.
+
+### What worked
+
+- Focused workflow, authoring, runner, SQLite, and runtime tests passed.
+- The pre-commit hook passed full `GOWORK=off go test ./... -count=1` and lint with zero issues.
+- The compiler correctly reports `capacity 4096 is smaller than source contract 4097` for fan-in 8 and four levels.
+
+### What didn't work
+
+- The first focused run failed as expected because canonical goldens did not yet contain the new policy. The failure showed expected JSON without `policy` and actual JSON with `"policy":{"maxItems":...}` for all four set-based fixtures. I regenerated them with:
+
+```bash
+UPDATE_GOLDEN=1 go test ./pkg/gojamodules/workflow -count=1
+```
+
+- A new missing-`maxItems` authoring test initially triggered a Go nil-pointer panic because `options.Get("maxItems")` can return `nil`; calling `ToInteger()` directly was unsafe. The stack pointed to `authoring.go:249`. I changed decoding to check `nil`, `undefined`, and `null` before conversion, producing the intended closed TypeError.
+
+### What I learned
+
+- Goja option access must not assume a missing property is represented by a non-nil undefined value.
+- Reduction geometry gives a deterministic input-capacity contract: `FanIn^MaxLevels`, computed with saturation to avoid integer overflow.
+- Direct set pass-through was already accepted by the compiler; output projection was the missing half.
+
+### What was tricky to build
+
+- Map limits are execution limits while set limits are ingress guarantees. The compiler must require each consumer to cover the source guarantee, including chained map outputs.
+- Canonical policy fields change IR/plan digests. Amending V3 in place is appropriate only because the product is still under the open introduction PR; a released contract would require a schema bump.
+
+### What warrants a second pair of eyes
+
+- Confirm the choice to amend unreleased V3 instead of introducing V4.
+- Review whether author-provided `maxItems` also needs a host-owned global ceiling in a later hardening slice.
+- Review the semantic choice that empty reductions remain invalid while empty pass-through sets are valid.
+
+### What should be done in the future
+
+- Add a host-level maximum set cardinality if deployments need to constrain author contracts independently of byte limits.
+
+### Code review instructions
+
+- Start with `pkg/workflowv3/types.go` and `compiler.go` policy validation.
+- Review `pkg/gojamodules/workflow/authoring.go` missing-option handling and declaration parity.
+- Review `pkg/workflowv3sqlite/store.go` direct set-output branch.
+- Run:
+
+```bash
+go test ./pkg/workflowv3 ./pkg/gojamodules/workflow ./pkg/researchrunner ./pkg/workflowv3sqlite ./pkg/workflowv3runtime -count=1
+```
+
+### Technical details
+
+Compatibility rules:
+
+```text
+set-input.maxItems <= direct-map.maxItems
+map-output.maxItems <= chained-map.maxItems
+set-or-map maxItems <= reduction FanIn^MaxLevels
+runner archive item count <= set-input.maxItems
 ```

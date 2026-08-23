@@ -12,7 +12,7 @@
 - [x] Validate ticket with docmgr doctor <!-- t:qp47 -->
 - [x] Upload ticket bundle to reMarkable <!-- t:ia9j -->
 - [x] Implement immutable verified-input custody and resolved-input size limits <!-- t:dlgs -->
-- [ ] Implement explicit set-input cardinality policy and pass-through set outputs <!-- t:hc7q -->
+- [x] Implement explicit set-input cardinality policy and pass-through set outputs <!-- t:hc7q -->
 - [ ] Implement compiler-derived effective dependencies and cross-kind cycle validation <!-- t:zf9m -->
 - [ ] Implement centralized run terminal reconciliation and accurate submission status <!-- t:a09k -->
 - [ ] Run focused full and race validation for all corrective slices <!-- t:e9or -->
