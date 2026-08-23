@@ -25,6 +25,7 @@ func main() {
 	flag.DurationVar(&config.PollInterval, "poll-interval", config.PollInterval, "Workflow V3 dispatch poll interval")
 	flag.DurationVar(&config.CancellationTimeout, "cancellation-timeout", config.CancellationTimeout, "bounded workflow cancellation acknowledgement timeout")
 	flag.Int64Var(&config.MaxRequestBytes, "max-request-bytes", config.MaxRequestBytes, "maximum protocol request bytes")
+	flag.Int64Var(&config.MaxResolvedInputBytes, "max-resolved-input-bytes", config.MaxResolvedInputBytes, "maximum bytes for each resolved input artifact")
 	flag.Int64Var(&config.MaxExportBytes, "max-export-bytes", config.MaxExportBytes, "maximum bytes for each exported artifact")
 	flag.Parse()
 	if flag.NArg() != 0 {

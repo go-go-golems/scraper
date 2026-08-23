@@ -112,10 +112,25 @@ func (a *Application) Submit(
 	if err != nil {
 		return Submission{}, err
 	}
+	return a.SubmitArtifacts(ctx, plan, refs, runID)
+}
+
+// SubmitArtifacts submits inputs that already crossed an immutable artifact
+// custody boundary. Callers that verify external bytes must use this method so
+// a mutable path cannot be read again after verification.
+func (a *Application) SubmitArtifacts(
+	ctx context.Context,
+	plan workflowv3.WorkflowPlan,
+	inputs map[string]workflowv3.ArtifactRef,
+	runID workflowv3.RunID,
+) (Submission, error) {
+	if a == nil || a.Engine == nil {
+		return Submission{}, fmt.Errorf("workflow application is required")
+	}
 	if strings.TrimSpace(string(runID)) == "" {
 		runID = workflowv3.RunID(uuid.NewString())
 	}
-	if err := a.Engine.Submit(ctx, runID, plan, refs); err != nil {
+	if err := a.Engine.Submit(ctx, runID, plan, inputs); err != nil {
 		return Submission{}, err
 	}
 	return Submission{RunID: runID, PlanDigest: plan.Digest, Status: "running"}, nil

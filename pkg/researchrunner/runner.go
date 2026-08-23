@@ -36,6 +36,7 @@ type Config struct {
 	PollInterval          time.Duration
 	CancellationTimeout   time.Duration
 	MaxRequestBytes       int64
+	MaxResolvedInputBytes int64
 	MaxExportBytes        int64
 	AvailableTaskPackages []workflowv3product.TaskPackage
 	DomainProjector       DomainProjector
@@ -48,7 +49,7 @@ func DefaultConfig() Config {
 		Capacities:    map[string]int{workflowv3.ResourceCPUDefault: 2},
 		LeaseDuration: 30 * time.Second, PollInterval: 25 * time.Millisecond,
 		CancellationTimeout: 5 * time.Second, MaxRequestBytes: defaultMaxRequestBytes,
-		MaxExportBytes: 16 << 20,
+		MaxResolvedInputBytes: 32 << 20, MaxExportBytes: 16 << 20,
 	}
 }
 
@@ -62,8 +63,8 @@ func (c Config) Validate() error {
 	if c.LeaseDuration <= 0 || c.PollInterval <= 0 || c.CancellationTimeout <= 0 {
 		return fmt.Errorf("runner lease, poll, and cancellation durations must be positive")
 	}
-	if c.MaxRequestBytes <= 0 || c.MaxExportBytes <= 0 {
-		return fmt.Errorf("runner request and export limits must be positive")
+	if c.MaxRequestBytes <= 0 || c.MaxResolvedInputBytes <= 0 || c.MaxExportBytes <= 0 {
+		return fmt.Errorf("runner request, resolved input, and export limits must be positive")
 	}
 	return nil
 }
@@ -142,7 +143,7 @@ func execute(ctx context.Context, request Request, config Config, emit emitter) 
 	productConfig.Capacities = cloneCapacities(config.Capacities)
 	productConfig.LeaseDuration = config.LeaseDuration
 	productConfig.PollInterval = config.PollInterval
-	productConfig.MaxArtifactBytes = config.MaxExportBytes
+	productConfig.MaxArtifactBytes = max(config.MaxExportBytes, config.MaxResolvedInputBytes)
 	app, err := workflowv3product.Open(ctx, productConfig, config.AvailableTaskPackages...)
 	if err != nil {
 		return infrastructureError("RUNNER_OPEN")
@@ -151,12 +152,12 @@ func execute(ctx context.Context, request Request, config Config, emit emitter) 
 	if err := validateCatalog(execution, app.Authoring.Packages); err != nil {
 		return err
 	}
-	inputs, baseDir, err := resolveInputs(ctx, execution, request.Inputs, app)
+	inputs, err := resolveInputs(ctx, execution, request.Inputs, app, config.MaxResolvedInputBytes)
 	if err != nil {
 		return err
 	}
 	workflowRunID := workflowv3.RunID(stateKey)
-	submission, err := app.Submit(ctx, execution.Plan, inputs, baseDir, workflowRunID)
+	submission, err := app.SubmitArtifacts(ctx, execution.Plan, inputs, workflowRunID)
 	if err != nil {
 		return infrastructureError("RUNNER_SUBMIT")
 	}
@@ -300,46 +301,57 @@ func validateCatalog(execution WorkflowExecution, packages *workflowv3product.Pa
 	return nil
 }
 
-func resolveInputs(ctx context.Context, execution WorkflowExecution, resolved []ResolvedInput, app *workflowv3product.Application) (map[string]workflowv3product.StagedInput, string, error) {
+func resolveInputs(ctx context.Context, execution WorkflowExecution, resolved []ResolvedInput, app *workflowv3product.Application, maxBytes int64) (map[string]workflowv3.ArtifactRef, error) {
 	bySelector := map[string]ResolvedInput{}
 	for _, input := range resolved {
 		key := selectorKey(input.Reference.Role, input.Reference.Kind, input.Reference.ID)
 		if _, exists := bySelector[key]; exists {
-			return nil, "", contractError("RUNNER_INPUT_DUPLICATE")
+			return nil, contractError("RUNNER_INPUT_DUPLICATE")
 		}
 		bySelector[key] = input
 	}
 	if len(bySelector) != len(execution.InputBindings) {
-		return nil, "", contractError("RUNNER_INPUT_BINDINGS")
+		return nil, contractError("RUNNER_INPUT_BINDINGS")
 	}
-	ret := make(map[string]workflowv3product.StagedInput, len(execution.InputBindings))
+	ret := make(map[string]workflowv3.ArtifactRef, len(execution.InputBindings))
 	for name, binding := range execution.InputBindings {
 		resolvedInput, ok := bySelector[selectorKey(binding.Role, binding.Kind, binding.ID)]
 		if !ok || strings.TrimSpace(resolvedInput.Path) == "" {
-			return nil, "", contractError("RUNNER_INPUT_MISSING")
+			return nil, contractError("RUNNER_INPUT_MISSING")
 		}
-		body, err := readVerifiedInput(resolvedInput)
+		body, err := readVerifiedInput(resolvedInput, maxBytes)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 		if expected, ok := scalarInputSchema(execution.Plan, name); ok {
 			if resolvedInput.Reference.SchemaVersion != expected {
-				return nil, "", contractError("RUNNER_INPUT_SCHEMA")
+				return nil, contractError("RUNNER_INPUT_SCHEMA")
 			}
-			ret[name] = workflowv3product.StagedInput{Path: resolvedInput.Path, Schema: expected, MediaType: resolvedInput.Reference.MediaType}
+			mediaType := strings.TrimSpace(resolvedInput.Reference.MediaType)
+			if mediaType == "" {
+				mediaType = "application/octet-stream"
+			}
+			ref, err := app.Artifacts.Put(ctx, expected, mediaType, body)
+			if err != nil {
+				return nil, infrastructureError("RUNNER_INPUT_STAGE")
+			}
+			if ref.Digest != resolvedInput.Reference.Digest || ref.Size != *resolvedInput.Reference.SizeBytes {
+				return nil, contractError("RUNNER_INPUT_CUSTODY")
+			}
+			ret[name] = ref
 			continue
 		}
 		setInput, ok := setInputSchema(execution.Plan, name)
 		if !ok || resolvedInput.Reference.SchemaVersion != SetInputArchiveSchema {
-			return nil, "", contractError("RUNNER_INPUT_SCHEMA")
+			return nil, contractError("RUNNER_INPUT_SCHEMA")
 		}
 		ref, err := stageSetInput(ctx, app, execution.Plan, name, setInput, body)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
-		ret[name] = workflowv3product.StagedInput{Schema: setInput.ManifestSchema, MediaType: "application/json", Reference: &ref}
+		ret[name] = ref
 	}
-	return ret, ".", nil
+	return ret, nil
 }
 
 func scalarInputSchema(plan workflowv3.WorkflowPlan, name string) (string, bool) {
@@ -360,12 +372,26 @@ func setInputSchema(plan workflowv3.WorkflowPlan, name string) (workflowv3.IRSet
 	return workflowv3.IRSetInput{}, false
 }
 
-func readVerifiedInput(input ResolvedInput) ([]byte, error) {
-	body, err := os.ReadFile(input.Path)
+func readVerifiedInput(input ResolvedInput, maxBytes int64) ([]byte, error) {
+	if input.Reference.SizeBytes == nil || *input.Reference.SizeBytes < 0 {
+		return nil, contractError("RUNNER_INPUT_SIZE")
+	}
+	if maxBytes <= 0 || *input.Reference.SizeBytes > maxBytes {
+		return nil, contractError("RUNNER_INPUT_LIMIT")
+	}
+	file, err := os.Open(input.Path)
 	if err != nil {
 		return nil, contractError("RUNNER_INPUT_READ")
 	}
-	if input.Reference.SizeBytes == nil || int64(len(body)) != *input.Reference.SizeBytes {
+	defer func() { _ = file.Close() }()
+	body, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+	if err != nil {
+		return nil, contractError("RUNNER_INPUT_READ")
+	}
+	if int64(len(body)) > maxBytes {
+		return nil, contractError("RUNNER_INPUT_LIMIT")
+	}
+	if int64(len(body)) != *input.Reference.SizeBytes {
 		return nil, contractError("RUNNER_INPUT_SIZE")
 	}
 	sum := sha256.Sum256(body)

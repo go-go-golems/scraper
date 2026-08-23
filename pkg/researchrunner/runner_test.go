@@ -174,6 +174,43 @@ func TestRunnerRejectsCatalogAndInputDigestMismatchWithClosedErrors(t *testing.T
 	require.Equal(t, "RUNNER_INPUT_DIGEST", frames[len(frames)-1].Error.Code)
 }
 
+func TestResolveInputsStagesExactlyTheVerifiedScalarBytes(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	root := t.TempDir()
+	original := []byte(`{"value":"verified"}`)
+	request, config := runnerRequest(t, root, original)
+	var execution WorkflowExecution
+	require.NoError(t, json.Unmarshal(request.Attempt.Specification.CanonicalIdentity.DomainConfig, &execution))
+
+	productConfig := workflowv3product.DefaultConfig()
+	productConfig.DatabasePath = filepath.Join(root, "custody.db")
+	productConfig.ArtifactRoot = filepath.Join(root, "custody-artifacts")
+	productConfig.TaskPackages = []string{researchfixture.Name}
+	productConfig.MaxArtifactBytes = config.MaxResolvedInputBytes
+	app, err := workflowv3product.Open(ctx, productConfig)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, app.Close()) }()
+
+	refs, err := resolveInputs(ctx, execution, request.Inputs, app, config.MaxResolvedInputBytes)
+	require.NoError(t, err)
+	ref := refs["source"]
+	require.Equal(t, request.Inputs[0].Reference.Digest, ref.Digest)
+
+	require.NoError(t, os.WriteFile(request.Inputs[0].Path, []byte(`{"value":"replaced"}`), 0o600))
+	staged, err := workflowv3.ReadArtifact(ctx, app.Artifacts, ref)
+	require.NoError(t, err)
+	require.Equal(t, original, staged)
+}
+
+func TestReadVerifiedInputEnforcesResolvedInputLimit(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	request, _ := runnerRequest(t, root, []byte(`{"value":"too-large"}`))
+	_, err := readVerifiedInput(request.Inputs[0], *request.Inputs[0].Reference.SizeBytes-1)
+	require.ErrorContains(t, err, "RUNNER_INPUT_LIMIT")
+}
+
 func TestRunnerRequiresCanonicalObservationProjection(t *testing.T) {
 	t.Parallel()
 	request, config := runnerRequest(t, t.TempDir(), []byte(`{"value":"fixture"}`))
