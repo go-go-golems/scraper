@@ -10,6 +10,10 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: repo://cmd/scraper-workflow-runner/main.go
+      Note: Host-level resolved-input byte limit flag (commit 5486f2e)
+    - Path: repo://pkg/researchrunner/runner_test.go
+      Note: Custody replacement and resolved-input bound regression tests (commit 5486f2e)
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md
       Note: Original immutable-reference, boundedness, dependency, and durability requirements
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/08-workflow-v3-slices-1-through-12-intern-architecture-and-analysis-guide.md
@@ -23,6 +27,7 @@ LastUpdated: 2026-08-23T19:45:00-04:00
 WhatFor: Resume or review the evidence collection, architectural diagnosis, ticket writing, validation, and reMarkable delivery.
 WhenToUse: Read before implementing or reviewing the fixes proposed by SCRAPER-PR10-SYSTEMIC-REVIEW.
 ---
+
 
 
 # Diary
@@ -366,4 +371,97 @@ zf9m  dependency graph
 a09k  lifecycle reconciliation
 e9or  focused/full/race validation
 nwdm  final diary and ticket audit
+```
+
+## Step 5: Preserve verified input custody through immutable artifact references
+
+This slice closes the Researchctl scalar-input TOCTOU window. Resolved files are now read through a byte ceiling, verified once, immediately staged into the content-addressed artifact store, and submitted as immutable `ArtifactRef`s; the runner no longer passes a verified pathname to product staging for a second read.
+
+The product facade now exposes `SubmitArtifacts` for callers that already own immutable refs, while existing CLI path staging remains explicit through `Submit`. A dedicated `--max-resolved-input-bytes` host flag separates external artifact size from protocol-frame and export limits.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 4)
+
+**Assistant interpretation:** Implement the first accepted invariant boundary as a focused, tested commit and record exact evidence.
+
+**Inferred user intent:** Ensure the workflow executes exactly the bytes committed by Researchctl identity, even if a source pathname is replaced concurrently.
+
+**Commit (code):** `5486f2e678abda499b1887cab0a2706b5a0b3259` — `fix: preserve verified workflow input custody`
+
+### What I did
+
+- Added `Config.MaxResolvedInputBytes` with a 32 MiB default and CLI flag.
+- Changed `readVerifiedInput` to reject invalid/oversized declared sizes before reading and to use `io.LimitReader(max+1)`.
+- Changed runner input resolution to return `map[string]workflowv3.ArtifactRef`.
+- Staged scalar verified bodies directly with `ArtifactStore.Put` and checked staged digest/size against the Researchctl reference.
+- Added `Application.SubmitArtifacts` and routed the runner through it.
+- Added tests proving a replaced source path cannot change staged bytes and proving resolved-input limit enforcement.
+
+### Why
+
+- A digest check is meaningful only if the checked bytes remain the bytes executed.
+- Protocol request bytes, resolved artifact bytes, and exported artifact bytes are separate operational boundaries.
+
+### What worked
+
+- Focused tests passed:
+
+```text
+ok github.com/go-go-golems/scraper/pkg/researchrunner
+ok github.com/go-go-golems/scraper/pkg/workflowv3product
+ok github.com/go-go-golems/scraper/cmd/scraper-workflow-runner
+```
+
+- `go test ./pkg/cmd ./cmd/scraper -count=1` passed.
+- The pre-commit hook ran `GOWORK=off go test ./... -count=1` and golangci-lint with `0 issues`; the full suite passed, including the 74.528-second runtime package.
+
+### What didn't work
+
+- The first `edit` call attempted several small replacements in `resolveInputs`; one old text fragment appeared twice and the tool rejected the complete call with:
+
+```text
+Found 2 occurrences of edits[10] in pkg/researchrunner/runner.go. Each oldText must be unique.
+```
+
+- No partial edit was applied. I replaced the entire `resolveInputs` and `readVerifiedInput` blocks in one exact edit, then formatted and tested.
+
+### What I learned
+
+- The artifact store already provides the required atomic content-addressed custody boundary; no new storage mechanism was necessary.
+- The runner's set-input path already used verified bytes, so scalar and set handling now converge on the same immutable-ref submission contract.
+
+### What was tricky to build
+
+- A declared size check alone does not prevent a file from growing before `os.ReadFile`; bounded streaming with `LimitReader(max+1)` is required to cap allocation while still detecting replacement/truncation through final size and digest checks.
+- Product artifact capacity must cover both resolved input and export ceilings, so runner setup uses the larger limit.
+
+### What warrants a second pair of eyes
+
+- Review the 32 MiB resolved-input default against realistic Researchctl workloads.
+- Review whether `SubmitArtifacts` should eventually replace the overloaded staged-input API entirely; this slice keeps explicit CLI path convenience without changing callers unnecessarily.
+
+### What should be done in the future
+
+- Consider a streaming `ArtifactStore.PutReader` only if measured input sizes justify it; it must preserve bounded hashing and atomic publication.
+
+### Code review instructions
+
+- Start at `pkg/researchrunner/runner.go:36-67`, then follow `resolveInputs` and `readVerifiedInput`.
+- Review `pkg/workflowv3product/service.go:101-145` for the immutable-ref boundary.
+- Run:
+
+```bash
+go test ./pkg/researchrunner ./pkg/workflowv3product ./cmd/scraper-workflow-runner -count=1
+```
+
+### Technical details
+
+Custody invariant after this commit:
+
+```text
+Researchctl digest
+  == sha256(single bounded read)
+  == ArtifactRef digest returned by Put
+  == v3_run_inputs digest
 ```

@@ -30,3 +30,13 @@ Delivered the validated five-document review bundle to reMarkable at /ai/2026/08
 
 Accepted the systemic review for implementation, activated the ticket, and added focused custody, set-policy, dependency, lifecycle, validation, and documentation tasks.
 
+
+## 2026-08-23
+
+Step 5: staged verified scalar bytes directly into immutable artifact refs, added resolved-input byte ceilings, and separated ref submission from path staging (commit 5486f2e).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/researchrunner/runner.go — Verified-byte custody and bounded reads
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3product/service.go — Immutable artifact-ref submission boundary
+
