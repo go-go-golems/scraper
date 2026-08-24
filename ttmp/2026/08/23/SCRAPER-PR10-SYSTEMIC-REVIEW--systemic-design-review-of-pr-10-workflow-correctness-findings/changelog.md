@@ -95,3 +95,14 @@ Ticket closed
 
 Published the completed implementation diary and evidence bundle as a non-overwriting reMarkable revision at /ai/2026/08/23/SCRAPER-PR10-SYSTEMIC-REVIEW.
 
+
+## 2026-08-24
+
+Step 11: resolved second-round dynamic reduction readiness, chained identity determinism, Bubblewrap CI, gosec findings, and vulnerable toolchain/dependency versions (commits e0a3439, dc24fb4).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/go.mod — Go 1.26.6 and Excelize 2.11.0 security updates
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/expansion.go — Stable chained-map child identity
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/readiness.go — Canonical dynamic readiness lowering
+

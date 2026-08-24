@@ -10,6 +10,8 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: repo://.github/workflows/push.yml
+      Note: Bubblewrap installation for isolation integration CI (commit dc24fb4)
     - Path: repo://cmd/scraper-workflow-runner/main.go
       Note: Host-level resolved-input byte limit flag (commit 5486f2e)
     - Path: repo://pkg/gojamodules/workflow/authoring_test.go
@@ -20,6 +22,8 @@ RelatedFiles:
       Note: Set policy, consumer capacity, reduction bound, and pass-through tests (commit 2dfdee1)
     - Path: repo://pkg/workflowv3product/application_test.go
       Note: Immediate persisted submission status and scalar pass-through test (commit 7f6e728)
+    - Path: repo://pkg/workflowv3sqlite/readiness.go
+      Note: Shared static and dynamic readiness lowering from second review (commit e0a3439)
     - Path: repo://pkg/workflowv3sqlite/store_test.go
       Note: Direct set-input output projection regression test (commit 2dfdee1)
     - Path: repo://ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/design-doc/01-durable-dataflow-workflow-v3-and-modern-scripting-architecture.md
@@ -35,6 +39,7 @@ LastUpdated: 2026-08-23T19:45:00-04:00
 WhatFor: Resume or review the evidence collection, architectural diagnosis, ticket writing, validation, and reMarkable delivery.
 WhenToUse: Read before implementing or reviewing the fixes proposed by SCRAPER-PR10-SYSTEMIC-REVIEW.
 ---
+
 
 
 
@@ -926,3 +931,115 @@ OK: uploaded SCRAPER PR10 Systemic Correctness Implementation.pdf -> /ai/2026/08
 - Remote directory: `/ai/2026/08/23/SCRAPER-PR10-SYSTEMIC-REVIEW`.
 - New bundle: `SCRAPER PR10 Systemic Correctness Implementation.pdf`.
 - Original preserved bundle: `SCRAPER PR10 Systemic Correctness Review.pdf`.
+
+## Step 11: Resolve second-round dynamic readiness, identity, and CI findings
+
+The second Codex review exposed two remaining dynamic-materialization gaps: generated map/reduction nodes did not share one lowering path for reduction consumers, and chained-map child identity incorporated a timing-dependent prefix-manifest digest. This slice centralizes all durable node readiness registration and derives chained identities from the stable upstream map source plus item key.
+
+The same round also exposed CI-environment and security drift. Pull-request tests now install Bubblewrap, the Go and Excelize versions include published vulnerability fixes, and all six gosec findings were either removed structurally or documented at closed, validated construction points.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Address next round of issues: https://github.com/go-go-golems/scraper/pull/10#issuecomment-5389120843"
+
+**Assistant interpretation:** Resolve the two new inline review findings and both linked CI failures, then validate and publish another reviewable correction.
+
+**Inferred user intent:** Bring PR 10 back to deterministic Workflow V3 semantics and a genuinely green CI state before requesting another review.
+
+**Commit (code):** `e0a3439cc1b59a4eafe15df02568037b9a73759e` — `fix: stabilize dynamic workflow readiness identities`
+
+**Commit (CI/security):** `dc24fb42f89a647d081128420453f05cd8a211be` — `ci: restore isolation and security checks`
+
+### What I did
+
+- Added `insertNodeReadiness` as the shared lowering path for static nodes, map children, and reduction partitions.
+- Registered node, gate, and reduction readiness edges through that helper.
+- Derived chained-map child/page identity from stable source-map identity instead of the current completed-prefix manifest digest.
+- Added timing-order and generated reduction-consumer regression tests.
+- Installed `bubblewrap` in the pull-request test job.
+- Updated the Go directive to 1.26.6 and Excelize to 2.11.0.
+- Removed unsafe integer conversion and dynamic status-table formatting findings.
+- Tightened temporary plan permissions to `0600`.
+- Added narrow gosec annotations where directory execute permission and closed SQL predicates are intentional.
+
+### Why
+
+- Dynamic nodes must obey the same binding-owned readiness contract as static nodes.
+- Durable node and operation identities cannot depend on dispatcher polling timing.
+- Isolation integration tests require the actual Linux sandbox executable in CI.
+- Security checks should fail on real regressions, not known stale toolchains or unexplained false positives.
+
+### What worked
+
+- `TestChainedMapChildIdentityDoesNotDependOnPollingTiming` proves early and late polling produce identical node and page identities.
+- `TestGeneratedMapNodeRegistersReductionConsumer` proves a generated child remains unleaseable until its reduction is published.
+- `GOWORK=off go test ./... -count=1` and lint passed in both commits.
+- Local gosec completed with `Issues: 0`.
+- Local govulncheck reported `No vulnerabilities found`.
+- The full runtime suite, including installed local Bubblewrap integration, passed.
+
+### What didn't work
+
+- The first focused test command failed because the parent workspace still declared Go 1.26.5:
+
+```text
+go: module . listed in go.work file requires go >= 1.26.6, but go.work lists go 1.26.5; to update it:
+	go work use
+```
+
+  Running `go work use` refreshed the parent workspace directive.
+- The first new fixtures failed compilation with `workflow requires at least one output`; explicit set outputs were added.
+- The first code commit attempt failed lint:
+
+```text
+pkg/workflowv3sqlite/expansion_test.go:408:13: ineffectual assignment to summariesRef (ineffassign)
+```
+
+  The fixture now discards the obsolete ref and declares only the rebuilt summary-manifest ref.
+
+### What I learned
+
+- Compiler-owned semantics are insufficient unless every persistence materializer calls one shared lowering function.
+- Prefix manifests are valid availability snapshots but invalid identity roots.
+- The security workflow was correctly identifying both stale dependencies and several narrow code hygiene issues; fixing the causes was preferable to broad scanner exclusions.
+
+### What was tricky to build
+
+- A chained map legitimately observes a growing prefix. Source locator/digest columns may track that prefix for availability, while child identity must instead use stable source-map identity and item key; conflating those purposes caused the timing bug.
+- Reduction consumers use specialized readiness tables rather than ordinary node dependencies, so generated nodes need both binding classes lowered transactionally before becoming lease-visible.
+- Bubblewrap tests intentionally exercise real namespace/resource behavior and therefore should install the executable rather than silently skip in CI.
+
+### What warrants a second pair of eyes
+
+- Review whether stable chained identity should eventually incorporate an explicit upstream child key field instead of the canonical source-map digest plus item key.
+- Review the three narrow `#nosec` annotations and their closed-input invariants.
+- Confirm GitHub-hosted Ubuntu permits all Bubblewrap namespace/resource tests after package installation.
+
+### What should be done in the future
+
+- Add a generated reduction-partition test that consumes another independent reduction, complementing the shared-helper map-child regression.
+- Keep the Go patch version current because several August 2026 standard-library advisories were fixed in 1.26.6.
+
+### Code review instructions
+
+- Start with `pkg/workflowv3sqlite/readiness.go`, then inspect its three call sites.
+- Review chained source identity in `expandNextPage` and the timing-order regression.
+- Review `.github/workflows/push.yml`, `go.mod`, and each gosec remediation.
+- Run:
+
+```bash
+GOWORK=off go test ./... -count=1
+GOWORK=off gosec -exclude=G101,G304,G301,G306,G204 -exclude-dir=.history -exclude-dir=gen ./...
+GOWORK=off govulncheck ./...
+```
+
+### Technical details
+
+```text
+static node ───────┐
+map child ─────────┼─> insertNodeReadiness ─> node/gate/reduction readiness tables
+reduction partition┘
+
+chained child identity = digest(consumer map, stable upstream map identity, item key)
+not digest(consumer map, currently completed prefix manifest, item key)
+```
