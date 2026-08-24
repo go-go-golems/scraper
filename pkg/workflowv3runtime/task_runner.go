@@ -350,7 +350,7 @@ func materializeReductionMembers(
 			"size": member.Value.Size, "path": "/" + directory + "/" + name,
 		})
 	}
-	if err := os.Chmod(filepath.Join(workspace, directory), 0o500); err != nil {
+	if err := os.Chmod(filepath.Join(workspace, directory), 0o500); err != nil { // #nosec G302 -- directories require execute permission; group/other retain no access
 		return nil, err
 	}
 	return members, nil

@@ -257,13 +257,25 @@ func groupedStatus(
 	runID *workflowv3.RunID,
 	destination map[string]int,
 ) error {
-	query := fmt.Sprintf("SELECT status, COUNT(*) FROM %s", table)
+	var query string
+	switch table {
+	case "v3_runs":
+		query = "SELECT status, COUNT(*) FROM v3_runs"
+	case "v3_nodes":
+		query = "SELECT status, COUNT(*) FROM v3_nodes"
+	case "v3_attempts":
+		query = "SELECT status, COUNT(*) FROM v3_attempts"
+	case "v3_gates":
+		query = "SELECT status, COUNT(*) FROM v3_gates"
+	default:
+		return fmt.Errorf("unsupported grouped status table %q", table)
+	}
 	var args []any
 	if runID != nil {
-		if runColumn == "" {
-			runColumn = "run_id"
+		if runColumn != "" && runColumn != "run_id" {
+			return fmt.Errorf("unsupported grouped status run column %q", runColumn)
 		}
-		query += " WHERE " + runColumn + " = ?"
+		query += " WHERE run_id = ?"
 		args = append(args, *runID)
 	}
 	query += " GROUP BY status"

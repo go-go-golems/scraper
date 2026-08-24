@@ -10,6 +10,9 @@ import (
 )
 
 func applyIsolationLimits(policy workflowv3.IsolationPolicy) error {
+	if policy.MaxOutputBytes <= 0 {
+		return fmt.Errorf("max output bytes must be positive")
+	}
 	limits := []struct {
 		resource int
 		value    uint64

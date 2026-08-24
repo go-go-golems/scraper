@@ -100,7 +100,7 @@ func operationCountersTx(ctx context.Context, tx *sql.Tx, table, nameColumn, ope
 	if table != "v3_external_operation_allocations" && table != "v3_external_operation_measures" && table != "v3_external_operation_counters" {
 		return nil, fmt.Errorf("unsupported external operation counter table")
 	}
-	rows, err := tx.QueryContext(ctx, "SELECT "+nameColumn+",units FROM "+table+" WHERE operation_id=? ORDER BY "+nameColumn, operationID) // #nosec G201 -- table/nameColumn are closed constants above
+	rows, err := tx.QueryContext(ctx, "SELECT "+nameColumn+",units FROM "+table+" WHERE operation_id=? ORDER BY "+nameColumn, operationID) // #nosec G202 -- table/nameColumn are restricted to closed constants above
 	if err != nil {
 		return nil, err
 	}

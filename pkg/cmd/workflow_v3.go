@@ -465,7 +465,7 @@ func writeFileAtomic(path string, body []byte) error {
 	if err := temporary.Close(); err != nil {
 		return fmt.Errorf("close temporary plan: %w", err)
 	}
-	if err := os.Chmod(name, 0o644); err != nil {
+	if err := os.Chmod(name, 0o600); err != nil {
 		return fmt.Errorf("chmod temporary plan: %w", err)
 	}
 	if err := os.Rename(name, path); err != nil {

@@ -322,6 +322,7 @@ func settleConservativeWhere(
 	args []any,
 	now time.Time,
 ) error {
+	// #nosec G202 -- whereSQL is supplied only by the closed internal predicates at the call sites below.
 	query := `
 SELECT run_id, node_key, attempt_no FROM v3_budget_reservations
 WHERE status = 'reserved' AND ` + whereSQL + `
