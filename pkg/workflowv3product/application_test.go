@@ -72,6 +72,29 @@ func TestProductExecutesAuthoredWorkflowAcrossProcessRestart(t *testing.T) {
 	require.Equal(t, workflowv3.RunID("restart-run"), runs[0].RunID)
 }
 
+func TestRunUntilTerminalReturnsWorkerFailureBeforeContextDeadline(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	root := t.TempDir()
+	app, err := workflowv3product.Open(ctx, productConfig(root))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, app.Close()) }()
+	authored, err := app.Authoring.Author(ctx, cookbooklinear.WorkflowSource())
+	require.NoError(t, err)
+	inputPath := filepath.Join(root, "customers.jsonl")
+	require.NoError(t, os.WriteFile(inputPath, []byte("{\"id\":\"1\",\"email\":\"a@example.com\"}\n"), 0o600))
+	_, err = app.Submit(ctx, authored.Plan, map[string]workflowv3product.StagedInput{
+		"source": {Path: inputPath, Schema: "customer-jsonl-ref/v1"},
+	}, root, "worker-failure")
+	require.NoError(t, err)
+	app.Dispatcher.Engine = nil
+	waitCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	_, err = app.RunUntilTerminal(waitCtx, "worker-failure")
+	require.ErrorContains(t, err, "dispatcher requires an engine")
+	require.NotErrorIs(t, err, context.DeadlineExceeded)
+}
+
 func TestProductImmediatelyCompletesScalarPassThrough(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

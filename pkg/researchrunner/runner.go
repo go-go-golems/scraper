@@ -178,37 +178,59 @@ func execute(ctx context.Context, request Request, config Config, emit emitter) 
 	workerCtx, cancelWorker := context.WithCancel(context.Background())
 	workerDone := make(chan error, 1)
 	go func() { workerDone <- app.RunWorker(workerCtx) }()
-	view, err := waitForTerminal(ctx, app, workflowRunID, config.PollInterval)
-	if err != nil {
+	view, workerErr, err := waitForTerminal(ctx, app, workflowRunID, config.PollInterval, workerDone)
+	if err != nil || workerErr != nil {
 		cancelCtx, cancel := context.WithTimeout(context.Background(), config.CancellationTimeout)
 		_, _ = app.Cancel(cancelCtx, workflowRunID)
 		cancel()
 		cancelWorker()
-		<-workerDone
-		return err
+		if workerErr == nil {
+			<-workerDone
+			return err
+		}
+		return infrastructureError("RUNNER_WORKER")
 	}
 	cancelWorker()
-	if workerErr := <-workerDone; workerErr != nil {
+	if workerErr = <-workerDone; workerErr != nil {
 		return infrastructureError("RUNNER_WORKER")
 	}
 	return exportTerminal(ctx, app, execution, view, workflowRunID, sequence, emit, config)
 }
 
-func waitForTerminal(ctx context.Context, app *workflowv3product.Application, runID workflowv3.RunID, poll time.Duration) (workflowv3product.RunView, error) {
+func waitForTerminal(
+	ctx context.Context,
+	app *workflowv3product.Application,
+	runID workflowv3.RunID,
+	poll time.Duration,
+	workerDone <-chan error,
+) (workflowv3product.RunView, error, error) {
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
 	for {
+		select {
+		case workerErr := <-workerDone:
+			if workerErr == nil {
+				workerErr = fmt.Errorf("workflow worker stopped before run %q became terminal", runID)
+			}
+			return workflowv3product.RunView{}, workerErr, nil
+		default:
+		}
 		view, err := app.Show(ctx, runID)
 		if err != nil {
-			return workflowv3product.RunView{}, err
+			return workflowv3product.RunView{}, nil, err
 		}
 		switch view.Snapshot.Status {
 		case "succeeded", "failed", "canceled":
-			return view, nil
+			return view, nil, nil
 		}
 		select {
 		case <-ctx.Done():
-			return workflowv3product.RunView{}, ctx.Err()
+			return workflowv3product.RunView{}, nil, ctx.Err()
+		case workerErr := <-workerDone:
+			if workerErr == nil {
+				workerErr = fmt.Errorf("workflow worker stopped before run %q became terminal", runID)
+			}
+			return workflowv3product.RunView{}, workerErr, nil
 		case <-ticker.C:
 		}
 	}

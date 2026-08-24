@@ -150,7 +150,20 @@ int main(void) { for (int i = 0; i < 2000000; i++) fputc('x', stdout); fputc('\n
 	return worker
 }
 
+func requireRestrictedIsolationHost(t *testing.T) {
+	t.Helper()
+	if _, err := os.Stat("/usr/bin/bwrap"); err != nil {
+		t.Skipf("restricted isolation requires Bubblewrap: %v", err)
+	}
+	group, err := createIsolationCgroup(workflowv3isolation.Policy())
+	if err != nil {
+		t.Skipf("restricted isolation requires a delegated cgroup v2 hierarchy: %v", err)
+	}
+	require.NoError(t, group.Close())
+}
+
 func TestRestrictedProtocolRejectsMalformedAndOversizedWorkerFrames(t *testing.T) {
+	requireRestrictedIsolationHost(t)
 	ctx := context.Background()
 	goodWorker := buildIsolatedWorker(t)
 	launcher := filepath.Join(filepath.Dir(goodWorker), "workflowv3-isolation-launcher")
@@ -196,6 +209,7 @@ func TestRestrictedProtocolRejectsMalformedAndOversizedWorkerFrames(t *testing.T
 }
 
 func TestRestrictedAllowlistedExecUsesFixedToolWithoutShellAuthority(t *testing.T) {
+	requireRestrictedIsolationHost(t)
 	t.Setenv("PRIVATE_ISOLATION_ENV_CANARY", "must-not-enter-child")
 	ctx := context.Background()
 	worker := buildIsolatedWorker(t)
@@ -301,6 +315,7 @@ int main(int argc, char **argv) {
 }
 
 func TestIsolatedChildDeathRetriesWithFreshProcessAndImmutableAttempts(t *testing.T) {
+	requireRestrictedIsolationHost(t)
 	ctx := context.Background()
 	worker := buildIsolatedWorker(t)
 	tool := buildCrashOnceTool(t)
@@ -349,6 +364,7 @@ func TestIsolatedChildDeathRetriesWithFreshProcessAndImmutableAttempts(t *testin
 }
 
 func TestCancelKillsIsolatedChildAndFencesStaleCompletion(t *testing.T) {
+	requireRestrictedIsolationHost(t)
 	ctx := context.Background()
 	worker := buildIsolatedWorker(t)
 	tool := buildFixtureTool(t)
@@ -400,6 +416,7 @@ func TestCancelKillsIsolatedChildAndFencesStaleCompletion(t *testing.T) {
 }
 
 func TestRollingRegistryRequiresEveryRetainedIsolationExecutorDigest(t *testing.T) {
+	requireRestrictedIsolationHost(t)
 	worker := buildIsolatedWorker(t)
 	first := &BubblewrapExecutor{WorkerExecutable: worker, BubblewrapExecutable: "/usr/bin/bwrap", Tools: map[string]string{"fixture.echo": buildFixtureTool(t)}}
 	second := &BubblewrapExecutor{WorkerExecutable: worker, BubblewrapExecutable: "/usr/bin/bwrap", Tools: map[string]string{"fixture.echo": buildForkingTool(t)}}
@@ -434,6 +451,7 @@ func TestRollingRegistryRequiresEveryRetainedIsolationExecutorDigest(t *testing.
 }
 
 func TestEngineRunsAuthoredRestrictedTaskWithDurableIsolationEvidence(t *testing.T) {
+	requireRestrictedIsolationHost(t)
 	ctx := context.Background()
 	worker := buildIsolatedWorker(t)
 	tool := buildFixtureTool(t)
@@ -482,6 +500,7 @@ func TestEngineRunsAuthoredRestrictedTaskWithDurableIsolationEvidence(t *testing
 }
 
 func TestRestrictedSubprocessMatchesTrustedExecutionDigest(t *testing.T) {
+	requireRestrictedIsolationHost(t)
 	ctx := context.Background()
 	worker := buildIsolatedWorker(t)
 	tool := buildFixtureTool(t)

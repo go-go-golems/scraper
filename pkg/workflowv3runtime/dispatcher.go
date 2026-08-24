@@ -69,6 +69,9 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	for {
 		started := false
 		for {
+			if err := drainDispatchCompletions(completions); err != nil {
+				return err
+			}
 			gates, err := d.Engine.MaintainGates(ctx)
 			if err != nil {
 				return dispatchOperationError(ctx, "maintain workflow gates", err)
@@ -124,19 +127,39 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case completion := <-completions:
-			if completion.err != nil && !isRecordedAttemptError(completion.err) {
-				return fmt.Errorf(
-					"execute %s/%s: %w",
-					completion.lease.RunID,
-					completion.lease.NodeKey,
-					completion.err,
-				)
+			if err := handleDispatchCompletion(completion); err != nil {
+				return err
 			}
 		case <-poll.C:
 			// Retry deadlines, lease expiry, new runs, and cross-process
 			// completions are coalesced by this wakeup.
 		}
 	}
+}
+
+func drainDispatchCompletions(completions <-chan dispatchCompletion) error {
+	for {
+		select {
+		case completion := <-completions:
+			if err := handleDispatchCompletion(completion); err != nil {
+				return err
+			}
+		default:
+			return nil
+		}
+	}
+}
+
+func handleDispatchCompletion(completion dispatchCompletion) error {
+	if completion.err == nil || isRecordedAttemptError(completion.err) {
+		return nil
+	}
+	return fmt.Errorf(
+		"execute %s/%s: %w",
+		completion.lease.RunID,
+		completion.lease.NodeKey,
+		completion.err,
+	)
 }
 
 func dispatchOperationError(ctx context.Context, operation string, err error) error {

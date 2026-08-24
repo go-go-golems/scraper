@@ -36,6 +36,15 @@ exports.snapshot = task.implementation(async ctx => {
 });
 `
 
+func TestDrainDispatchCompletionsEmptiesReadyBufferBeforeRefill(t *testing.T) {
+	t.Parallel()
+	completions := make(chan dispatchCompletion, 2)
+	completions <- dispatchCompletion{lease: workflowv3.Lease{RunID: "run", NodeKey: "one"}}
+	completions <- dispatchCompletion{lease: workflowv3.Lease{RunID: "run", NodeKey: "two"}, err: &AttemptExecutionError{Err: context.Canceled}}
+	require.NoError(t, drainDispatchCompletions(completions))
+	require.Empty(t, completions)
+}
+
 func TestDispatcherRefillsReleasedResourceWhileUnrelatedTaskRuns(t *testing.T) {
 	var httpActive atomic.Int32
 	var httpMax atomic.Int32

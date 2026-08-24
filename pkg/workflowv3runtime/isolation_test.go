@@ -89,6 +89,7 @@ func TestCandidateValidationRejectsTraversalSymlinkHardlinkAndDigestDrift(t *tes
 }
 
 func TestRestrictedWorkerWallTimeAndCancellationKillChild(t *testing.T) {
+	requireRestrictedIsolationHost(t)
 	ctx := context.Background()
 	worker := buildIsolatedWorker(t)
 	executor := &BubblewrapExecutor{WorkerExecutable: worker, BubblewrapExecutable: "/usr/bin/bwrap"}

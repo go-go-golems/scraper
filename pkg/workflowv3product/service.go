@@ -259,18 +259,35 @@ func (a *Application) RunWorker(ctx context.Context) error {
 
 func (a *Application) RunUntilTerminal(ctx context.Context, runID workflowv3.RunID) (RunView, error) {
 	workerCtx, cancelWorker := context.WithCancel(ctx)
+	defer cancelWorker()
 	workerDone := make(chan error, 1)
 	go func() { workerDone <- a.RunWorker(workerCtx) }()
-	view, waitErr := a.Wait(ctx, runID)
-	cancelWorker()
-	workerErr := <-workerDone
-	if waitErr != nil {
-		return RunView{}, waitErr
+
+	ticker := time.NewTicker(a.Config.PollInterval)
+	defer ticker.Stop()
+	for {
+		view, err := a.Show(ctx, runID)
+		if err != nil {
+			return RunView{}, err
+		}
+		if terminalRunStatus(view.Snapshot.Status) {
+			cancelWorker()
+			if workerErr := <-workerDone; workerErr != nil {
+				return RunView{}, workerErr
+			}
+			return view, nil
+		}
+		select {
+		case <-ctx.Done():
+			return RunView{}, ctx.Err()
+		case workerErr := <-workerDone:
+			if workerErr == nil {
+				return RunView{}, fmt.Errorf("workflow worker stopped before run %q became terminal", runID)
+			}
+			return RunView{}, workerErr
+		case <-ticker.C:
+		}
 	}
-	if workerErr != nil {
-		return RunView{}, workerErr
-	}
-	return view, nil
 }
 
 func (a *Application) Wait(ctx context.Context, runID workflowv3.RunID) (RunView, error) {

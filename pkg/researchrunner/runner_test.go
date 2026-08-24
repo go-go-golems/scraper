@@ -211,6 +211,15 @@ func TestReadVerifiedInputEnforcesResolvedInputLimit(t *testing.T) {
 	require.ErrorContains(t, err, "RUNNER_INPUT_LIMIT")
 }
 
+func TestWaitForTerminalObservesWorkerFailureBeforePolling(t *testing.T) {
+	t.Parallel()
+	workerDone := make(chan error, 1)
+	workerDone <- errors.New("expand map: missing artifact")
+	_, workerErr, waitErr := waitForTerminal(context.Background(), nil, "running", time.Hour, workerDone)
+	require.NoError(t, waitErr)
+	require.EqualError(t, workerErr, "expand map: missing artifact")
+}
+
 func TestRunnerCompletesPassThroughWithoutScheduledWork(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
