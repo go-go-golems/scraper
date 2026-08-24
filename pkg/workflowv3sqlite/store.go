@@ -165,15 +165,6 @@ INSERT INTO v3_nodes(
 			return err
 		}
 	}
-	for _, node := range plan.Nodes {
-		for _, dependency := range workflowv3.EffectiveNodeDependencies(node.Bindings, node.DependsOn) {
-			if _, err := tx.ExecContext(ctx, `
-INSERT INTO v3_dependencies(run_id, node_key, dependency_key)
-VALUES (?, ?, ?)`, runID, node.Key, dependency); err != nil {
-				return fmt.Errorf("insert dependency %s -> %s: %w", node.Key, dependency, err)
-			}
-		}
-	}
 	for _, gate := range plan.Gates {
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO v3_gates(
@@ -190,18 +181,6 @@ INSERT INTO v3_gates(
 INSERT INTO v3_gate_dependencies(run_id, gate_key, dependency_key)
 VALUES (?, ?, ?)`, runID, gate.Key, dependency); err != nil {
 				return fmt.Errorf("insert gate dependency %s -> %s: %w", gate.Key, dependency, err)
-			}
-		}
-	}
-	for _, node := range plan.Nodes {
-		for _, binding := range node.Bindings {
-			if binding.Source != "gate-output" {
-				continue
-			}
-			if _, err := tx.ExecContext(ctx, `
-INSERT OR IGNORE INTO v3_gate_consumers(run_id, node_key, gate_key)
-VALUES (?, ?, ?)`, runID, node.Key, binding.GateKey); err != nil {
-				return fmt.Errorf("insert gate consumer %s -> %s: %w", node.Key, binding.GateKey, err)
 			}
 		}
 	}
@@ -258,15 +237,8 @@ INSERT INTO v3_reductions(
 		}
 	}
 	for _, node := range plan.Nodes {
-		for _, binding := range node.Bindings {
-			if binding.Source != "reduction-output" {
-				continue
-			}
-			if _, err := tx.ExecContext(ctx, `
-INSERT INTO v3_reduction_consumers(run_id, node_key, reduce_key)
-VALUES (?, ?, ?)`, runID, node.Key, binding.ReduceKey); err != nil {
-				return fmt.Errorf("insert reduction consumer %s -> %s: %w", node.Key, binding.ReduceKey, err)
-			}
+		if err := insertNodeReadiness(ctx, tx, runID, node.Key, node.Bindings, node.DependsOn); err != nil {
+			return err
 		}
 	}
 	if err := insertEvent(ctx, tx, runID, "", "run.created", map[string]any{

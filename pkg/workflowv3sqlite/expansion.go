@@ -323,12 +323,22 @@ WHERE run_id = ? AND map_key = ? AND next_index = ?`,
 	for i, item := range items {
 		keys[i] = item.Key
 	}
+	identitySourceDigest := manifestRef.Digest
+	if chained {
+		identitySourceDigest, err = workflowv3.Digest(struct {
+			Source string `json:"source"`
+			MapKey string `json:"mapKey"`
+		}{Source: mapped.Source.Source, MapKey: mapped.Source.MapKey})
+		if err != nil {
+			return nil, err
+		}
+	}
 	pageDigest, err := workflowv3.Digest(struct {
 		MapKey       string   `json:"mapKey"`
 		SourceDigest string   `json:"sourceDigest"`
 		FirstIndex   int      `json:"firstIndex"`
 		ItemKeys     []string `json:"itemKeys"`
-	}{MapKey: mapKey, SourceDigest: manifestRef.Digest, FirstIndex: nextIndex, ItemKeys: keys})
+	}{MapKey: mapKey, SourceDigest: identitySourceDigest, FirstIndex: nextIndex, ItemKeys: keys})
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +349,7 @@ WHERE run_id = ? AND map_key = ? AND next_index = ?`,
 	}
 	for offset, item := range items {
 		itemIndex := nextIndex + offset
-		nodeKey, err := workflowv3.MapChildNodeKey(mapKey, manifestRef.Digest, item.Key)
+		nodeKey, err := workflowv3.MapChildNodeKey(mapKey, identitySourceDigest, item.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -389,22 +399,8 @@ INSERT INTO v3_map_items(
 			[]any{runID, mapKey, item.Key, itemIndex, nodeKey}, item.Value); err != nil {
 			return nil, fmt.Errorf("insert map item %s: %w", item.Key, err)
 		}
-		dependencyKeys := workflowv3.EffectiveNodeDependencies(bindings, nil)
-		for _, binding := range bindings {
-			if binding.Source == "gate-output" {
-				if _, err := tx.ExecContext(ctx, `
-INSERT OR IGNORE INTO v3_gate_consumers(run_id, node_key, gate_key)
-VALUES (?, ?, ?)`, runID, nodeKey, binding.GateKey); err != nil {
-					return nil, err
-				}
-			}
-		}
-		for _, dependency := range dependencyKeys {
-			if _, err := tx.ExecContext(ctx, `
-INSERT INTO v3_dependencies(run_id, node_key, dependency_key)
-VALUES (?, ?, ?)`, runID, nodeKey, dependency); err != nil {
-				return nil, err
-			}
+		if err := insertNodeReadiness(ctx, tx, runID, nodeKey, bindings, nil); err != nil {
+			return nil, err
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -294,4 +295,134 @@ func TestExpansionRejectsManifestIdentityAndCardinalityDrift(t *testing.T) {
 	wrong.Digest = artifactRef("x", "wrong-manifest").Digest
 	_, err = store.ExpandNextPage(ctx, "map-run", "normalize", wrong, manifest, now)
 	require.ErrorContains(t, err, "does not match canonical manifest")
+}
+
+func chainedMapStoreFixture(t *testing.T) (*workflowv3.SealedRegistry, workflowv3.WorkflowPlan) {
+	t.Helper()
+	bundle, err := workflowv3.NewBundle(workflowv3.BundleManifest{
+		Name: "chained-map-fixture", Version: "1", ABI: workflowv3.TaskABI,
+		Tasks: []workflowv3.BundleTask{
+			{TaskKey: workflowv3.TaskKey{Kind: "map.upstream", Version: "v1"}, Entrypoint: "tasks.cjs#upstream", Inputs: map[string]string{"item": "item/v1"}, Outputs: map[string]string{"output": "middle/v1"}, ResourceClass: "cpu.map"},
+			{TaskKey: workflowv3.TaskKey{Kind: "map.downstream", Version: "v1"}, Entrypoint: "tasks.cjs#downstream", Inputs: map[string]string{"item": "middle/v1"}, Outputs: map[string]string{"output": "result/v1"}, ResourceClass: "cpu.map"},
+		},
+	}, map[string][]byte{"tasks.cjs": []byte(`exports.upstream = item => item; exports.downstream = item => item`)})
+	require.NoError(t, err)
+	builder := workflowv3.NewRegistryBuilder()
+	require.NoError(t, builder.AddBundle(bundle))
+	registry, err := builder.Seal()
+	require.NoError(t, err)
+	catalog, err := registry.Catalog()
+	require.NoError(t, err)
+	plan, err := workflowv3.Compile(workflowv3.WorkflowIR{
+		Schema: workflowv3.IRSchema, Name: "chained-map",
+		SetInputs: []workflowv3.IRSetInput{{Name: "items", ItemSchema: "item/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1, Policy: workflowv3.SetInputPolicy{MaxItems: 2}}},
+		Maps: []workflowv3.IRMap{
+			{Key: "upstream", Source: workflowv3.SetRef{Source: "set-input", Name: "items", ItemSchema: "item/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1}, ItemTask: workflowv3.TaskKey{Kind: "map.upstream", Version: "v1"}, Bindings: map[string]workflowv3.ValueRef{"item": {Source: "map-item", MapKey: "upstream", Schema: "item/v1"}}, Policy: workflowv3.MapPolicy{PageSize: 2, MaxItems: 2, MaxMaterializedAhead: 2}},
+			{Key: "downstream", Source: workflowv3.SetRef{Source: "map-output", MapKey: "upstream", ItemSchema: "middle/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1}, ItemTask: workflowv3.TaskKey{Kind: "map.downstream", Version: "v1"}, Bindings: map[string]workflowv3.ValueRef{"item": {Source: "map-item", MapKey: "downstream", Schema: "middle/v1"}}, Policy: workflowv3.MapPolicy{PageSize: 1, MaxItems: 2, MaxMaterializedAhead: 2}},
+		},
+		SetOutputs: []workflowv3.IRSetOutput{{Name: "results", Value: workflowv3.SetRef{Source: "map-output", MapKey: "downstream", ItemSchema: "result/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1}}},
+	}, catalog)
+	require.NoError(t, err)
+	return registry, plan
+}
+
+func manifestArtifactRef(t *testing.T, manifest workflowv3.ItemManifest) workflowv3.ArtifactRef {
+	t.Helper()
+	body, err := workflowv3.EncodeItemManifest(manifest)
+	require.NoError(t, err)
+	digest, err := workflowv3.Digest(manifest)
+	require.NoError(t, err)
+	return workflowv3.ArtifactRef{Schema: workflowv3.ItemManifestSchemaV1, Digest: digest, MediaType: "application/json", Size: int64(len(body)), Locator: "cas://" + strings.TrimPrefix(digest, "sha256:")}
+}
+
+func TestChainedMapChildIdentityDoesNotDependOnPollingTiming(t *testing.T) {
+	ctx := context.Background()
+	registry, plan := chainedMapStoreFixture(t)
+	manifest, inputRef := mapManifest(t, 2)
+	now := time.Date(2026, 8, 23, 20, 0, 0, 0, time.UTC)
+
+	materialize := func(t *testing.T, completed int) (workflowv3.NodeKey, string) {
+		store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+		require.NoError(t, err)
+		defer func() { require.NoError(t, store.Close()) }()
+		require.NoError(t, store.CreateRun(ctx, "chained", plan, map[string]workflowv3.ArtifactRef{"items": inputRef}, now))
+		_, err = store.ExpandNextPage(ctx, "chained", "upstream", inputRef, manifest, now)
+		require.NoError(t, err)
+		for index := 0; index < completed; index++ {
+			lease, leaseErr := store.LeaseNext(ctx, registry, now.Add(time.Duration(index+1)*time.Second), time.Minute)
+			require.NoError(t, leaseErr)
+			require.NotNil(t, lease)
+			require.NoError(t, store.Complete(ctx, *lease, map[string]workflowv3.ArtifactRef{"output": artifactRef("middle/v1", fmtItemKey(index))}, now.Add(time.Duration(index+2)*time.Second)))
+		}
+		candidate, err := store.ChainedExpansionCandidate(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, candidate)
+		require.Len(t, candidate.Manifest.Items, completed)
+		ref := manifestArtifactRef(t, candidate.Manifest)
+		page, err := store.ExpandNextChainedPage(ctx, candidate.RunID, candidate.MapKey, ref, candidate.Manifest, candidate.Final, now.Add(5*time.Second))
+		require.NoError(t, err)
+		require.NotNil(t, page)
+		var nodeKey workflowv3.NodeKey
+		var pageDigest string
+		require.NoError(t, store.db.QueryRow(`SELECT node_key FROM v3_map_items WHERE run_id = ? AND map_key = ? AND item_index = 0`, "chained", "downstream").Scan(&nodeKey))
+		require.NoError(t, store.db.QueryRow(`SELECT page_digest FROM v3_expansion_pages WHERE run_id = ? AND map_key = ? AND page_no = 0`, "chained", "downstream").Scan(&pageDigest))
+		return nodeKey, pageDigest
+	}
+
+	earlyNode, earlyPage := materialize(t, 1)
+	lateNode, latePage := materialize(t, 2)
+	require.Equal(t, earlyNode, lateNode)
+	require.Equal(t, earlyPage, latePage)
+}
+
+func TestGeneratedMapNodeRegistersReductionConsumer(t *testing.T) {
+	ctx := context.Background()
+	bundle, err := workflowv3.NewBundle(workflowv3.BundleManifest{
+		Name: "map-reduction-readiness", Version: "1", ABI: workflowv3.TaskABI,
+		Tasks: []workflowv3.BundleTask{
+			{TaskKey: workflowv3.TaskKey{Kind: "reduce.summary", Version: "v1"}, Entrypoint: "tasks.cjs#reduce", Inputs: map[string]string{"partition": workflowv3.ReductionPartitionSchemaV1}, Outputs: map[string]string{"output": "summary/v1"}, ResourceClass: "cpu.reduce"},
+			{TaskKey: workflowv3.TaskKey{Kind: "map.consume-summary", Version: "v1"}, Entrypoint: "tasks.cjs#mapped", Inputs: map[string]string{"item": "item/v1", "summary": "summary/v1"}, Outputs: map[string]string{"output": "result/v1"}, ResourceClass: "cpu.map"},
+		},
+	}, map[string][]byte{"tasks.cjs": []byte(`exports.reduce = value => value; exports.mapped = value => value`)})
+	require.NoError(t, err)
+	builder := workflowv3.NewRegistryBuilder()
+	require.NoError(t, builder.AddBundle(bundle))
+	registry, err := builder.Seal()
+	require.NoError(t, err)
+	catalog, err := registry.Catalog()
+	require.NoError(t, err)
+	plan, err := workflowv3.Compile(workflowv3.WorkflowIR{
+		Schema: workflowv3.IRSchema, Name: "map-reduction-readiness",
+		SetInputs: []workflowv3.IRSetInput{
+			{Name: "items", ItemSchema: "item/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1, Policy: workflowv3.SetInputPolicy{MaxItems: 2}},
+			{Name: "summaries", ItemSchema: "summary/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1, Policy: workflowv3.SetInputPolicy{MaxItems: 2}},
+		},
+		Maps: []workflowv3.IRMap{{Key: "mapped", Source: workflowv3.SetRef{Source: "set-input", Name: "items", ItemSchema: "item/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1}, ItemTask: workflowv3.TaskKey{Kind: "map.consume-summary", Version: "v1"}, Bindings: map[string]workflowv3.ValueRef{
+			"item": {Source: "map-item", MapKey: "mapped", Schema: "item/v1"}, "summary": {Source: "reduction-output", ReduceKey: "summary", Schema: "summary/v1"},
+		}, Policy: workflowv3.MapPolicy{PageSize: 1, MaxItems: 2, MaxMaterializedAhead: 2}}},
+		Reductions: []workflowv3.IRReduce{{Key: "summary", Source: workflowv3.SetRef{Source: "set-input", Name: "summaries", ItemSchema: "summary/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1}, PartitionTask: workflowv3.TaskKey{Kind: "reduce.summary", Version: "v1"}, Bindings: map[string]workflowv3.ValueRef{"partition": {Source: "reduction-partition", ReduceKey: "summary", Schema: workflowv3.ReductionPartitionSchemaV1}}, Policy: workflowv3.ReducePolicy{FanIn: 2, MaxLevels: 2}}},
+		SetOutputs: []workflowv3.IRSetOutput{{Name: "results", Value: workflowv3.SetRef{Source: "map-output", MapKey: "mapped", ItemSchema: "result/v1", ManifestSchema: workflowv3.ItemManifestSchemaV1}}},
+	}, catalog)
+	require.NoError(t, err)
+	items, itemsRef := mapManifest(t, 1)
+	summaries, _ := mapManifest(t, 2)
+	for index := range summaries.Items {
+		summaries.Items[index].Value.Schema = "summary/v1"
+	}
+	summaries, err = workflowv3.NewItemManifest("summary/v1", summaries.Items)
+	require.NoError(t, err)
+	summariesRef := manifestArtifactRef(t, summaries)
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "workflow.db"))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, store.Close()) }()
+	now := time.Date(2026, 8, 23, 21, 0, 0, 0, time.UTC)
+	require.NoError(t, store.CreateRun(ctx, "readiness", plan, map[string]workflowv3.ArtifactRef{"items": itemsRef, "summaries": summariesRef}, now))
+	_, err = store.ExpandNextPage(ctx, "readiness", "mapped", itemsRef, items, now)
+	require.NoError(t, err)
+	var consumers int
+	require.NoError(t, store.db.QueryRow(`SELECT COUNT(*) FROM v3_reduction_consumers WHERE run_id = ? AND reduce_key = ?`, "readiness", "summary").Scan(&consumers))
+	require.Equal(t, 1, consumers)
+	lease, err := store.LeaseNext(ctx, registry, now, time.Minute)
+	require.NoError(t, err)
+	require.Nil(t, lease, "map child must remain blocked until the independent reduction is published")
 }

@@ -296,21 +296,8 @@ INSERT INTO v3_nodes(
 		if err := insertNodeBudget(ctx, tx, runID, nodeKey, reduced.Budget); err != nil {
 			return err
 		}
-		for _, binding := range reduced.Bindings {
-			if binding.Source == "gate-output" {
-				if _, err := tx.ExecContext(ctx, `
-INSERT OR IGNORE INTO v3_gate_consumers(run_id, node_key, gate_key)
-VALUES (?, ?, ?)`, runID, nodeKey, binding.GateKey); err != nil {
-					return err
-				}
-			}
-		}
-		for _, dependency := range workflowv3.EffectiveNodeDependencies(reduced.Bindings, nil) {
-			if _, err := tx.ExecContext(ctx, `
-INSERT OR IGNORE INTO v3_dependencies(run_id, node_key, dependency_key)
-VALUES (?, ?, ?)`, runID, nodeKey, dependency); err != nil {
-				return err
-			}
+		if err := insertNodeReadiness(ctx, tx, runID, nodeKey, reduced.Bindings, nil); err != nil {
+			return err
 		}
 		if err := insertRef(ctx, tx, `
 INSERT INTO v3_reduction_partitions(
