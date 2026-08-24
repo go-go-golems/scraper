@@ -106,3 +106,14 @@ Step 11: resolved second-round dynamic reduction readiness, chained identity det
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/expansion.go — Stable chained-map child identity
 - /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3sqlite/readiness.go — Canonical dynamic readiness lowering
 
+
+## 2026-08-24
+
+Step 12: resolved third-round worker supervision hangs, dispatcher completion backpressure, and GitHub cgroup capability mismatch (commit fbd23b5).
+
+### Related Files
+
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/researchrunner/runner.go — Map worker exit to runner infrastructure failure
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3product/service.go — Observe premature worker exit
+- /home/manuel/workspaces/2026-06-30/benchmark-cpu-inference/scraper/pkg/workflowv3runtime/dispatcher.go — Drain completions before refill
+

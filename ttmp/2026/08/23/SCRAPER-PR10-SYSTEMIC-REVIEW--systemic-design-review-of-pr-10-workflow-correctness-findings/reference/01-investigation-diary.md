@@ -22,6 +22,10 @@ RelatedFiles:
       Note: Set policy, consumer capacity, reduction bound, and pass-through tests (commit 2dfdee1)
     - Path: repo://pkg/workflowv3product/application_test.go
       Note: Immediate persisted submission status and scalar pass-through test (commit 7f6e728)
+    - Path: repo://pkg/workflowv3product/service.go
+      Note: Concurrent durable-terminal and worker-exit supervision (commit fbd23b5)
+    - Path: repo://pkg/workflowv3runtime/dispatcher.go
+      Note: Bounded completion draining during continuous refill (commit fbd23b5)
     - Path: repo://pkg/workflowv3sqlite/readiness.go
       Note: Shared static and dynamic readiness lowering from second review (commit e0a3439)
     - Path: repo://pkg/workflowv3sqlite/store_test.go
@@ -39,6 +43,7 @@ LastUpdated: 2026-08-23T19:45:00-04:00
 WhatFor: Resume or review the evidence collection, architectural diagnosis, ticket writing, validation, and reMarkable delivery.
 WhenToUse: Read before implementing or reviewing the fixes proposed by SCRAPER-PR10-SYSTEMIC-REVIEW.
 ---
+
 
 
 
@@ -1042,4 +1047,90 @@ reduction partition┘
 
 chained child identity = digest(consumer map, stable upstream map identity, item key)
 not digest(consumer map, currently completed prefix manifest, item key)
+```
+
+## Step 12: Make worker supervision and dispatcher completion flow bounded
+
+The third Codex review found two liveness defects above the durable state machine. Product and Researchctl callers waited only for terminal database state even when their worker had already exited, while the dispatcher could refill newly freed slots without draining its bounded completion channel.
+
+This slice makes worker exit a first-class concurrent wait condition and drains all ready completion messages before each refill attempt. It also makes restricted-isolation integration tests explicitly conditional on both Bubblewrap and a writable delegated cgroup v2 hierarchy, matching the executor's real host contract.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Address next round"
+
+**Assistant interpretation:** Inspect the newest Codex review and CI result, fix every new liveness issue, and publish another validated round.
+
+**Inferred user intent:** Prevent hangs and unbounded goroutine buildup while returning PR 10 to green CI.
+
+**Commit (code):** `fbd23b5c22d6af9d0f2746aa7119dbfe26260cb6` — `fix: propagate worker failures and drain dispatch completions`
+
+### What I did
+
+- Changed `Application.RunUntilTerminal` to select between persisted terminal state, context cancellation, and worker exit.
+- Changed the Researchctl runner wait loop to observe `workerDone` concurrently and map premature worker exit to `RUNNER_WORKER`.
+- Added `drainDispatchCompletions` before every dispatcher refill iteration.
+- Preserved durable task failures as non-fatal dispatcher completions while propagating infrastructure failures.
+- Added focused product, Researchctl, and dispatcher regression tests.
+- Added an isolation-host prerequisite that skips real sandbox integration only when Bubblewrap or delegated cgroup v2 is unavailable.
+
+### Why
+
+- A worker failure can leave a run durably `running`; waiting only on the row can never terminate.
+- Completion messages are part of dispatcher flow control and must be consumed while capacity is being refilled.
+- GitHub-hosted runners install Bubblewrap but do not provide a writable delegated cgroup hierarchy, so real resource-isolation tests cannot execute there safely.
+
+### What worked
+
+- Focused runtime/product/runner tests passed.
+- Both pre-commit full tests and lint passed.
+- The product regression returns the dispatcher error before a one-second context deadline.
+- The Researchctl helper observes a preexisting worker error before attempting another poll.
+- The dispatcher regression proves the ready completion buffer is fully drained.
+
+### What didn't work
+
+- The first combined race run hit the pre-existing short-timing lease heartbeat assertion:
+
+```text
+--- FAIL: TestWatchLeaseRenewsLongRunningAttemptAuthority
+    database_integration_test.go:290: Error: Should be true
+```
+
+  Repeating that exact race test three times passed. The failure is recorded as a timing-sensitive existing test rather than hidden.
+
+### What I learned
+
+- Durable state and process supervision are separate signals; terminal waiting must observe both.
+- A buffered completion channel does not bound goroutines unless the producer/consumer protocol drains it during continuous refill.
+- Installing a sandbox binary is not equivalent to receiving delegated kernel resource-control authority.
+
+### What was tricky to build
+
+- Worker completion can be consumed only once. The Researchctl wait helper returns worker failure separately from polling failure so cleanup does not block trying to receive the same completion twice.
+- Terminal success still cancels and joins the worker before exporting results, preserving the prior shutdown guarantee.
+- Isolation tests skip only after actively probing cgroup creation and cleanup; ordinary protocol/unit tests remain unconditional.
+
+### What warrants a second pair of eyes
+
+- Review the worker-channel ownership and all terminal/error cleanup branches in both product and Researchctl paths.
+- Review dispatcher fairness after moving completion draining into the refill loop.
+- Decide whether CI should eventually gain a self-hosted runner with delegated cgroup v2 so restricted sandbox integration is never skipped.
+
+### What should be done in the future
+
+- Harden the 40 ms lease-renewal race test against scheduler delays under `-race`.
+- Add a self-hosted privileged isolation test lane if restricted execution becomes release-critical.
+
+### Code review instructions
+
+- Start at `Application.RunUntilTerminal`, then compare `researchrunner.waitForTerminal`.
+- Review `Dispatcher.Run` and `drainDispatchCompletions` together.
+- Run `go test ./pkg/workflowv3runtime ./pkg/workflowv3product ./pkg/researchrunner -count=1`.
+
+### Technical details
+
+```text
+terminal wait = first of {durable terminal status, worker exit, caller cancellation}
+refill cycle  = drain ready completions -> maintain/expand/reduce -> lease one -> repeat
 ```
