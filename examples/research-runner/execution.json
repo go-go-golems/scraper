@@ -1,0 +1,136 @@
+{
+  "schemaVersion": "scraper-workflow-execution/v2",
+  "plan": {
+    "schema": "scraper-workflow-plan/v3",
+    "name": "research-runner-fixture",
+    "irDigest": "sha256:97bbff8cb646f5675a0a4a6262bb1e786e0176bcb6cde8d75c6b2d2d60719beb",
+    "catalogDigest": "sha256:340b129f066d397fc09d96d436c5f8c7a6303b748182922328dfbbadace9127e",
+    "inputs": [
+      {
+        "name": "source",
+        "schema": "fixture-source/v1"
+      }
+    ],
+    "nodes": [
+      {
+        "key": "transform",
+        "implementation": {
+          "kind": "fixture.research.transform",
+          "version": "v1",
+          "bundleDigest": "sha256:c4c0b202402dace93c976af396e55567131d53fda4a316d3b0558e084ac7f989",
+          "entrypoint": "transform.cjs#transform",
+          "abi": "scraper-js-task/v1"
+        },
+        "bindings": {
+          "source": {
+            "source": "input",
+            "name": "source",
+            "schema": "fixture-source/v1"
+          }
+        },
+        "inputSchemas": {
+          "source": "fixture-source/v1"
+        },
+        "outputSchemas": {
+          "transformed": "fixture-transformed/v1"
+        },
+        "modules": [
+          "fixture:operation",
+          "fs:input"
+        ],
+        "resourceClass": "cpu.default",
+        "retry": {
+          "maxAttempts": 2,
+          "backoffMillis": 5
+        },
+        "isolation": {
+          "requested": {
+            "class": "in-process.trusted"
+          },
+          "effective": {
+            "class": "in-process.trusted"
+          },
+          "policyDigest": "sha256:7b4a7a2aa4da8e02268512816ba3a6a36e8b90f8e4ff690b826023053666d581"
+        }
+      },
+      {
+        "key": "publish",
+        "implementation": {
+          "kind": "fixture.research.publish",
+          "version": "v1",
+          "bundleDigest": "sha256:c4c0b202402dace93c976af396e55567131d53fda4a316d3b0558e084ac7f989",
+          "entrypoint": "publish.cjs#publish",
+          "abi": "scraper-js-task/v1"
+        },
+        "bindings": {
+          "transformed": {
+            "source": "node-output",
+            "nodeKey": "transform",
+            "port": "transformed",
+            "schema": "fixture-transformed/v1"
+          }
+        },
+        "dependsOn": [
+          "transform"
+        ],
+        "inputSchemas": {
+          "transformed": "fixture-transformed/v1"
+        },
+        "outputSchemas": {
+          "result": "fixture-result/v1"
+        },
+        "modules": [
+          "fs:input"
+        ],
+        "resourceClass": "cpu.default",
+        "retry": {
+          "maxAttempts": 1,
+          "backoffMillis": 0
+        },
+        "isolation": {
+          "requested": {
+            "class": "in-process.trusted"
+          },
+          "effective": {
+            "class": "in-process.trusted"
+          },
+          "policyDigest": "sha256:7b4a7a2aa4da8e02268512816ba3a6a36e8b90f8e4ff690b826023053666d581"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "value": {
+          "source": "node-output",
+          "nodeKey": "publish",
+          "port": "result",
+          "schema": "fixture-result/v1"
+        }
+      }
+    ],
+    "digest": "sha256:b96c9982b57e48cc9f7bef019a204a2067d3002bd220c0046e2802b90c3c57c9"
+  },
+  "inputBindings": {
+    "source": {
+      "role": "workflow-input",
+      "kind": "fixture-source",
+      "id": "source"
+    }
+  },
+  "taskCatalog": {
+    "digest": "sha256:340b129f066d397fc09d96d436c5f8c7a6303b748182922328dfbbadace9127e",
+    "packages": [
+      {
+        "name": "research-runner-fixture",
+        "version": "1.0.0",
+        "bundleDigest": "sha256:c4c0b202402dace93c976af396e55567131d53fda4a316d3b0558e084ac7f989"
+      }
+    ]
+  },
+  "observation": {
+    "exportOutputs": true,
+    "exportExternalOperations": true,
+    "exportCanonicalObservations": true
+  }
+}

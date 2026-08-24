@@ -1,0 +1,7 @@
+{
+  "source": {
+    "role": "workflow-input",
+    "kind": "fixture-source",
+    "id": "source"
+  }
+}

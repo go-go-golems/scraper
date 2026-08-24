@@ -1,0 +1,321 @@
+{
+  "blockCount": 52,
+  "checks": [
+    {
+      "error": null,
+      "index": 1,
+      "ok": true,
+      "startLine": 158
+    },
+    {
+      "error": null,
+      "index": 2,
+      "ok": true,
+      "startLine": 313
+    },
+    {
+      "error": null,
+      "index": 3,
+      "ok": true,
+      "startLine": 364
+    },
+    {
+      "error": null,
+      "index": 4,
+      "ok": true,
+      "startLine": 411
+    },
+    {
+      "error": null,
+      "index": 5,
+      "ok": true,
+      "startLine": 505
+    },
+    {
+      "error": null,
+      "index": 6,
+      "ok": true,
+      "startLine": 586
+    },
+    {
+      "error": null,
+      "index": 7,
+      "ok": true,
+      "startLine": 710
+    },
+    {
+      "error": null,
+      "index": 8,
+      "ok": true,
+      "startLine": 804
+    },
+    {
+      "error": null,
+      "index": 9,
+      "ok": true,
+      "startLine": 900
+    },
+    {
+      "error": null,
+      "index": 10,
+      "ok": true,
+      "startLine": 994
+    },
+    {
+      "error": null,
+      "index": 11,
+      "ok": true,
+      "startLine": 1058
+    },
+    {
+      "error": null,
+      "index": 12,
+      "ok": true,
+      "startLine": 1137
+    },
+    {
+      "error": null,
+      "index": 13,
+      "ok": true,
+      "startLine": 1210
+    },
+    {
+      "error": null,
+      "index": 14,
+      "ok": true,
+      "startLine": 1289
+    },
+    {
+      "error": null,
+      "index": 15,
+      "ok": true,
+      "startLine": 1373
+    },
+    {
+      "error": null,
+      "index": 16,
+      "ok": true,
+      "startLine": 1448
+    },
+    {
+      "error": null,
+      "index": 17,
+      "ok": true,
+      "startLine": 1524
+    },
+    {
+      "error": null,
+      "index": 18,
+      "ok": true,
+      "startLine": 1602
+    },
+    {
+      "error": null,
+      "index": 19,
+      "ok": true,
+      "startLine": 1662
+    },
+    {
+      "error": null,
+      "index": 20,
+      "ok": true,
+      "startLine": 1775
+    },
+    {
+      "error": null,
+      "index": 21,
+      "ok": true,
+      "startLine": 1813
+    },
+    {
+      "error": null,
+      "index": 22,
+      "ok": true,
+      "startLine": 1836
+    },
+    {
+      "error": null,
+      "index": 23,
+      "ok": true,
+      "startLine": 1859
+    },
+    {
+      "error": null,
+      "index": 24,
+      "ok": true,
+      "startLine": 1911
+    },
+    {
+      "error": null,
+      "index": 25,
+      "ok": true,
+      "startLine": 1949
+    },
+    {
+      "error": null,
+      "index": 26,
+      "ok": true,
+      "startLine": 2023
+    },
+    {
+      "error": null,
+      "index": 27,
+      "ok": true,
+      "startLine": 2066
+    },
+    {
+      "error": null,
+      "index": 28,
+      "ok": true,
+      "startLine": 2164
+    },
+    {
+      "error": null,
+      "index": 29,
+      "ok": true,
+      "startLine": 2202
+    },
+    {
+      "error": null,
+      "index": 30,
+      "ok": true,
+      "startLine": 2298
+    },
+    {
+      "error": null,
+      "index": 31,
+      "ok": true,
+      "startLine": 2331
+    },
+    {
+      "error": null,
+      "index": 32,
+      "ok": true,
+      "startLine": 2435
+    },
+    {
+      "error": null,
+      "index": 33,
+      "ok": true,
+      "startLine": 2458
+    },
+    {
+      "error": null,
+      "index": 34,
+      "ok": true,
+      "startLine": 2510
+    },
+    {
+      "error": null,
+      "index": 35,
+      "ok": true,
+      "startLine": 2559
+    },
+    {
+      "error": null,
+      "index": 36,
+      "ok": true,
+      "startLine": 2653
+    },
+    {
+      "error": null,
+      "index": 37,
+      "ok": true,
+      "startLine": 2681
+    },
+    {
+      "error": null,
+      "index": 38,
+      "ok": true,
+      "startLine": 2743
+    },
+    {
+      "error": null,
+      "index": 39,
+      "ok": true,
+      "startLine": 2776
+    },
+    {
+      "error": null,
+      "index": 40,
+      "ok": true,
+      "startLine": 2840
+    },
+    {
+      "error": null,
+      "index": 41,
+      "ok": true,
+      "startLine": 2884
+    },
+    {
+      "error": null,
+      "index": 42,
+      "ok": true,
+      "startLine": 2997
+    },
+    {
+      "error": null,
+      "index": 43,
+      "ok": true,
+      "startLine": 3033
+    },
+    {
+      "error": null,
+      "index": 44,
+      "ok": true,
+      "startLine": 3108
+    },
+    {
+      "error": null,
+      "index": 45,
+      "ok": true,
+      "startLine": 3153
+    },
+    {
+      "error": null,
+      "index": 46,
+      "ok": true,
+      "startLine": 3254
+    },
+    {
+      "error": null,
+      "index": 47,
+      "ok": true,
+      "startLine": 3293
+    },
+    {
+      "error": null,
+      "index": 48,
+      "ok": true,
+      "startLine": 3380
+    },
+    {
+      "error": null,
+      "index": 49,
+      "ok": true,
+      "startLine": 3408
+    },
+    {
+      "error": null,
+      "index": 50,
+      "ok": true,
+      "startLine": 3477
+    },
+    {
+      "error": null,
+      "index": 51,
+      "ok": true,
+      "startLine": 3518
+    },
+    {
+      "error": null,
+      "index": 52,
+      "ok": true,
+      "startLine": 3939
+    }
+  ],
+  "document": "ttmp/2026/07/21/SCRAPER-WORKFLOW-V3--durable-dataflow-workflow-engine-and-modern-goja-dsl/reference/03-workflow-v3-javascript-cookbook-and-execution-atlas.md",
+  "failed": 0,
+  "passed": 52,
+  "schemaVersion": "workflow-cookbook-js-check/v1"
+}

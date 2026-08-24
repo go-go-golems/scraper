@@ -1,0 +1,74 @@
+{
+  "executionContextPropertiesAndMethods": [
+    "site",
+    "now",
+    "workflow",
+    "op",
+    "lease",
+    "input",
+    "log",
+    "dep",
+    "emit",
+    "writeRecord",
+    "writeArtifact"
+  ],
+  "goGoGojaVersion": "v0.8.3",
+  "literalRequireTargets": {
+    "./common.js": 1,
+    "./lib/common.js": 2,
+    "./lib/demo.js": 2,
+    "./lib/extract.js": 2,
+    "./lib/frontpage.js": 2,
+    "scraper-db": 1,
+    "site-db": 6
+  },
+  "observations": [
+    "Execution and submission contexts are assembled independently.",
+    "The JavaScript API is implemented by raw ctx object property installation rather than a NativeModule contract.",
+    "Site source files are CommonJS JavaScript; no TypeScript source appears in the site roots.",
+    "Operation specs expose engine storage fields directly to scripts."
+  ],
+  "operationResultFields": [
+    "OpID",
+    "Data",
+    "Records",
+    "Artifacts",
+    "Emitted",
+    "EmittedIDs",
+    "Error",
+    "CompletedAt"
+  ],
+  "operationSpecFields": [
+    "ID",
+    "WorkflowID",
+    "ParentID",
+    "Site",
+    "Kind",
+    "Queue",
+    "DedupKey",
+    "Input",
+    "DependsOn",
+    "Retry",
+    "RetryState",
+    "Metadata",
+    "CreatedAt",
+    "UpdatedAt",
+    "NextReadyAt"
+  ],
+  "schemaVersion": "scraper-scripting-inventory/v1",
+  "siteScriptFiles": 15,
+  "siteVerbFiles": 8,
+  "submissionContextPropertiesAndMethods": [
+    "site",
+    "now",
+    "values",
+    "sections",
+    "command",
+    "workflow",
+    "log",
+    "emit",
+    "setTargetOpID",
+    "setWorkflowName",
+    "setWorkflowMetadata"
+  ]
+}

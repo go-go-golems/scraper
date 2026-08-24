@@ -1,0 +1,62 @@
+declare module "workflow/task" {
+  export interface ArtifactMember {
+    readonly key: string;
+    readonly schema: string;
+    readonly digest: string;
+    readonly mediaType: string;
+    readonly size: number;
+    readonly path: string;
+  }
+  export interface ArtifactInput {
+    readonly schema: string;
+    readonly digest: string;
+    readonly mediaType: string;
+    readonly size: number;
+    readonly path: string;
+    readonly members?: readonly ArtifactMember[];
+  }
+  export interface TaskIdentity {
+    readonly runId: string;
+    readonly nodeKey: string;
+    readonly attempt: number;
+    readonly operationKey: string;
+  }
+  export interface OutputRef {
+    readonly schema: string;
+    readonly digest: string;
+    readonly mediaType: string;
+    readonly size: number;
+    readonly locator: string;
+  }
+  export interface TaskOutputs {
+    putJSON(
+      port: string,
+      options: {schema: string; value: unknown},
+    ): Promise<OutputRef>;
+  }
+  export type BudgetDimension =
+    | "requests" | "input_tokens" | "output_tokens"
+    | "embedding_tokens" | "input_bytes" | "output_bytes"
+    | "cost_microunits";
+  export interface TaskUsage {
+    report(dimension: BudgetDimension, units: number): void;
+  }
+  export interface TaskContext {
+    input(): Record<string, ArtifactInput>;
+    identity(): TaskIdentity;
+    checkpoint(): void;
+    readonly outputs: TaskOutputs;
+    readonly usage: TaskUsage;
+  }
+  export interface TaskFailure {
+    class: string;
+    code: string;
+    retryable: boolean;
+    message: string;
+  }
+  export function implementation<T>(
+    fn: (context: TaskContext) => T | Promise<T>,
+  ): (context: TaskContext) => T | Promise<T>;
+  export function success<T>(outputs: T): T;
+  export function failure(value: TaskFailure): TaskFailure;
+}

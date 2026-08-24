@@ -1,5 +1,0 @@
-name: slashdot
-databaseFileName: slashdot.db
-scriptsRoot: scripts
-verbsRoot: verbs
-sqlMigrationsRoot: migrations
